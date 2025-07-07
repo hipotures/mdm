@@ -462,13 +462,7 @@ class DatasetStatistics:
             # Create a minimal profile for statistics
             profile = ProfileReport(
                 df,
-                minimal=True,
-                explorative=True,
-                interactions=False,
-                correlations=True,
-                missing_diagrams=True,
-                samples=False,
-                duplicates=True
+                minimal=True
             )
             
             # Extract key insights from the profile

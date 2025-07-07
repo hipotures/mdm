@@ -540,13 +540,7 @@ class DatasetRegistrar:
                 profile = ProfileReport(
                     df,
                     minimal=True,
-                    type_schema=type_schema,
-                    explorative=False,
-                    interactions=False,
-                    correlations=False,
-                    missing_diagrams=False,
-                    samples=False,
-                    duplicates=False
+                    type_schema=type_schema
                 )
                 
                 # Extract column types from profile

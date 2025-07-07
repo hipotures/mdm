@@ -116,8 +116,8 @@ def register(
             raise typer.Exit(1)
         # Auto-detection mode
         if not path:
-            console.print("[red]Error:[/red] Path required for auto-detection")
-            raise typer.Exit(1)
+            # Use current directory if no path provided
+            path = Path("./")
 
         # Register dataset
         dataset_info = registrar.register(
