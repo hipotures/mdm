@@ -1,241 +1,230 @@
 # Summary
 
-ML Data Manager (MDM) provides a simple, decentralized solution for dataset management in machine learning workflows. This summary captures the key concepts and benefits of using MDM.
+## What is MDM?
 
-## Core Principles
-
-MDM is built on five fundamental principles:
-
-### 1. Decentralized Architecture
-- **No central registry** - each dataset is self-contained
-- Configuration files serve as lightweight pointers
-- Datasets can be managed independently
-- No heavy infrastructure requirements
-
-### 2. Simplicity
-- **Each dataset = one directory + one database file + one config**
-- Minimal configuration required
-- Intuitive command-line interface
-- Clear file organization
-
-### 3. Portability
-- **Datasets can be easily moved, copied, or shared**
-- Self-contained database files
-- Platform-independent storage
-- Simple backup and restore
-
-### 4. Efficiency
-- **Direct access to optimized database storage**
-- Columnar storage for analytics (DuckDB)
-- Automatic compression
-- Smart query optimization
-
-### 5. Minimal Dependencies
-- **Just DuckDB/SQLite and YAML configs**
-- No complex server setup
-- Works out of the box
-- Easy installation
-
-## Architecture Summary
-
-```
-MDM System
-├── Configuration Layer
-│   ├── mdm.yaml (system config)
-│   └── datasets/*.yaml (dataset configs)
-├── Storage Layer
-│   ├── Dataset Databases (DuckDB/SQLite/PostgreSQL)
-│   └── Feature Cache (temporary)
-└── API Layer
-    ├── CLI (command-line interface)
-    └── Python API (programmatic access)
-```
+MDM (ML Data Manager) is a standalone, enterprise-grade dataset management system designed specifically for machine learning workflows. It provides a unified interface for managing, versioning, and accessing datasets across different storage backends.
 
 ## Key Features
 
-### Dataset Management
-- Automatic dataset discovery and registration
-- Multi-file support (train, test, validation, submission)
-- Intelligent auto-detection of dataset characteristics
-- Rich metadata tracking
+### 1. **Multi-Backend Support**
+- **DuckDB** (default): Best for analytical queries and medium to large datasets
+- **SQLite**: Lightweight option for small datasets and maximum portability
+- **PostgreSQL**: Enterprise option with multi-user support and advanced features
 
-### Storage Flexibility
-- Multiple backend support (DuckDB, SQLite, PostgreSQL)
-- Per-dataset backend selection
-- Optimized storage for different use cases
-- Efficient compression
+### 2. **Intelligent Dataset Registration**
+- Auto-detection of data structure (train/test/validation splits)
+- Automatic file format detection (CSV, Parquet, JSON, Excel)
+- Kaggle competition structure recognition
+- Target column and problem type inference
 
-### Data Quality
-- Automatic validation during registration
-- Missing value analysis
-- Duplicate detection
-- Statistical profiling
+### 3. **Advanced Feature Engineering**
+- Two-tier system: generic transformers + custom features
+- Automatic feature generation for common patterns
+- Signal detection to filter low-quality features
+- Support for custom dataset-specific transformers
 
-### Integration
-- Direct SQL access to datasets
-- Pandas DataFrame compatibility
-- Export to multiple formats
-- ML framework integration
+### 4. **Comprehensive CLI**
+- Dataset management: register, list, info, search, update, remove
+- Export/import with multiple format support
+- Batch operations for multiple datasets
+- Time series specific commands
+- Rich terminal output with progress indicators
 
-## Ideal Use Cases
+### 5. **Programmatic API**
+- High-level `MDMClient` for common operations
+- Low-level `DatasetService` for advanced use cases
+- ML framework integration (sklearn, PyTorch, TensorFlow)
+- Efficient chunk processing for large datasets
 
-MDM is particularly well-suited for:
+### 6. **Performance Optimization**
+- Configurable batch processing
+- Memory-efficient operations
+- Query optimization
+- Parallel processing support
 
-### Research Environments
-- Datasets are frequently created and removed
-- Need for quick experimentation
-- Flexible storage requirements
-- Minimal setup overhead
+### 7. **Time Series Support**
+- Time-based train/test/validation splits
+- Cross-validation fold generation
+- Frequency and seasonality detection
+- Trend analysis
 
-### Team Collaboration
-- Self-contained datasets for easy sharing
-- Version control friendly configurations
-- Clear dataset documentation
-- Consistent access patterns
+## Quick Start
 
-### Infrastructure-Light Projects
-- No central database server needed
-- File-based management
-- Simple backup strategies
-- Low maintenance requirements
+### Installation
+```bash
+pip install mdm
+```
 
-### Rapid Prototyping
-- Quick dataset registration
-- Immediate data access
-- Flexible schema evolution
-- Easy cleanup
+### Basic Workflow
+```bash
+# 1. Register a dataset
+mdm dataset register titanic /path/to/kaggle/titanic
 
-## Benefits Over Traditional Approaches
+# 2. Get dataset information
+mdm dataset info titanic
 
-### Compared to Central Catalogs
-- No single point of failure
-- Easier to scale horizontally
-- Lower infrastructure costs
-- Simpler disaster recovery
+# 3. Search datasets
+mdm dataset search kaggle
 
-### Compared to Raw File Management
-- Structured metadata tracking
-- Optimized query performance
-- Consistent access patterns
-- Built-in validation
+# 4. Export dataset
+mdm dataset export titanic --format parquet
 
-### Compared to Custom Solutions
-- Standardized workflows
-- Proven best practices
-- Active maintenance
-- Community support
+# 5. Use in Python
+from mdm import load_dataset
+train_df, test_df = load_dataset("titanic")
+```
 
-## Trade-offs of Decentralized Architecture
+## Architecture Overview
 
-### Advantages
-- **No single point of failure** - Each dataset is independent
-- **Easy backup and portability** - Just copy directories
-- **Simple disaster recovery** - No complex database restoration
-- **Works offline** - No network dependencies
-- **Minimal maintenance** - No registry service to manage
+```
+MDM System Architecture
+├── Configuration Layer
+│   ├── YAML-based configuration
+│   ├── Environment variable overrides
+│   └── Sensible defaults
+├── Storage Layer
+│   ├── Backend abstraction (DuckDB/SQLite/PostgreSQL)
+│   ├── Efficient data loading
+│   └── Query optimization
+├── Dataset Management
+│   ├── Registration with auto-detection
+│   ├── Metadata tracking
+│   └── Version management
+├── Feature Engineering
+│   ├── Generic transformers
+│   ├── Custom transformers
+│   └── Signal detection
+├── API Layer
+│   ├── CLI (Typer-based)
+│   ├── High-level Python API
+│   └── Low-level service API
+└── Utilities
+    ├── Performance monitoring
+    ├── Time series operations
+    └── ML framework integration
+```
 
-### Trade-offs to Consider
-- **Search performance** - O(n) directory scanning vs indexed database queries
-- **Cross-dataset queries** - Require opening multiple databases
-- **No centralized monitoring** - Must check each dataset individually
-- **Manual consistency** - No foreign keys between datasets
-- **Discovery overhead** - Must read YAML files for metadata
+## Design Principles
 
-### Performance Characteristics
-| Operation | Centralized | Decentralized (MDM) |
-|-----------|-------------|---------------------|
-| List datasets | O(1) - indexed | O(n) - directory scan |
-| Search by name | O(log n) - indexed | O(n) - YAML parsing |
-| Search metadata | O(log n) - indexed | O(n) - open databases |
-| Add dataset | O(1) + index update | O(1) - create files |
-| Remove dataset | O(1) + index update | O(1) - delete files |
-| Single dataset ops | Network round-trip | Direct file access |
+1. **Immutability**: Datasets are immutable once registered
+2. **Discoverability**: Easy search and metadata access
+3. **Flexibility**: Multiple backends and formats supported
+4. **Performance**: Optimized for ML workflows
+5. **Simplicity**: Intuitive CLI and API
+6. **Extensibility**: Custom transformers and backends
 
-## When to Use MDM
+## Common Use Cases
 
-MDM is ideal when you need:
-- ✅ Simple dataset management without complex infrastructure
-- ✅ Flexibility to work with various data formats
-- ✅ Quick setup and minimal configuration
-- ✅ Portable, self-contained datasets
-- ✅ Integration with existing ML workflows
+### 1. Kaggle Competition Workflow
+```bash
+# Download and register
+kaggle competitions download -c house-prices
+mdm dataset register house_prices ./house-prices-advanced-regression-techniques
 
-MDM might not be the best choice if you need:
-- ❌ Real-time streaming data management
-- ❌ Petabyte-scale data warehousing
-- ❌ Complex access control and audit requirements
-- ❌ Existing investment in enterprise data catalogs
+# Explore
+mdm dataset info house_prices --details
 
-## Getting Started Checklist
+# Work with data
+from mdm import MDMClient
+client = MDMClient()
+train_df, test_df = client.load_dataset_files("house_prices")
+```
 
-1. **Install MDM**
-   ```bash
-   # Create and activate uv virtual environment
-   uv venv
-   source .venv/bin/activate
-   
-   # Install MDM (MUST use uv pip)
-   uv pip install mdm
-   ```
-   
-   **Note**: Regular `pip` cannot be used in a uv-created environment
+### 2. Time Series Analysis
+```bash
+# Register time series data
+mdm dataset register sales_data /data/sales \
+    --time-column date \
+    --target revenue \
+    --problem-type time_series
 
-2. **Configure the system**
-   ```bash
-   mdm init
-   vi config/mdm.yaml
-   ```
+# Analyze patterns
+mdm timeseries analyze sales_data
 
-3. **Register your first dataset**
-   ```bash
-   mdm dataset register my_dataset /path/to/data
-   ```
+# Create CV folds
+mdm timeseries validate sales_data --folds 5 --gap 7
+```
 
-4. **Verify registration**
-   ```bash
-   mdm dataset info my_dataset
-   ```
+### 3. Feature Engineering Pipeline
+```python
+# Create custom features
+# ~/.mdm/custom_features/titanic.py
+from mdm.features.custom.base import BaseDomainFeatures
 
-5. **Start using the data**
-   ```python
-   from mdm import DatasetManager
-   dm = DatasetManager()
-   df = dm.load_table("my_dataset", "train")
-   ```
+class CustomFeatureOperations(BaseDomainFeatures):
+    def get_domain_features(self, df):
+        features = {}
+        features['family_size'] = df['SibSp'] + df['Parch'] + 1
+        features['is_alone'] = (features['family_size'] == 1).astype(int)
+        return features
+
+# Regenerate with custom features
+mdm dataset register titanic /path/to/data --force
+```
+
+### 4. Large Dataset Processing
+```python
+from mdm import MDMClient
+
+client = MDMClient()
+
+# Process in chunks
+def process_chunk(chunk_df):
+    # Your processing logic
+    return chunk_df.describe()
+
+results = client.process_in_chunks(
+    "large_dataset",
+    process_func=process_chunk,
+    chunk_size=50000
+)
+```
+
+## Best Practices Summary
+
+1. **Use meaningful dataset names** with versioning
+2. **Keep datasets immutable** - create new versions instead of modifying
+3. **Choose the right backend** based on dataset size and access patterns
+4. **Use Parquet format** for better performance and type preservation
+5. **Leverage batch operations** for multiple datasets
+6. **Monitor performance** with built-in tools
+7. **Write custom transformers** for domain-specific features
+8. **Use chunk processing** for memory efficiency
+
+## Troubleshooting Quick Reference
+
+| Issue | Quick Fix |
+|-------|-----------|
+| Dataset already exists | Use `--force` flag |
+| Out of memory | Reduce batch size or switch backend |
+| Slow queries | Create indexes or optimize query |
+| Feature generation fails | Check logs or skip with `--no-features` |
+| Command not found | Check installation and PATH |
+
+## What's Next?
+
+1. **Explore the CLI**: Run `mdm --help` to see all commands
+2. **Read the API docs**: Check the programmatic API guide
+3. **Try the examples**: Use sample data in `data/sample/`
+4. **Write custom features**: Create domain-specific transformers
+5. **Run the tests**: Verify your setup with test scripts
+
+## Resources
+
+- **Documentation**: Full documentation in `docs/`
+- **Test Scripts**: End-to-end tests in `scripts/`
+- **Examples**: Sample data in `data/sample/`
+- **Configuration**: Example configs in `config/`
+- **Tests**: Unit and integration tests in `tests/`
 
 ## Key Takeaways
 
-1. **MDM simplifies ML dataset management** without requiring complex infrastructure
+1. MDM makes ML dataset management **simple and consistent**
+2. **Case-insensitive** dataset names for convenience
+3. **Auto-detection** reduces manual configuration
+4. **Feature engineering** is built-in and extensible
+5. **Multiple backends** provide flexibility
+6. **Performance optimized** for ML workflows
+7. **Comprehensive testing** ensures reliability
 
-2. **The decentralized architecture** provides flexibility and portability
-
-3. **Multiple storage backends** allow optimization for different use cases
-
-4. **Rich metadata tracking** enables better dataset discovery and quality control
-
-5. **Simple CLI and Python API** make integration straightforward
-
-## Final Thoughts
-
-MDM represents a deliberate choice: simplicity and portability over centralized complexity. By embracing a fully decentralized architecture where each dataset is self-contained, MDM eliminates the need for:
-- Central registry databases that can become bottlenecks
-- Complex synchronization between registry and data files  
-- Database migration scripts when upgrading
-- Network dependencies for local dataset access
-- Heavyweight infrastructure for simple use cases
-
-The trade-off is clear: you sacrifice some query performance for massive gains in simplicity, portability, and reliability. For most ML workflows, where you work with dozens or hundreds of datasets rather than millions, this trade-off makes perfect sense.
-
-Whether you're working on Kaggle competitions, research projects, or production ML pipelines, MDM provides a refreshingly simple approach to dataset management that just works.
-
-## Learn More
-
-- Start with [Project Overview](01_Project_Overview.md)
-- Configure your system with [Configuration](02_Configuration.md)
-- Register datasets using [Dataset Registration](04_Dataset_Registration.md)
-- Explore operations in [Dataset Management Operations](05_Dataset_Management_Operations.md)
-- Follow [Best Practices](10_Best_Practices.md)
-
----
-
-*MDM: Simple, decentralized dataset management for modern ML workflows.*
+MDM is designed to be the foundation of your ML data pipeline, providing reliable, efficient, and scalable dataset management for projects of any size.
