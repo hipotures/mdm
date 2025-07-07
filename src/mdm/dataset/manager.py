@@ -4,7 +4,9 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from mdm.config import get_config
 from mdm.core.exceptions import DatasetError, StorageError
@@ -25,8 +27,13 @@ class DatasetManager:
                           If not provided, uses config default.
         """
         config = get_config()
+        self.config = config
         self.datasets_path = datasets_path or config.get_full_path("datasets_path")
         self.datasets_path.mkdir(parents=True, exist_ok=True)
+        
+        # Also ensure dataset registry directory exists
+        self.dataset_registry_dir = config.dataset_registry_dir
+        self.dataset_registry_dir.mkdir(parents=True, exist_ok=True)
 
     def register_dataset(self, dataset_info: DatasetInfo) -> None:
         """Register a new dataset.
@@ -48,10 +55,15 @@ class DatasetManager:
             # Create dataset directory
             dataset_path.mkdir(parents=True, exist_ok=True)
 
-            # Save dataset info
+            # Save dataset info to JSON (for backward compatibility)
             info_path = dataset_path / "dataset_info.json"
             with open(info_path, 'w') as f:
                 json.dump(dataset_info.model_dump(), f, indent=2, default=str)
+            
+            # Also save to YAML in registry directory
+            yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
+            with open(yaml_path, 'w') as f:
+                yaml.dump(dataset_info.model_dump(), f, default_flow_style=False, sort_keys=False)
 
             # Initialize metadata directory
             metadata_path = dataset_path / "metadata"
@@ -76,18 +88,28 @@ class DatasetManager:
             DatasetInfo or None if not found
         """
         dataset_name = name.lower()
+        
+        # Try YAML first (new format)
+        yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
+        if yaml_path.exists():
+            try:
+                with open(yaml_path) as f:
+                    data = yaml.safe_load(f)
+                return DatasetInfo(**data)
+            except Exception as e:
+                logger.error(f"Failed to load dataset '{dataset_name}' from YAML: {e}")
+        
+        # Fall back to JSON (backward compatibility)
         info_path = self.datasets_path / dataset_name / "dataset_info.json"
-
-        if not info_path.exists():
-            return None
-
-        try:
-            with open(info_path) as f:
-                data = json.load(f)
-            return DatasetInfo(**data)
-        except Exception as e:
-            logger.error(f"Failed to load dataset '{dataset_name}': {e}")
-            return None
+        if info_path.exists():
+            try:
+                with open(info_path) as f:
+                    data = json.load(f)
+                return DatasetInfo(**data)
+            except Exception as e:
+                logger.error(f"Failed to load dataset '{dataset_name}' from JSON: {e}")
+        
+        return None
 
     def update_dataset(self, name: str, updates: dict[str, Any]) -> DatasetInfo:
         """Update dataset information.
@@ -115,11 +137,19 @@ class DatasetManager:
             # Update timestamp
             dataset_info.last_updated_at = datetime.now(timezone.utc)
 
-            # Save updated info
+            # Save updated info to both locations
             dataset_name = name.lower()
+            
+            # Update JSON (backward compatibility)
             info_path = self.datasets_path / dataset_name / "dataset_info.json"
-            with open(info_path, 'w') as f:
-                json.dump(dataset_info.model_dump(), f, indent=2, default=str)
+            if info_path.exists():
+                with open(info_path, 'w') as f:
+                    json.dump(dataset_info.model_dump(), f, indent=2, default=str)
+            
+            # Update YAML (primary format)
+            yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
+            with open(yaml_path, 'w') as f:
+                yaml.dump(dataset_info.model_dump(), f, default_flow_style=False, sort_keys=False)
 
             logger.info(f"Dataset '{name}' updated successfully")
             return dataset_info
@@ -134,12 +164,25 @@ class DatasetManager:
             List of DatasetInfo objects
         """
         datasets = []
-
+        seen_names = set()
+        
+        # First, scan YAML files in registry (primary source)
+        for yaml_file in self.dataset_registry_dir.glob("*.yaml"):
+            try:
+                dataset_info = self.get_dataset(yaml_file.stem)
+                if dataset_info and dataset_info.name not in seen_names:
+                    datasets.append(dataset_info)
+                    seen_names.add(dataset_info.name)
+            except Exception as e:
+                logger.error(f"Failed to load dataset from {yaml_file}: {e}")
+        
+        # Then scan dataset directories for any missing (backward compatibility)
         for dataset_dir in self.datasets_path.iterdir():
-            if dataset_dir.is_dir():
+            if dataset_dir.is_dir() and dataset_dir.name not in seen_names:
                 dataset_info = self.get_dataset(dataset_dir.name)
                 if dataset_info:
                     datasets.append(dataset_info)
+                    seen_names.add(dataset_info.name)
 
         return sorted(datasets, key=lambda d: d.name)
 
@@ -153,7 +196,10 @@ class DatasetManager:
             True if dataset exists
         """
         dataset_name = name.lower()
-        return (self.datasets_path / dataset_name).exists()
+        # Check both YAML registry and dataset directory
+        yaml_exists = (self.dataset_registry_dir / f"{dataset_name}.yaml").exists()
+        dir_exists = (self.datasets_path / dataset_name).exists()
+        return yaml_exists or dir_exists
 
     def delete_dataset(self, name: str, force: bool = False) -> None:
         """Delete a dataset.
@@ -176,6 +222,13 @@ class DatasetManager:
             logger.warning(f"Deleting dataset '{name}' without confirmation (force=False not implemented)")
 
         try:
+            # Remove YAML config first (atomic operation)
+            yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
+            if yaml_path.exists():
+                yaml_path.unlink()
+                logger.info(f"Removed YAML config: {yaml_path}")
+            
+            # Then remove dataset directory
             import shutil
             shutil.rmtree(dataset_path)
             logger.info(f"Dataset '{name}' deleted successfully")
@@ -341,3 +394,60 @@ class DatasetManager:
 
         except Exception as e:
             raise DatasetError(f"Failed to export metadata: {e}") from e
+
+    def search_datasets(
+        self,
+        query: str,
+        deep: bool = False,
+        case_sensitive: bool = False
+    ) -> List[DatasetInfo]:
+        """Search for datasets matching query.
+        
+        Args:
+            query: Search query string
+            deep: Whether to search in database metadata (slower)
+            case_sensitive: Whether search is case-sensitive
+            
+        Returns:
+            List of matching DatasetInfo objects
+        """
+        matches = []
+        
+        # Process query
+        if not case_sensitive:
+            query = query.lower()
+        
+        # Quick search in YAML files
+        for yaml_file in self.dataset_registry_dir.glob("*.yaml"):
+            try:
+                # Check filename first
+                filename = yaml_file.stem
+                if not case_sensitive:
+                    filename = filename.lower()
+                
+                if query in filename:
+                    dataset_info = self.get_dataset(yaml_file.stem)
+                    if dataset_info:
+                        matches.append(dataset_info)
+                        continue
+                
+                # Check file contents
+                with open(yaml_file, 'r') as f:
+                    content = f.read()
+                    if not case_sensitive:
+                        content = content.lower()
+                    
+                    if query in content:
+                        dataset_info = self.get_dataset(yaml_file.stem)
+                        if dataset_info:
+                            matches.append(dataset_info)
+                
+                # Deep search would require opening databases
+                if deep:
+                    # TODO: Implement deep search in database metadata
+                    pass
+                    
+            except Exception as e:
+                logger.error(f"Error searching {yaml_file}: {e}")
+        
+        return matches

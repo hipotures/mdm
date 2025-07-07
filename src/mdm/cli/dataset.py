@@ -8,11 +8,29 @@ from rich.console import Console
 from rich.table import Table
 
 from mdm.dataset.manager import DatasetManager
+from mdm.dataset.operations import (
+    ExportOperation,
+    InfoOperation,
+    ListOperation,
+    RemoveOperation,
+    SearchOperation,
+    StatsOperation,
+    UpdateOperation,
+)
 from mdm.dataset.registrar import DatasetRegistrar
 
 # Create dataset app
 dataset_app = typer.Typer(help="Dataset management commands")
 console = Console()
+
+
+def _format_size(size_bytes: int) -> str:
+    """Format size in bytes to human-readable format."""
+    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if size_bytes < 1024.0:
+            return f"{size_bytes:.1f} {unit}"
+        size_bytes /= 1024.0
+    return f"{size_bytes:.1f} PB"
 
 
 @dataset_app.command("register")
@@ -103,11 +121,23 @@ def register(
 
 
 @dataset_app.command("list")
-def list_datasets():
+def list_datasets(
+    format: str = typer.Option("rich", "--format", "-f", help="Output format (rich, text, or filename)"),
+    filter_str: Optional[str] = typer.Option(None, "--filter", help="Filter datasets (e.g., 'problem_type=classification')"),
+    sort_by: str = typer.Option("name", "--sort-by", help="Sort field (name, registration_date)"),
+    limit: Optional[int] = typer.Option(None, "--limit", help="Maximum number of results"),
+    full: bool = typer.Option(False, "--full", help="Get full information from databases (slower)"),
+):
     """List all registered datasets."""
     try:
-        manager = DatasetManager()
-        datasets = manager.list_datasets()
+        list_op = ListOperation()
+        datasets = list_op.execute(
+            format=format,
+            filter_str=filter_str,
+            sort_by=sort_by,
+            limit=limit,
+            full=full,
+        )
 
         if not datasets:
             console.print("[yellow]No datasets registered yet.[/yellow]")
@@ -116,21 +146,33 @@ def list_datasets():
         # Create table
         table = Table(title="Registered Datasets")
         table.add_column("Name", style="cyan")
-        table.add_column("Description")
         table.add_column("Problem Type", style="green")
         table.add_column("Target")
         table.add_column("Tables")
+        table.add_column("Total Rows")
+        table.add_column("DB Size")
 
         for dataset in datasets:
+            # Format row count and size
+            row_count = dataset.get('row_count')
+            size = dataset.get('size')
+            
+            row_str = "?" if row_count is None else f"{row_count:,}"
+            size_str = "?" if size is None else _format_size(size)
+            
             table.add_row(
-                dataset.name,
-                dataset.description[:50] + "..." if len(dataset.description) > 50 else dataset.description,
-                dataset.problem_type or "-",
-                dataset.target_column or "-",
-                str(len(dataset.tables))
+                dataset['name'],
+                dataset.get('problem_type') or "-",
+                dataset.get('target_column') or "-",
+                str(len(dataset.get('tables', {}))),
+                row_str,
+                size_str
             )
 
         console.print(table)
+        
+        if not full and any(d.get('row_count') is None for d in datasets):
+            console.print("\n[dim]Note: Row counts and sizes not available in fast mode. Use --full flag for complete information.[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -139,38 +181,49 @@ def list_datasets():
 
 @dataset_app.command("info")
 def dataset_info(
-    name: str = typer.Argument(..., help="Dataset name")
+    name: str = typer.Argument(..., help="Dataset name"),
+    details: bool = typer.Option(False, "--details", "-d", help="Include detailed statistics"),
 ):
     """Show detailed information about a dataset."""
     try:
-        manager = DatasetManager()
-        dataset = manager.get_dataset(name)
-
-        if not dataset:
-            console.print(f"[red]Error:[/red] Dataset '{name}' not found")
-            raise typer.Exit(1)
+        info_op = InfoOperation()
+        info = info_op.execute(name, details=details)
 
         # Display dataset info
-        console.print(f"\n[bold cyan]Dataset: {dataset.display_name}[/bold cyan]")
-        console.print(f"Internal name: {dataset.name}")
+        console.print(f"\n[bold cyan]Dataset: {info.get('display_name', info['name'])}[/bold cyan]")
+        console.print(f"Configuration: {info.get('file', 'N/A')}")
+        
+        if info.get('dataset_path'):
+            console.print(f"Database: {info.get('database_file', info['dataset_path'])} ({_format_size(info.get('database_size', info.get('total_size', 0)))})") 
 
-        if dataset.description:
-            console.print(f"\nDescription: {dataset.description}")
+        if info.get('description'):
+            console.print(f"\nDescription: {info['description']}")
 
-        console.print(f"\nProblem Type: {dataset.problem_type or 'Unknown'}")
-        console.print(f"Target Column: {dataset.target_column or 'None'}")
-        console.print(f"ID Columns: {', '.join(dataset.id_columns) if dataset.id_columns else 'None'}")
+        console.print(f"\nProblem Type: {info.get('problem_type') or 'Unknown'}")
+        console.print(f"Target Column: {info.get('target_column') or 'None'}")
+        console.print(f"ID Columns: {', '.join(info.get('id_columns', [])) if info.get('id_columns') else 'None'}")
 
-        if dataset.tags:
-            console.print(f"Tags: {', '.join(dataset.tags)}")
+        if info.get('tags'):
+            console.print(f"Tags: {', '.join(info['tags'])}")
 
-        console.print(f"\nSource: {dataset.source}")
-        console.print(f"Backend: {dataset.database.get('backend', 'Unknown')}")
+        console.print(f"\nSource: {info.get('source', 'Unknown')}")
+        console.print(f"Backend: {info.get('database', {}).get('backend', 'Unknown')}")
 
         # Display tables
         console.print("\n[bold]Tables:[/bold]")
-        for table_type, table_name in dataset.tables.items():
+        for table_type, table_name in info.get('tables', {}).items():
             console.print(f"  - {table_type}: {table_name}")
+        
+        # Display metadata
+        if info.get('created_at'):
+            console.print(f"\nRegistered: {info['created_at']}")
+        if info.get('last_updated_at'):
+            console.print(f"Last Modified: {info['last_updated_at']}")
+
+        # Display statistics if available
+        if details and info.get('statistics'):
+            console.print("\n[bold]Statistics:[/bold]")
+            console.print(info['statistics']['note'])
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -180,20 +233,235 @@ def dataset_info(
 @dataset_app.command("remove")
 def remove_dataset(
     name: str = typer.Argument(..., help="Dataset name"),
-    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation")
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview what would be deleted"),
 ):
     """Remove a registered dataset."""
     try:
-        manager = DatasetManager()
+        remove_op = RemoveOperation()
+        
+        if dry_run:
+            # Preview mode
+            info = remove_op.execute(name, force=True, dry_run=True)
+            console.print(f"\n[yellow]DRY RUN - No changes will be made[/yellow]")
+            console.print(f"Would remove dataset: {info['name']}")
+            console.print(f"- Config: {info['config_file']}")
+            if info.get('dataset_directory'):
+                console.print(f"- Database: {info['dataset_directory']} ({_format_size(info['size'])})")
+            if info.get('postgresql_db'):
+                console.print(f"- PostgreSQL database: {info['postgresql_db']}")
+            return
 
+        # Get removal info for confirmation
+        info = remove_op.execute(name, force=True, dry_run=True)
+        
         if not force:
-            confirm = typer.confirm(f"Are you sure you want to remove dataset '{name}'?")
+            console.print(f"\nRemoving dataset: {info['name']}")
+            console.print(f"- Config: {info['config_file']}")
+            if info.get('dataset_directory'):
+                console.print(f"- Database: {info['dataset_directory']} ({_format_size(info['size'])})")
+            
+            confirm = typer.confirm("\nAre you sure?")
             if not confirm:
                 console.print("[yellow]Cancelled.[/yellow]")
                 return
 
-        manager.remove_dataset(name)
+        # Actually remove
+        remove_op.execute(name, force=True, dry_run=False)
         console.print(f"[green]✓[/green] Dataset '{name}' removed successfully")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@dataset_app.command("search")
+def search_datasets(
+    query: str = typer.Argument(..., help="Search query"),
+    deep: bool = typer.Option(False, "--deep", help="Search in database metadata (slower)"),
+    pattern: bool = typer.Option(False, "--pattern", "-p", help="Use glob patterns"),
+    case_sensitive: bool = typer.Option(False, "--case-sensitive", "-c", help="Case-sensitive search"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of results"),
+):
+    """Search for datasets."""
+    try:
+        search_op = SearchOperation()
+        matches = search_op.execute(
+            query=query,
+            deep=deep,
+            pattern=pattern,
+            case_sensitive=case_sensitive,
+            limit=limit,
+        )
+
+        if not matches:
+            console.print(f"[yellow]No datasets found matching '{query}'[/yellow]")
+            return
+
+        # Display results
+        table = Table(title=f"Search Results for '{query}'")
+        table.add_column("Name", style="cyan")
+        table.add_column("Display Name")
+        table.add_column("Problem Type", style="green")
+        table.add_column("Target")
+        table.add_column("Description")
+
+        for match in matches:
+            desc = match.get('description', '')
+            desc_preview = desc[:50] + "..." if len(desc) > 50 else desc
+            
+            table.add_row(
+                match['name'],
+                match.get('display_name', match['name']),
+                match.get('problem_type') or "-",
+                match.get('target_column') or "-",
+                desc_preview
+            )
+
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@dataset_app.command("stats")
+def dataset_stats(
+    name: str = typer.Argument(..., help="Dataset name"),
+    full: bool = typer.Option(False, "--full", help="Compute full statistics including correlations"),
+    export: Optional[Path] = typer.Option(None, "--export", help="Export statistics to file"),
+):
+    """Display dataset statistics."""
+    try:
+        stats_op = StatsOperation()
+        stats = stats_op.execute(name, full=full, export=export)
+
+        # Display summary
+        console.print(f"\n[bold cyan]Statistics for dataset: {name}[/bold cyan]")
+        console.print(f"Computed at: {stats['computed_at']}")
+        console.print(f"Mode: {stats['mode']}")
+
+        summary = stats.get('summary', {})
+        console.print(f"\n[bold]Summary:[/bold]")
+        console.print(f"- Total tables: {summary.get('total_tables', 0)}")
+        console.print(f"- Total rows: {summary.get('total_rows', 0):,}")
+        console.print(f"- Total columns: {summary.get('total_columns', 0)}")
+        console.print(f"- Overall completeness: {summary.get('overall_completeness', 1.0):.1%}")
+
+        # Display table statistics
+        for table_name, table_stats in stats.get('tables', {}).items():
+            console.print(f"\n[bold]Table: {table_name}[/bold]")
+            console.print(f"- Rows: {table_stats.get('row_count', 0):,}")
+            console.print(f"- Columns: {table_stats.get('column_count', 0)}")
+            
+            missing = table_stats.get('missing_values', {})
+            if missing.get('total_missing_cells', 0) > 0:
+                console.print(f"- Missing cells: {missing['total_missing_cells']:,} ({missing.get('total_missing_percentage', 0):.1f}%)")
+            
+            # Show column statistics in full mode
+            if full and table_stats.get('columns'):
+                console.print("\n  Column Statistics:")
+                for col_name, col_stats in table_stats['columns'].items():
+                    dtype = col_stats.get('dtype', 'unknown')
+                    null_pct = col_stats.get('null_percentage', 0)
+                    console.print(f"  - {col_name} ({dtype}): {null_pct:.1f}% null")
+
+        if export:
+            console.print(f"\n[green]✓[/green] Statistics exported to {export}")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@dataset_app.command("update")
+def update_dataset(
+    name: str = typer.Argument(..., help="Dataset name"),
+    description: Optional[str] = typer.Option(None, "--description", "-d", help="New description"),
+    target: Optional[str] = typer.Option(None, "--target", "-t", help="New target column"),
+    problem_type: Optional[str] = typer.Option(None, "--problem-type", help="New problem type"),
+    id_columns: Optional[str] = typer.Option(None, "--id-columns", help="New ID columns (comma-separated)"),
+):
+    """Update dataset metadata."""
+    try:
+        # Check if any updates provided
+        if not any([description, target, problem_type, id_columns]):
+            console.print("[yellow]No updates specified. Use --help to see available options.[/yellow]")
+            return
+
+        update_op = UpdateOperation()
+        
+        # Prepare updates
+        id_cols = None
+        if id_columns:
+            id_cols = [col.strip() for col in id_columns.split(",")]
+
+        # Execute update
+        updated = update_op.execute(
+            name=name,
+            description=description,
+            target=target,
+            problem_type=problem_type,
+            id_columns=id_cols,
+        )
+
+        console.print(f"[green]✓[/green] Dataset '{name}' updated successfully")
+        
+        # Show what was updated
+        console.print("\n[bold]Updated fields:[/bold]")
+        if description:
+            console.print(f"- Description: {description}")
+        if target:
+            console.print(f"- Target column: {target}")
+        if problem_type:
+            console.print(f"- Problem type: {problem_type}")
+        if id_columns:
+            console.print(f"- ID columns: {', '.join(id_cols)}")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+
+@dataset_app.command("export")
+def export_dataset(
+    name: str = typer.Argument(..., help="Dataset name"),
+    format: str = typer.Option("csv", "--format", "-f", help="Export format (csv, parquet, json)"),
+    output_dir: Optional[Path] = typer.Option(None, "--output-dir", "-o", help="Output directory"),
+    table: Optional[str] = typer.Option(None, "--table", help="Export specific table only"),
+    compression: Optional[str] = typer.Option(None, "--compression", "-c", help="Compression (zip, gzip, snappy, lz4)"),
+    metadata_only: bool = typer.Option(False, "--metadata-only", help="Export only metadata"),
+    no_header: bool = typer.Option(False, "--no-header", help="Exclude header row (CSV only)"),
+):
+    """Export dataset to various formats."""
+    try:
+        export_op = ExportOperation()
+        
+        # Show what will be exported
+        if metadata_only:
+            console.print(f"Exporting metadata for dataset '{name}'...")
+        elif table:
+            console.print(f"Exporting table '{table}' from dataset '{name}' as {format.upper()}...")
+        else:
+            console.print(f"Exporting all tables from dataset '{name}' as {format.upper()}...")
+
+        # Execute export
+        exported_files = export_op.execute(
+            name=name,
+            format=format,
+            output_dir=output_dir,
+            table=table,
+            compression=compression,
+            metadata_only=metadata_only,
+            no_header=no_header,
+        )
+
+        # Display results
+        console.print(f"\n[green]✓[/green] Export completed successfully")
+        console.print("\n[bold]Exported files:[/bold]")
+        for file_path in exported_files:
+            size = file_path.stat().st_size if file_path.exists() else 0
+            console.print(f"  - {file_path.name} ({_format_size(size)})")
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
