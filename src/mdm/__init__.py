@@ -4,6 +4,11 @@ MDM - ML Data Manager
 A standalone, enterprise-grade dataset management system for machine learning.
 """
 
+import os
+
+# Suppress ydata-profiling promotional banner
+os.environ["YDATA_SUPPRESS_BANNER"] = "1"
+
 __version__ = "0.1.0"
 __author__ = "MDM Development Team"
 
