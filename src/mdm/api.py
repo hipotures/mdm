@@ -1,0 +1,387 @@
+"""MDM Programmatic API.
+
+This module provides the main public API for MDM.
+"""
+
+from typing import Any, Callable, Optional
+
+import pandas as pd
+
+from mdm.config import get_config
+from mdm.dataset.manager import DatasetManager
+from mdm.models.dataset import DatasetInfo
+
+
+class MDMClient:
+    """High-level client for MDM operations."""
+
+    def __init__(self, config=None):
+        """Initialize MDM client.
+
+        Args:
+            config: Optional configuration object. If not provided,
+                   loads from default location.
+        """
+        self.config = config or get_config()
+        self.manager = DatasetManager()
+
+    def register_dataset(
+        self,
+        name: str,
+        dataset_path: str,
+        target_column: Optional[str] = None,
+        id_columns: Optional[list[str]] = None,
+        problem_type: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        auto_analyze: bool = True,
+        force: bool = False,
+        **kwargs
+    ) -> DatasetInfo:
+        """Register a new dataset.
+
+        Args:
+            name: Dataset name (case-insensitive)
+            dataset_path: Path to dataset directory
+            target_column: Name of target column
+            id_columns: List of ID column names
+            problem_type: Type of ML problem (classification, regression, etc.)
+            description: Dataset description
+            tags: List of tags
+            auto_analyze: Whether to auto-detect structure
+            force: Whether to overwrite existing dataset
+            **kwargs: Additional options
+
+        Returns:
+            DatasetInfo object
+
+        Raises:
+            DatasetError: If registration fails
+        """
+        from pathlib import Path
+
+        from mdm.dataset.registrar import DatasetRegistrar
+
+        registrar = DatasetRegistrar(self.manager)
+
+        # Convert path to Path object
+        path = Path(dataset_path)
+        if not path.exists():
+            raise ValueError(f"Path does not exist: {dataset_path}")
+
+        # Register dataset
+        return registrar.register(
+            name=name,
+            path=path,
+            auto_detect=auto_analyze,
+            target_column=target_column,
+            id_columns=id_columns,
+            problem_type=problem_type,
+            description=description,
+            tags=tags,
+            force=force,
+            **kwargs
+        )
+
+    def get_dataset(self, name: str) -> Optional[DatasetInfo]:
+        """Get dataset information.
+
+        Args:
+            name: Dataset name (case-insensitive)
+
+        Returns:
+            DatasetInfo object or None if not found
+        """
+        return self.manager.get_dataset(name)
+
+    def list_datasets(
+        self,
+        filter_func: Optional[Callable[[DatasetInfo], bool]] = None
+    ) -> list[DatasetInfo]:
+        """List all datasets.
+
+        Args:
+            filter_func: Optional filter function
+
+        Returns:
+            List of DatasetInfo objects
+        """
+        datasets = self.manager.list_datasets()
+
+        if filter_func:
+            datasets = [d for d in datasets if filter_func(d)]
+
+        return datasets
+
+    def dataset_exists(self, name: str) -> bool:
+        """Check if dataset exists.
+
+        Args:
+            name: Dataset name (case-insensitive)
+
+        Returns:
+            True if dataset exists
+        """
+        return self.manager.dataset_exists(name)
+
+    def load_dataset_files(
+        self,
+        name: str,
+        sample_size: Optional[int] = None
+    ) -> tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        """Load dataset files as DataFrames.
+
+        Args:
+            name: Dataset name
+            sample_size: Optional sample size
+
+        Returns:
+            Tuple of (train_df, test_df). test_df may be None.
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        dataset_info = self.get_dataset(name)
+        if not dataset_info:
+            raise ValueError(f"Dataset '{name}' not found")
+
+        backend = self.manager.get_backend(name)
+
+        # Load train table
+        train_table = dataset_info.tables.get("train")
+        if not train_table:
+            raise ValueError(f"Dataset '{name}' has no train table")
+
+        train_df = backend.read_table(train_table)
+
+        # Sample if requested
+        if sample_size and len(train_df) > sample_size:
+            train_df = train_df.sample(n=sample_size, random_state=42)
+
+        # Load test table if exists
+        test_df = None
+        test_table = dataset_info.tables.get("test")
+        if test_table:
+            test_df = backend.read_table(test_table)
+            if sample_size and test_df is not None and len(test_df) > sample_size:
+                test_df = test_df.sample(n=sample_size, random_state=42)
+
+        return train_df, test_df
+
+    def load_table(self, name: str, table_name: str) -> pd.DataFrame:
+        """Load a specific table from dataset.
+
+        Args:
+            name: Dataset name
+            table_name: Table name (e.g., 'train', 'test', 'validation')
+
+        Returns:
+            DataFrame
+
+        Raises:
+            DatasetError: If dataset or table not found
+        """
+        dataset_info = self.get_dataset(name)
+        if not dataset_info:
+            raise ValueError(f"Dataset '{name}' not found")
+
+        table_full_name = dataset_info.tables.get(table_name)
+        if not table_full_name:
+            available = list(dataset_info.tables.keys())
+            raise ValueError(
+                f"Table '{table_name}' not found in dataset '{name}'. "
+                f"Available tables: {available}"
+            )
+
+        backend = self.manager.get_backend(name)
+        return backend.read_table(table_full_name)
+
+    def query_dataset(self, name: str, query: str) -> pd.DataFrame:
+        """Execute SQL query on dataset.
+
+        Args:
+            name: Dataset name
+            query: SQL query string
+
+        Returns:
+            Query result as DataFrame
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        backend = self.manager.get_backend(name)
+        return backend.execute_query(query)
+
+    def get_dataset_connection(self, name: str):
+        """Get direct database connection.
+
+        Args:
+            name: Dataset name
+
+        Returns:
+            Database connection object (DuckDB, SQLite, etc.)
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        backend = self.manager.get_backend(name)
+
+        # Get the underlying connection
+        if hasattr(backend, 'get_connection'):
+            return backend.get_connection()
+        if hasattr(backend, 'connection'):
+            return backend.connection
+        raise NotImplementedError(
+            f"Backend {type(backend).__name__} does not support direct connections"
+        )
+
+    def update_dataset(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        target_column: Optional[str] = None,
+        problem_type: Optional[str] = None,
+        id_columns: Optional[list[str]] = None,
+        tags: Optional[list[str]] = None,
+    ) -> DatasetInfo:
+        """Update dataset metadata.
+
+        Args:
+            name: Dataset name
+            description: New description
+            target_column: New target column
+            problem_type: New problem type
+            id_columns: New ID columns
+            tags: New tags
+
+        Returns:
+            Updated DatasetInfo
+
+        Raises:
+            DatasetError: If dataset not found or update fails
+        """
+        updates = {}
+        if description is not None:
+            updates['description'] = description
+        if target_column is not None:
+            updates['target_column'] = target_column
+        if problem_type is not None:
+            updates['problem_type'] = problem_type
+        if id_columns is not None:
+            updates['id_columns'] = id_columns
+        if tags is not None:
+            updates['tags'] = tags
+
+        return self.manager.update_dataset(name, updates)
+
+    def remove_dataset(self, name: str, force: bool = False) -> None:
+        """Remove a dataset.
+
+        Args:
+            name: Dataset name
+            force: Skip confirmation
+
+        Raises:
+            DatasetError: If dataset not found or removal fails
+        """
+        self.manager.delete_dataset(name, force=force)
+
+    def export_dataset(
+        self,
+        name: str,
+        output_dir: str,
+        format: str = "csv",
+        tables: Optional[list[str]] = None,
+        compression: Optional[str] = None,
+    ) -> list[str]:
+        """Export dataset to files.
+
+        Args:
+            name: Dataset name
+            output_dir: Output directory path
+            format: Export format (csv, parquet, json)
+            tables: Specific tables to export (default: all)
+            compression: Compression type (zip, gzip, etc.)
+
+        Returns:
+            List of exported file paths
+
+        Raises:
+            DatasetError: If dataset not found or export fails
+        """
+        from pathlib import Path
+
+        from mdm.dataset.operations import ExportOperation
+
+        export_op = ExportOperation()
+
+        # Convert tables list to specific table name if only one
+        table_name = None
+        if tables and len(tables) == 1:
+            table_name = tables[0]
+
+        exported_files = export_op.execute(
+            name=name,
+            format=format,
+            output_dir=Path(output_dir),
+            table=table_name,
+            compression=compression,
+        )
+
+        return [str(f) for f in exported_files]
+
+    def get_statistics(self, name: str, full: bool = False) -> dict[str, Any]:
+        """Get dataset statistics.
+
+        Args:
+            name: Dataset name
+            full: Whether to compute full statistics
+
+        Returns:
+            Statistics dictionary
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        from mdm.dataset.operations import StatsOperation
+
+        stats_op = StatsOperation()
+        return stats_op.execute(name, full=full)
+
+
+# Convenience functions
+def load_dataset(name: str) -> tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    """Load dataset files.
+
+    Args:
+        name: Dataset name
+
+    Returns:
+        Tuple of (train_df, test_df)
+    """
+    client = MDMClient()
+    return client.load_dataset_files(name)
+
+
+def list_datasets() -> list[str]:
+    """List all dataset names.
+
+    Returns:
+        List of dataset names
+    """
+    client = MDMClient()
+    datasets = client.list_datasets()
+    return [d.name for d in datasets]
+
+
+def get_dataset_info(name: str) -> Optional[DatasetInfo]:
+    """Get dataset information.
+
+    Args:
+        name: Dataset name
+
+    Returns:
+        DatasetInfo object or None
+    """
+    client = MDMClient()
+    return client.get_dataset(name)
