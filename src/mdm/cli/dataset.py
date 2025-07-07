@@ -116,7 +116,7 @@ def register(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @dataset_app.command("list")
@@ -175,7 +175,7 @@ def list_datasets(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @dataset_app.command("info")
@@ -226,7 +226,7 @@ def dataset_info(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @dataset_app.command("search")
@@ -367,7 +367,7 @@ def update_dataset(
             return
 
         operation = UpdateOperation()
-        updated_info = operation.execute(name, updates)
+        operation.execute(name, updates)
 
         console.print(f"[green]✓[/green] Dataset '{name}' updated successfully")
         console.print("\nUpdated fields:")
@@ -456,57 +456,9 @@ def remove_dataset(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
-@dataset_app.command("search")
-def search_datasets(
-    query: str = typer.Argument(..., help="Search query"),
-    deep: bool = typer.Option(False, "--deep", help="Search in database metadata (slower)"),
-    pattern: bool = typer.Option(False, "--pattern", "-p", help="Use glob patterns"),
-    case_sensitive: bool = typer.Option(False, "--case-sensitive", "-c", help="Case-sensitive search"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Maximum number of results"),
-):
-    """Search for datasets."""
-    try:
-        search_op = SearchOperation()
-        matches = search_op.execute(
-            query=query,
-            deep=deep,
-            pattern=pattern,
-            case_sensitive=case_sensitive,
-            limit=limit,
-        )
-
-        if not matches:
-            console.print(f"[yellow]No datasets found matching '{query}'[/yellow]")
-            return
-
-        # Display results
-        table = Table(title=f"Search Results for '{query}'")
-        table.add_column("Name", style="cyan")
-        table.add_column("Display Name")
-        table.add_column("Problem Type", style="green")
-        table.add_column("Target")
-        table.add_column("Description")
-
-        for match in matches:
-            desc = match.get('description', '')
-            desc_preview = desc[:50] + "..." if len(desc) > 50 else desc
-
-            table.add_row(
-                match['name'],
-                match.get('display_name', match['name']),
-                match.get('problem_type') or "-",
-                match.get('target_column') or "-",
-                desc_preview
-            )
-
-        console.print(table)
-
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
 
 
 @dataset_app.command("stats")
@@ -555,98 +507,8 @@ def dataset_stats(
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
-@dataset_app.command("update")
-def update_dataset(
-    name: str = typer.Argument(..., help="Dataset name"),
-    description: Optional[str] = typer.Option(None, "--description", "-d", help="New description"),
-    target: Optional[str] = typer.Option(None, "--target", "-t", help="New target column"),
-    problem_type: Optional[str] = typer.Option(None, "--problem-type", help="New problem type"),
-    id_columns: Optional[str] = typer.Option(None, "--id-columns", help="New ID columns (comma-separated)"),
-):
-    """Update dataset metadata."""
-    try:
-        # Check if any updates provided
-        if not any([description, target, problem_type, id_columns]):
-            console.print("[yellow]No updates specified. Use --help to see available options.[/yellow]")
-            return
-
-        update_op = UpdateOperation()
-
-        # Prepare updates
-        id_cols = None
-        if id_columns:
-            id_cols = [col.strip() for col in id_columns.split(",")]
-
-        # Execute update
-        updated = update_op.execute(
-            name=name,
-            description=description,
-            target=target,
-            problem_type=problem_type,
-            id_columns=id_cols,
-        )
-
-        console.print(f"[green]✓[/green] Dataset '{name}' updated successfully")
-
-        # Show what was updated
-        console.print("\n[bold]Updated fields:[/bold]")
-        if description:
-            console.print(f"- Description: {description}")
-        if target:
-            console.print(f"- Target column: {target}")
-        if problem_type:
-            console.print(f"- Problem type: {problem_type}")
-        if id_columns:
-            console.print(f"- ID columns: {', '.join(id_cols)}")
-
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
 
 
-@dataset_app.command("export")
-def export_dataset(
-    name: str = typer.Argument(..., help="Dataset name"),
-    format: str = typer.Option("csv", "--format", "-f", help="Export format (csv, parquet, json)"),
-    output_dir: Optional[Path] = typer.Option(None, "--output-dir", "-o", help="Output directory"),
-    table: Optional[str] = typer.Option(None, "--table", help="Export specific table only"),
-    compression: Optional[str] = typer.Option(None, "--compression", "-c", help="Compression (zip, gzip, snappy, lz4)"),
-    metadata_only: bool = typer.Option(False, "--metadata-only", help="Export only metadata"),
-    no_header: bool = typer.Option(False, "--no-header", help="Exclude header row (CSV only)"),
-):
-    """Export dataset to various formats."""
-    try:
-        export_op = ExportOperation()
-
-        # Show what will be exported
-        if metadata_only:
-            console.print(f"Exporting metadata for dataset '{name}'...")
-        elif table:
-            console.print(f"Exporting table '{table}' from dataset '{name}' as {format.upper()}...")
-        else:
-            console.print(f"Exporting all tables from dataset '{name}' as {format.upper()}...")
-
-        # Execute export
-        exported_files = export_op.execute(
-            name=name,
-            format=format,
-            output_dir=output_dir,
-            table=table,
-            compression=compression,
-            metadata_only=metadata_only,
-            no_header=no_header,
-        )
-
-        # Display results
-        console.print("\n[green]✓[/green] Export completed successfully")
-        console.print("\n[bold]Exported files:[/bold]")
-        for file_path in exported_files:
-            size = file_path.stat().st_size if file_path.exists() else 0
-            console.print(f"  - {file_path.name} ({_format_size(size)})")
-
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
