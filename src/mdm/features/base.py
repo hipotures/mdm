@@ -56,7 +56,7 @@ class BaseFeatureOperation(ABC):
                             f"Generated feature '{feature_name}' in {elapsed:.3f}s"
                         )
                     else:
-                        logger.info(
+                        logger.debug(
                             f"Feature '{feature_name}' has no signal, discarded"
                         )
 

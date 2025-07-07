@@ -305,6 +305,10 @@ class DatasetRegistrar:
                     logger.warning(f"Unsupported file type: {file_path}")
                     continue
 
+                # Log column information
+                logger.debug(f"Columns in {table_name}: {list(df.columns)}")
+                logger.debug(f"Data types: {df.dtypes.to_dict()}")
+                
                 # Load into database
                 backend.create_table_from_dataframe(df, table_name, engine, if_exists='replace')
                 table_mappings[file_key] = table_name
