@@ -18,7 +18,7 @@ from mdm.features.generic import (
     TextFeatures,
 )
 from mdm.features.signal import SignalDetector
-from mdm.storage.base import BaseBackend
+from mdm.storage.base import StorageBackend
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -43,7 +43,7 @@ class FeatureEngine:
     def generate_features(
         self,
         dataset_name: str,
-        backend: BaseBackend,
+        backend: StorageBackend,
         tables: dict[str, str],
         target_column: Optional[str] = None,
         id_columns: Optional[list[str]] = None,
@@ -102,7 +102,7 @@ class FeatureEngine:
     def _generate_table_features(
         self,
         dataset_name: str,
-        backend: BaseBackend,
+        backend: StorageBackend,
         table_name: str,
         table_type: str,
         target_column: Optional[str] = None,

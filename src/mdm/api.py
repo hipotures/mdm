@@ -3,13 +3,16 @@
 This module provides the main public API for MDM.
 """
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 import pandas as pd
 
 from mdm.config import get_config
 from mdm.dataset.manager import DatasetManager
 from mdm.models.dataset import DatasetInfo
+from mdm.utils.integration import MLFrameworkAdapter, SubmissionCreator
+from mdm.utils.performance import ChunkProcessor, PerformanceMonitor
+from mdm.utils.time_series import TimeSeriesSplitter
 
 
 class MDMClient:
@@ -347,6 +350,137 @@ class MDMClient:
 
         stats_op = StatsOperation()
         return stats_op.execute(name, full=full)
+
+    def split_time_series(
+        self,
+        name: str,
+        test_size: Union[float, int],
+        validation_size: Optional[Union[float, int]] = None,
+        time_column: Optional[str] = None,
+    ) -> dict[str, pd.DataFrame]:
+        """Split time series dataset.
+
+        Args:
+            name: Dataset name
+            test_size: Size of test set (fraction or days)
+            validation_size: Size of validation set
+            time_column: Time column (uses dataset's time_column if not specified)
+
+        Returns:
+            Dictionary with train, validation (optional), and test DataFrames
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        dataset_info = self.get_dataset(name)
+        if not dataset_info:
+            raise ValueError(f"Dataset '{name}' not found")
+
+        # Use dataset's time column if not specified
+        time_col = time_column or dataset_info.time_column
+        if not time_col:
+            raise ValueError(f"No time column specified for dataset '{name}'")
+
+        # Load data
+        train_df, _ = self.load_dataset_files(name)
+
+        # Split data
+        splitter = TimeSeriesSplitter(time_col, dataset_info.group_column)
+        return splitter.split_by_time(train_df, test_size, validation_size)
+
+    def prepare_for_ml(
+        self,
+        name: str,
+        framework: str = 'auto',
+        sample_size: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Prepare dataset for ML framework.
+
+        Args:
+            name: Dataset name
+            framework: ML framework ('sklearn', 'pytorch', 'tensorflow', 'auto')
+            sample_size: Optional sample size
+
+        Returns:
+            Dictionary with prepared data for the framework
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        dataset_info = self.get_dataset(name)
+        if not dataset_info:
+            raise ValueError(f"Dataset '{name}' not found")
+
+        # Load data
+        train_df, test_df = self.load_dataset_files(name, sample_size)
+
+        # Prepare for framework
+        adapter = MLFrameworkAdapter(framework)
+        return adapter.prepare_data(
+            train_df,
+            test_df,
+            dataset_info.target_column,
+            dataset_info.id_columns,
+        )
+
+    def create_submission(
+        self,
+        name: str,
+        predictions: Union[pd.Series, pd.DataFrame, list],
+        output_path: Optional[str] = None,
+    ) -> str:
+        """Create submission file.
+
+        Args:
+            name: Dataset name
+            predictions: Model predictions
+            output_path: Output file path
+
+        Returns:
+            Path to created submission file
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        creator = SubmissionCreator(self.manager)
+        return creator.create_submission(name, predictions, output_path)
+
+    def process_in_chunks(
+        self,
+        name: str,
+        process_func: Callable,
+        table_name: str = 'train',
+        chunk_size: Optional[int] = None,
+        show_progress: bool = True,
+    ) -> list[Any]:
+        """Process dataset in chunks.
+
+        Args:
+            name: Dataset name
+            process_func: Function to apply to each chunk
+            table_name: Table to process
+            chunk_size: Chunk size (default from config)
+            show_progress: Whether to show progress
+
+        Returns:
+            List of results from each chunk
+
+        Raises:
+            DatasetError: If dataset not found
+        """
+        # Load data
+        df = self.load_table(name, table_name)
+
+        # Process in chunks
+        processor = ChunkProcessor(chunk_size)
+        return processor.process_dataframe(df, process_func, show_progress)
+
+    @property
+    def performance_monitor(self) -> PerformanceMonitor:
+        """Get performance monitor instance."""
+        if not hasattr(self, '_perf_monitor'):
+            self._perf_monitor = PerformanceMonitor()
+        return self._perf_monitor
 
 
 # Convenience functions

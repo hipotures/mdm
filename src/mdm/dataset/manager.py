@@ -12,6 +12,7 @@ from mdm.config import get_config
 from mdm.core.exceptions import DatasetError, StorageError
 from mdm.models.dataset import DatasetInfo, DatasetStatistics
 from mdm.storage.factory import BackendFactory
+from mdm.utils.serialization import serialize_for_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class DatasetManager:
             # Also save to YAML in registry directory
             yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
             with open(yaml_path, 'w') as f:
-                yaml.dump(dataset_info.model_dump(), f, default_flow_style=False, sort_keys=False)
+                yaml.dump(serialize_for_yaml(dataset_info.model_dump()), f, default_flow_style=False, sort_keys=False)
 
             # Initialize metadata directory
             metadata_path = dataset_path / "metadata"
@@ -149,7 +150,7 @@ class DatasetManager:
             # Update YAML (primary format)
             yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
             with open(yaml_path, 'w') as f:
-                yaml.dump(dataset_info.model_dump(), f, default_flow_style=False, sort_keys=False)
+                yaml.dump(serialize_for_yaml(dataset_info.model_dump()), f, default_flow_style=False, sort_keys=False)
 
             logger.info(f"Dataset '{name}' updated successfully")
             return dataset_info
@@ -384,7 +385,7 @@ class DatasetManager:
             if output_path.suffix.lower() == '.yaml':
                 import yaml
                 with open(output_path, 'w') as f:
-                    yaml.dump(metadata, f, default_flow_style=False)
+                    yaml.dump(serialize_for_yaml(metadata), f, default_flow_style=False)
             else:
                 # Default to JSON
                 with open(output_path, 'w') as f:

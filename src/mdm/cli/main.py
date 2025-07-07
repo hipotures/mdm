@@ -9,6 +9,7 @@ from rich.console import Console
 
 from mdm.cli.batch import batch_app
 from mdm.cli.dataset import dataset_app
+from mdm.cli.timeseries import app as timeseries_app
 from mdm.config import get_config
 from mdm.dataset.manager import DatasetManager
 
@@ -22,6 +23,7 @@ app = typer.Typer(
 # Add subcommands
 app.add_typer(dataset_app, name="dataset", help="Dataset management commands")
 app.add_typer(batch_app, name="batch", help="Batch operations for multiple datasets")
+app.add_typer(timeseries_app, name="timeseries", help="Time series operations")
 
 # Create console for output
 console = Console()

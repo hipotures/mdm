@@ -18,10 +18,13 @@ class DatasetInfo(BaseModel):
     database: dict = Field(description="Database connection info")
     tables: dict[str, str] = Field(default_factory=dict, description="Table mappings")
     problem_type: Optional[
-        Literal["binary_classification", "multiclass_classification", "regression"]
+        Literal["binary_classification", "multiclass_classification", "regression", "time_series", "clustering"]
     ] = Field(default=None, description="ML problem type")
     target_column: Optional[str] = Field(default=None, description="Target column name")
     id_columns: list[str] = Field(default_factory=list, description="ID columns")
+    time_column: Optional[str] = Field(default=None, description="Time column for time series")
+    group_column: Optional[str] = Field(default=None, description="Group column for grouped time series")
+    feature_tables: dict[str, str] = Field(default_factory=dict, description="Feature table mappings")
     registered_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Registration timestamp"
@@ -32,6 +35,7 @@ class DatasetInfo(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Dataset tags")
     source: Optional[str] = Field(default=None, description="Data source")
     version: str = Field(default="1.0.0", description="Dataset version")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
 
     @field_validator("name")
     @classmethod

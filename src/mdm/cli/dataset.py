@@ -8,13 +8,10 @@ from rich.console import Console
 from rich.table import Table
 
 from mdm.dataset.operations import (
-    ExportOperation,
     InfoOperation,
     ListOperation,
     RemoveOperation,
-    SearchOperation,
     StatsOperation,
-    UpdateOperation,
 )
 from mdm.dataset.registrar import DatasetRegistrar
 
@@ -43,9 +40,11 @@ def register(
     submission: Optional[Path] = typer.Option(None, "--submission", help="Path to submission file"),
     target: Optional[str] = typer.Option(None, "--target", "-t", help="Target column name"),
     id_columns: Optional[str] = typer.Option(None, "--id-columns", help="Comma-separated ID columns"),
-    problem_type: Optional[str] = typer.Option(None, "--problem-type", help="Problem type"),
+    problem_type: Optional[str] = typer.Option(None, "--problem-type", help="Problem type (classification/regression/time_series)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Dataset description"),
     tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
+    time_column: Optional[str] = typer.Option(None, "--time-column", help="Time column for time series datasets"),
+    group_column: Optional[str] = typer.Option(None, "--group-column", help="Group column for grouped time series"),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-registration"),
     no_features: bool = typer.Option(False, "--no-features", help="Skip feature generation"),
 ):
@@ -64,6 +63,10 @@ def register(
             kwargs["id_columns"] = [col.strip() for col in id_columns.split(",")]
         if problem_type:
             kwargs["problem_type"] = problem_type
+        if time_column:
+            kwargs["time_column"] = time_column
+        if group_column:
+            kwargs["group_column"] = group_column
 
         # Handle manual mode
         if no_auto:

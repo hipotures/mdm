@@ -22,6 +22,7 @@ from mdm.features.generator import FeatureGenerator
 from mdm.models.dataset import DatasetInfo
 from mdm.models.enums import ColumnType
 from mdm.storage.factory import BackendFactory
+from mdm.utils.serialization import serialize_for_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,9 @@ class DatasetRegistrar:
             problem_type=problem_type,
             target_column=target_column,
             id_columns=id_columns,
+            time_column=kwargs.get('time_column'),
+            group_column=kwargs.get('group_column'),
+            feature_tables=feature_tables,
             tags=tags or [],
             source=str(path),
             **{k: v for k, v in kwargs.items()
