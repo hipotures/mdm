@@ -234,15 +234,25 @@ def dataset_info(
 
 @dataset_app.command("search")
 def search_datasets(
-    query: str = typer.Argument(..., help="Search query"),
+    query: Optional[str] = typer.Argument(None, help="Search query (optional when using --tag)"),
     deep: bool = typer.Option(False, "--deep", help="Search in dataset metadata (slower)"),
     pattern: bool = typer.Option(False, "--pattern", help="Use glob pattern matching"),
     case_sensitive: bool = typer.Option(False, "--case-sensitive", help="Case sensitive search"),
+    tag: Optional[str] = typer.Option(None, "--tag", help="Search for datasets with specific tag"),
     limit: Optional[int] = typer.Option(None, "--limit", help="Maximum results"),
 ) -> None:
     """Search for datasets."""
     try:
         from mdm.dataset.operations import SearchOperation
+
+        # If no query and no tag, show error
+        if not query and not tag:
+            console.print("[red]Error:[/red] Either a search query or --tag must be provided")
+            raise typer.Exit(1)
+
+        # Use tag as query if no query provided
+        if not query and tag:
+            query = tag
 
         operation = SearchOperation()
         results = operation.execute(
@@ -250,23 +260,35 @@ def search_datasets(
             deep=deep,
             pattern=pattern,
             case_sensitive=case_sensitive,
+            tag=tag,
             limit=limit
         )
 
         if not results:
-            console.print(f"[yellow]No datasets found matching '{query}'[/yellow]")
+            if tag:
+                console.print(f"[yellow]No datasets found with tag '{tag}'[/yellow]")
+            else:
+                console.print(f"[yellow]No datasets found matching '{query}'[/yellow]")
             return
 
         # Display results
-        table = Table(title=f"Search Results for '{query}'")
+        if tag:
+            table_title = f"Datasets with tag '{tag}'"
+        else:
+            table_title = f"Search Results for '{query}'"
+        
+        table = Table(title=table_title)
         table.add_column("Name", style="cyan")
         table.add_column("Description")
+        table.add_column("Tags", style="yellow")
         table.add_column("Match Location", style="green")
 
         for result in results:
+            tags_str = ", ".join(result.get('tags', [])) if result.get('tags') else "-"
             table.add_row(
                 result['name'],
                 result.get('description', '-')[:50] + "..." if len(result.get('description', '')) > 50 else result.get('description', '-'),
+                tags_str,
                 result.get('match_location', 'name')
             )
 
@@ -296,46 +318,43 @@ def show_statistics(
             console.print(f"[green]✓[/green] Statistics exported to {export}")
         else:
             # Display statistics
-            console.print(f"\n[bold cyan]Statistics for dataset: {name}[/bold cyan]\n")
+            console.print(f"\n[bold cyan]Statistics for dataset: {name}[/bold cyan]")
+            console.print(f"Computed at: {stats['computed_at']}")
+            console.print(f"Mode: {stats['mode']}\n")
 
-            # Basic info
-            console.print("[bold]Overview:[/bold]")
-            console.print(f"  Total rows: {stats['total_rows']:,}")
-            console.print(f"  Total columns: {stats['total_columns']}")
-            console.print(f"  Memory usage: {stats['memory_usage_mb']:.1f} MB")
-            console.print(f"  Missing values: {stats['total_missing']:,} ({stats['missing_percentage']:.1f}%)")
+            # Summary info
+            summary = stats.get('summary', {})
+            console.print("[bold]Summary:[/bold]")
+            console.print(f"- Total tables: {summary.get('total_tables', 0)}")
+            console.print(f"- Total rows: {summary.get('total_rows', 0):,}")
+            console.print(f"- Total columns: {summary.get('total_columns', 0)}")
+            console.print(f"- Overall completeness: {summary.get('overall_completeness', 0) * 100:.1f}%")
 
-            # Column types
-            console.print("\n[bold]Column Types:[/bold]")
-            for col_type, count in stats['column_types'].items():
-                console.print(f"  {col_type}: {count}")
+            # Table statistics
+            if stats.get('tables'):
+                console.print("\n[bold]Table Statistics:[/bold]")
+                for table_name, table_stats in stats['tables'].items():
+                    if table_stats:
+                        console.print(f"\n  Table: {table_name}")
+                        console.print(f"  - Rows: {table_stats.get('row_count', 0):,}")
+                        console.print(f"  - Columns: {table_stats.get('column_count', 0)}")
+                        if 'missing_values' in table_stats:
+                            missing = table_stats['missing_values']
+                            console.print(f"  - Missing cells: {missing.get('total_missing', 0):,}")
+                            console.print(f"  - Completeness: {missing.get('completeness', 0) * 100:.1f}%")
 
-            # Data quality
-            if 'data_quality' in stats:
-                console.print("\n[bold]Data Quality:[/bold]")
-                console.print(f"  Completeness: {stats['data_quality']['completeness']:.1f}%")
-                console.print(f"  Duplicate rows: {stats['data_quality']['duplicate_rows']}")
-
-            if full and 'column_stats' in stats:
-                console.print("\n[bold]Column Statistics:[/bold]")
-                # Show detailed column stats in a table
-                col_table = Table()
-                col_table.add_column("Column")
-                col_table.add_column("Type")
-                col_table.add_column("Missing")
-                col_table.add_column("Unique")
-                col_table.add_column("Mean/Mode")
-
-                for col_name, col_stats in stats['column_stats'].items():
-                    col_table.add_row(
-                        col_name,
-                        col_stats['dtype'],
-                        f"{col_stats['missing_count']} ({col_stats['missing_percentage']:.1f}%)",
-                        str(col_stats.get('unique_count', '-')),
-                        str(col_stats.get('mean', col_stats.get('mode', '-')))
-                    )
-
-                console.print(col_table)
+            if full:
+                console.print("\n[bold]Detailed Statistics:[/bold]")
+                # Show detailed stats for each table
+                for table_name, table_stats in stats.get('tables', {}).items():
+                    if table_stats and 'columns' in table_stats:
+                        console.print(f"\n  [bold]{table_name}[/bold] columns:")
+                        for col_name, col_stats in table_stats['columns'].items():
+                            if col_stats:
+                                console.print(f"    {col_name}:")
+                                console.print(f"      - Type: {col_stats.get('dtype', 'unknown')}")
+                                console.print(f"      - Non-null: {col_stats.get('non_null', 0):,}")
+                                console.print(f"      - Unique: {col_stats.get('unique', 0):,}")
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -398,13 +417,13 @@ def export_dataset(
 
         operation = ExportOperation()
         exported_files = operation.execute(
-            dataset_name=name,
-            output_dir=output_dir,
-            table_name=table,
+            name=name,
             format=format,
+            output_dir=output_dir,
+            table=table,
             compression=compression,
             metadata_only=metadata_only,
-            csv_header=not no_header
+            no_header=no_header
         )
 
         console.print(f"[green]✓[/green] Dataset '{name}' exported successfully")

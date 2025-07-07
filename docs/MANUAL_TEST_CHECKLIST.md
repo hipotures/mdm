@@ -197,8 +197,6 @@ For each parameter in mdm.yaml.default, perform:
 - [ ] Register with `--stratify-column` for stratified splitting
 - [ ] Register with `--group-column` for grouped splitting
 - [ ] Register with `--time-column` for temporal splits
-- [ ] Register with `--imbalanced` flag
-- [ ] Register with `--validation-split` ratio
 
 #### 2.1.4 Metadata Options
 - [ ] Register with `--description` text

@@ -287,6 +287,7 @@ class SearchOperation(DatasetOperation):
         deep: bool = False,
         pattern: bool = False,
         case_sensitive: bool = False,
+        tag: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """Search for datasets.
@@ -296,6 +297,7 @@ class SearchOperation(DatasetOperation):
             deep: Whether to search in database metadata
             pattern: Whether to use glob patterns
             case_sensitive: Whether search is case-sensitive
+            tag: Search for datasets with specific tag
             limit: Maximum number of results
 
         Returns:
@@ -308,30 +310,70 @@ class SearchOperation(DatasetOperation):
         self.dataset_registry_dir.mkdir(parents=True, exist_ok=True)
 
         # Process query
-        if not case_sensitive:
-            query = query.lower()
+        query_lower = query.lower() if not case_sensitive else query
 
         for yaml_file in self.dataset_registry_dir.glob("*.yaml"):
             if limit and count >= limit:
                 break
 
             try:
-                if self._matches_file(yaml_file, query, pattern, case_sensitive, deep):
-                    with open(yaml_file) as f:
-                        data = yaml.safe_load(f)
-                    matches.append({
-                        'name': data.get('name', yaml_file.stem),
-                        'display_name': data.get('display_name', data.get('name')),
-                        'description': data.get('description', ''),
-                        'problem_type': data.get('problem_type'),
-                        'target_column': data.get('target_column'),
-                        'file': str(yaml_file),
-                    })
-                    count += 1
+                with open(yaml_file) as f:
+                    data = yaml.safe_load(f)
+                
+                # If tag is specified, check if dataset has that tag
+                if tag:
+                    dataset_tags = data.get('tags', [])
+                    if tag not in dataset_tags:
+                        continue
+                
+                # If searching by tag only (query == tag), we already found a match
+                # Otherwise, check if file matches the query
+                if query != tag and not self._matches_file(yaml_file, query, pattern, case_sensitive, deep):
+                    continue
+                
+                match_info = {
+                    'name': data.get('name', yaml_file.stem),
+                    'display_name': data.get('display_name', data.get('name')),
+                    'description': data.get('description', ''),
+                    'problem_type': data.get('problem_type'),
+                    'target_column': data.get('target_column'),
+                    'tags': data.get('tags', []),
+                    'file': str(yaml_file),
+                }
+                
+                # Add match location info
+                if self._matches_name(yaml_file, query, pattern, case_sensitive):
+                    match_info['match_location'] = 'name'
+                elif tag and query == tag:
+                    match_info['match_location'] = 'tag'
+                else:
+                    match_info['match_location'] = 'content'
+                
+                matches.append(match_info)
+                count += 1
             except Exception as e:
                 logger.error(f"Error searching {yaml_file}: {e}")
 
         return matches
+
+    def _matches_name(
+        self,
+        yaml_file: Path,
+        query: str,
+        pattern: bool,
+        case_sensitive: bool
+    ) -> bool:
+        """Check if filename matches search criteria."""
+        filename = yaml_file.stem
+        check_query = query
+        if not case_sensitive:
+            filename = filename.lower()
+            check_query = query.lower()
+
+        if pattern:
+            return fnmatch.fnmatch(filename, check_query)
+        else:
+            return check_query in filename
 
     def _matches_file(
         self,
@@ -343,25 +385,19 @@ class SearchOperation(DatasetOperation):
     ) -> bool:
         """Check if file matches search criteria."""
         # First check filename
-        filename = yaml_file.stem
-        if not case_sensitive:
-            filename = filename.lower()
-
-        if pattern:
-            if fnmatch.fnmatch(filename, query):
-                return True
-        else:
-            if query in filename:
-                return True
+        if self._matches_name(yaml_file, query, pattern, case_sensitive):
+            return True
 
         # Then check file contents
         try:
             with open(yaml_file) as f:
                 content = f.read()
+                check_query = query
                 if not case_sensitive:
                     content = content.lower()
+                    check_query = query.lower()
 
-                if query in content:
+                if check_query in content:
                     return True
 
             # Deep search would open database

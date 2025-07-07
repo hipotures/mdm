@@ -237,6 +237,23 @@ class StorageBackend(ABC):
         except Exception as e:
             raise StorageError(f"Failed to execute query: {e}") from e
 
+    def query(self, query: str) -> pd.DataFrame:
+        """Execute SQL query and return results as DataFrame.
+
+        Args:
+            query: SQL query string
+
+        Returns:
+            Query results as pandas DataFrame
+        """
+        if self._engine is None:
+            raise StorageError("No engine available. Call get_engine() first.")
+        
+        try:
+            return pd.read_sql_query(query, self._engine)
+        except Exception as e:
+            raise StorageError(f"Failed to execute query: {e}") from e
+
     def close_connections(self) -> None:
         """Close all database connections."""
         if self._engine:

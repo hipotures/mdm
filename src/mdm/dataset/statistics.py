@@ -78,8 +78,8 @@ class DatasetStatistics:
 
         finally:
             # Close backend connection
-            if hasattr(backend, 'close'):
-                backend.close()
+            if hasattr(backend, 'close_connections'):
+                backend.close_connections()
 
     def _load_dataset_info(self, dataset_name: str) -> Dict[str, Any]:
         """Load dataset information from YAML."""
@@ -99,15 +99,24 @@ class DatasetStatistics:
         backend_type = dataset_info.get('database', {}).get('backend', 'duckdb')
         backend_config = dataset_info.get('database', {}).copy()
 
-        # Add dataset-specific paths
-        dataset_dir = self.datasets_dir / dataset_name
-        if backend_type == 'duckdb':
-            backend_config['database'] = str(dataset_dir / 'dataset.duckdb')
-        elif backend_type == 'sqlite':
-            backend_config['database'] = str(dataset_dir / 'dataset.db')
+        # Get the database path from dataset_info if available
+        if 'path' in dataset_info.get('database', {}):
+            db_path = dataset_info['database']['path']
+        else:
+            # Add dataset-specific paths
+            dataset_dir = self.datasets_dir / dataset_name
+            if backend_type == 'duckdb':
+                db_path = str(dataset_dir / f'{dataset_name}.duckdb')
+            elif backend_type == 'sqlite':
+                db_path = str(dataset_dir / f'{dataset_name}.sqlite')
+            else:
+                raise StorageError(f"Unsupported backend type for statistics: {backend_type}")
 
         try:
-            return BackendFactory.create(backend_type, backend_config)
+            backend = BackendFactory.create(backend_type, backend_config)
+            # Initialize the engine
+            backend.get_engine(db_path)
+            return backend
         except Exception as e:
             raise StorageError(f"Failed to create backend: {e}") from e
 
@@ -168,7 +177,7 @@ class DatasetStatistics:
             return stats
 
         except Exception as e:
-            logger.error(f"Failed to compute statistics for table '{table_name}': {e}")
+            logger.error(f"Failed to compute statistics for table '{table_name}': {e}", exc_info=True)
             return None
 
     def _get_row_count(self, backend: Any, table_name: str) -> int:
