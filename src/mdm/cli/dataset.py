@@ -47,6 +47,10 @@ def register(
     group_column: Optional[str] = typer.Option(None, "--group-column", help="Group column for grouped time series"),
     force: bool = typer.Option(False, "--force", "-f", help="Force re-registration"),
     no_features: bool = typer.Option(False, "--no-features", help="Skip feature generation"),
+    categorical_columns: Optional[str] = typer.Option(None, "--categorical-columns", help="Comma-separated columns to force as categorical"),
+    datetime_columns: Optional[str] = typer.Option(None, "--datetime-columns", help="Comma-separated columns to force as datetime"),
+    numeric_columns: Optional[str] = typer.Option(None, "--numeric-columns", help="Comma-separated columns to force as numeric"),
+    text_columns: Optional[str] = typer.Option(None, "--text-columns", help="Comma-separated columns to force as text"),
 ):
     """Register a new dataset."""
     try:
@@ -67,6 +71,24 @@ def register(
             kwargs["time_column"] = time_column
         if group_column:
             kwargs["group_column"] = group_column
+        
+        # Build type schema for ydata-profiling
+        type_schema = {}
+        if categorical_columns:
+            for col in categorical_columns.split(","):
+                type_schema[col.strip()] = "categorical"
+        if datetime_columns:
+            for col in datetime_columns.split(","):
+                type_schema[col.strip()] = "datetime"
+        if numeric_columns:
+            for col in numeric_columns.split(","):
+                type_schema[col.strip()] = "numeric"
+        if text_columns:
+            for col in text_columns.split(","):
+                type_schema[col.strip()] = "text"
+        
+        if type_schema:
+            kwargs["type_schema"] = type_schema
 
         # Handle manual mode
         if no_auto:

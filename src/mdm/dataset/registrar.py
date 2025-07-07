@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+from ydata_profiling import ProfileReport
 
 from mdm.config import get_config_manager
 from mdm.core.exceptions import DatasetError
@@ -114,7 +115,7 @@ class DatasetRegistrar:
         if kwargs.get('generate_features', True):
             feature_tables = self._generate_features(
                 normalized_name, db_info, table_mappings, column_info,
-                target_column, id_columns
+                target_column, id_columns, kwargs.get('type_schema')
             )
             table_mappings.update(feature_tables)
 
@@ -295,7 +296,7 @@ class DatasetRegistrar:
                 # Read and load based on file type
                 if file_path.suffix.lower() in ['.csv', '.tsv']:
                     delimiter = detect_delimiter(file_path)
-                    df = pd.read_csv(file_path, delimiter=delimiter)
+                    df = pd.read_csv(file_path, delimiter=delimiter, parse_dates=True)
                 elif file_path.suffix.lower() == '.parquet':
                     df = pd.read_parquet(file_path)
                 elif file_path.suffix.lower() == '.json':
@@ -441,7 +442,8 @@ class DatasetRegistrar:
         table_mappings: Dict[str, str],
         column_info: Dict[str, Dict[str, Any]],
         target_column: Optional[str],
-        id_columns: List[str]
+        id_columns: List[str],
+        type_schema: Optional[Dict[str, str]] = None
     ) -> Dict[str, str]:
         """Generate feature tables for the dataset.
         
@@ -470,35 +472,15 @@ class DatasetRegistrar:
 
             engine = backend.get_engine(db_path)
 
-            # Determine column types from the main training table
-            column_types = {}
-            if 'train' in column_info:
-                for col_name, col_type in column_info['train']['columns'].items():
-                    # Get dtype from dtypes dict
-                    dtype = str(column_info['train']['dtypes'].get(col_name, 'object'))
-
-                    # Map pandas dtype to ColumnType
-                    if 'datetime' in str(dtype):
-                        column_types[col_name] = ColumnType.DATETIME
-                    elif dtype == 'object':
-                        # Check if it's categorical or text
-                        sample_data = column_info['train']['sample_data'].get(col_name, [])
-                        if sample_data:
-                            avg_length = sum(len(str(v)) for v in sample_data if v is not None) / len(sample_data)
-                            unique_ratio = len(set(sample_data)) / len(sample_data)
-
-                            if avg_length > 50 or unique_ratio > 0.8:
-                                column_types[col_name] = ColumnType.TEXT
-                            else:
-                                column_types[col_name] = ColumnType.CATEGORICAL
-                        else:
-                            column_types[col_name] = ColumnType.CATEGORICAL
-                    elif col_name in id_columns:
-                        column_types[col_name] = ColumnType.ID
-                    elif col_name == target_column:
-                        column_types[col_name] = ColumnType.TARGET
-                    else:
-                        column_types[col_name] = ColumnType.NUMERIC
+            # Determine column types using ydata-profiling
+            column_types = self._detect_column_types_with_profiling(
+                column_info, 
+                table_mappings, 
+                engine,
+                target_column,
+                id_columns,
+                type_schema
+            )
 
             # Generate features for each table
             feature_tables = self.feature_generator.generate_feature_tables(
@@ -520,3 +502,143 @@ class DatasetRegistrar:
             backend.close_connections()
 
         return feature_tables
+
+    def _detect_column_types_with_profiling(
+        self,
+        column_info: Dict[str, Dict[str, Any]],
+        table_mappings: Dict[str, str],
+        engine: Any,
+        target_column: Optional[str],
+        id_columns: List[str],
+        type_schema: Optional[Dict[str, str]] = None
+    ) -> Dict[str, ColumnType]:
+        """Detect column types using ydata-profiling.
+        
+        Args:
+            column_info: Column information from database
+            table_mappings: Table mappings
+            engine: Database engine
+            target_column: Target column name
+            id_columns: List of ID columns
+            type_schema: Optional type schema to override detection
+            
+        Returns:
+            Dictionary mapping column names to ColumnType
+        """
+        column_types = {}
+        
+        # Focus on the main training table
+        if 'train' in table_mappings:
+            table_name = table_mappings['train']
+            
+            # Read sample data for profiling
+            backend = BackendFactory.create(engine.url.drivername, {})
+            df = backend.read_table_to_dataframe(table_name, engine, limit=10000)
+            
+            # Create minimal profile for type detection
+            try:
+                profile = ProfileReport(
+                    df,
+                    minimal=True,
+                    type_schema=type_schema,
+                    explorative=False,
+                    interactions=False,
+                    correlations=False,
+                    missing_diagrams=False,
+                    samples=False,
+                    duplicates=False
+                )
+                
+                # Extract column types from profile
+                description = profile.get_description()
+                variables = description.variables
+                
+                for col_name, var_info in variables.items():
+                    if isinstance(var_info, dict):
+                        var_type = var_info.get('type', 'Unsupported')
+                    else:
+                        var_type = getattr(var_info, 'type', 'Unsupported')
+                    
+                    # Map ydata-profiling types to MDM ColumnType
+                    if col_name in id_columns:
+                        column_types[col_name] = ColumnType.ID
+                    elif col_name == target_column:
+                        column_types[col_name] = ColumnType.TARGET
+                    elif var_type == "Numeric":
+                        column_types[col_name] = ColumnType.NUMERIC
+                    elif var_type == "Categorical":
+                        column_types[col_name] = ColumnType.CATEGORICAL
+                    elif var_type == "DateTime":
+                        column_types[col_name] = ColumnType.DATETIME
+                    elif var_type in ["Text", "URL", "Path", "File"]:
+                        column_types[col_name] = ColumnType.TEXT
+                    elif var_type == "Boolean":
+                        # Treat boolean as categorical
+                        column_types[col_name] = ColumnType.CATEGORICAL
+                    else:
+                        # Default to categorical for unknown types
+                        column_types[col_name] = ColumnType.CATEGORICAL
+                        
+                logger.info(f"Detected column types using ydata-profiling: {column_types}")
+                
+            except Exception as e:
+                logger.warning(f"Failed to use ydata-profiling, falling back to simple detection: {e}")
+                # Fallback to simple detection
+                column_types = self._simple_column_type_detection(
+                    column_info, target_column, id_columns
+                )
+        else:
+            # No train table, use simple detection
+            column_types = self._simple_column_type_detection(
+                column_info, target_column, id_columns
+            )
+            
+        return column_types
+    
+    def _simple_column_type_detection(
+        self,
+        column_info: Dict[str, Dict[str, Any]],
+        target_column: Optional[str],
+        id_columns: List[str]
+    ) -> Dict[str, ColumnType]:
+        """Simple fallback column type detection.
+        
+        Args:
+            column_info: Column information
+            target_column: Target column name
+            id_columns: List of ID columns
+            
+        Returns:
+            Dictionary mapping column names to ColumnType
+        """
+        column_types = {}
+        
+        # Use the first available table
+        for table_key, info in column_info.items():
+            for col_name, col_type in info['columns'].items():
+                dtype = str(info['dtypes'].get(col_name, 'object'))
+                
+                if col_name in id_columns:
+                    column_types[col_name] = ColumnType.ID
+                elif col_name == target_column:
+                    column_types[col_name] = ColumnType.TARGET
+                elif 'datetime' in str(dtype):
+                    column_types[col_name] = ColumnType.DATETIME
+                elif dtype == 'object':
+                    # Simple heuristic for categorical vs text
+                    sample_data = info.get('sample_data', {}).get(col_name, [])
+                    if sample_data:
+                        avg_length = sum(len(str(v)) for v in sample_data if v is not None) / len(sample_data)
+                        unique_ratio = len(set(sample_data)) / len(sample_data)
+                        
+                        if avg_length > 50 or unique_ratio > 0.8:
+                            column_types[col_name] = ColumnType.TEXT
+                        else:
+                            column_types[col_name] = ColumnType.CATEGORICAL
+                    else:
+                        column_types[col_name] = ColumnType.CATEGORICAL
+                else:
+                    column_types[col_name] = ColumnType.NUMERIC
+            break  # Only process first table
+            
+        return column_types

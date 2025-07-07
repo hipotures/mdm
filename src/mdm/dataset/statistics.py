@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import yaml
+from ydata_profiling import ProfileReport
 
 from mdm.config import get_config_manager
 from mdm.core.exceptions import DatasetError, StorageError
@@ -168,6 +169,11 @@ class DatasetStatistics:
                     if full:
                         stats['correlations'] = self._compute_correlations(df)
                         stats['data_quality'] = self._compute_data_quality(df)
+                        
+                        # Use ydata-profiling for enhanced statistics
+                        enhanced_stats = self._compute_enhanced_statistics_with_profiling(df)
+                        if enhanced_stats:
+                            stats['enhanced_analysis'] = enhanced_stats
 
             # Add memory usage estimate
             stats['estimated_memory_usage'] = self._estimate_memory_usage(
@@ -441,6 +447,134 @@ class DatasetStatistics:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load statistics: {e}")
+            return None
+    
+    def _compute_enhanced_statistics_with_profiling(self, df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+        """Compute enhanced statistics using ydata-profiling.
+        
+        Args:
+            df: DataFrame to analyze
+            
+        Returns:
+            Dictionary with enhanced statistics or None if profiling fails
+        """
+        try:
+            # Create a minimal profile for statistics
+            profile = ProfileReport(
+                df,
+                minimal=True,
+                explorative=True,
+                interactions=False,
+                correlations=True,
+                missing_diagrams=True,
+                samples=False,
+                duplicates=True
+            )
+            
+            # Extract key insights from the profile
+            description = profile.get_description()
+            
+            # Get table statistics
+            table_stats = description.table if hasattr(description, 'table') else {}
+            
+            enhanced_stats = {
+                "profile_summary": {
+                    "analysis_timestamp": pd.Timestamp.now().isoformat(),
+                    "n_variables": getattr(table_stats, 'n_variables', len(df.columns)),
+                    "n_observations": getattr(table_stats, 'n', len(df)),
+                    "memory_size": getattr(table_stats, 'memory_size', df.memory_usage(deep=True).sum()),
+                    "record_count": len(df),
+                    "variable_count": len(df.columns),
+                    "duplicate_row_count": getattr(table_stats, 'n_duplicates', df.duplicated().sum()),
+                    "duplicate_row_percentage": getattr(table_stats, 'p_duplicates', df.duplicated().sum() / len(df) * 100 if len(df) > 0 else 0),
+                },
+                "variable_types": {},
+                "warnings": []
+            }
+            
+            # Extract variable type information
+            variables = description.variables if hasattr(description, 'variables') else {}
+            for var_name, var_info in variables.items():
+                if isinstance(var_info, dict):
+                    var_type = var_info.get('type', 'Unknown')
+                else:
+                    var_type = getattr(var_info, 'type', 'Unknown')
+                # Helper function to safely get attributes
+                def get_attr(obj, attr, default=0):
+                    if isinstance(obj, dict):
+                        return obj.get(attr, default)
+                    else:
+                        return getattr(obj, attr, default)
+                
+                enhanced_stats["variable_types"][var_name] = {
+                    "type": var_type,
+                    "missing_count": get_attr(var_info, "n_missing", 0),
+                    "missing_percentage": get_attr(var_info, "p_missing", 0),
+                    "unique_count": get_attr(var_info, "n_unique", 0),
+                    "unique_percentage": get_attr(var_info, "p_unique", 0),
+                }
+                
+                # Add type-specific statistics
+                if var_type == "Numeric":
+                    enhanced_stats["variable_types"][var_name].update({
+                        "mean": get_attr(var_info, "mean", None),
+                        "std": get_attr(var_info, "std", None),
+                        "min": get_attr(var_info, "min", None),
+                        "max": get_attr(var_info, "max", None),
+                        "skewness": get_attr(var_info, "skewness", None),
+                        "kurtosis": get_attr(var_info, "kurtosis", None),
+                        "zeros_count": get_attr(var_info, "n_zeros", 0),
+                        "zeros_percentage": get_attr(var_info, "p_zeros", 0),
+                        "infinite_count": get_attr(var_info, "n_infinite", 0),
+                    })
+                elif var_type == "Categorical":
+                    enhanced_stats["variable_types"][var_name].update({
+                        "n_categories": get_attr(var_info, "n_category", 0),
+                        "top_categories": list(get_attr(var_info, "value_counts_index_sorted", [])[:5]),
+                        "imbalance": get_attr(var_info, "imbalance", None),
+                    })
+                elif var_type == "DateTime":
+                    enhanced_stats["variable_types"][var_name].update({
+                        "min_date": str(get_attr(var_info, "min", "")),
+                        "max_date": str(get_attr(var_info, "max", "")),
+                        "range": get_attr(var_info, "range", None),
+                    })
+                elif var_type == "Text":
+                    enhanced_stats["variable_types"][var_name].update({
+                        "max_length": get_attr(var_info, "max_length", 0),
+                        "mean_length": get_attr(var_info, "mean_length", 0),
+                        "min_length": get_attr(var_info, "min_length", 0),
+                    })
+            
+            # Extract warnings and alerts
+            alerts = getattr(description, 'alerts', [])
+            if isinstance(alerts, list):
+                for alert in alerts:
+                    if isinstance(alert, dict):
+                        enhanced_stats["warnings"].append({
+                            "column": alert.get("column_name", ""),
+                            "alert_type": alert.get("alert_type", ""),
+                            "description": alert.get("description", "")
+                        })
+            
+            # Extract correlation warnings
+            correlations = getattr(description, 'correlations', {})
+            if isinstance(correlations, dict) and correlations:
+                high_corr = correlations.get("high", [])
+                if isinstance(high_corr, list):
+                    for corr in high_corr:
+                        if isinstance(corr, (list, tuple)) and len(corr) >= 3:
+                            enhanced_stats["warnings"].append({
+                                "type": "high_correlation",
+                                "columns": [corr[0], corr[1]],
+                                "correlation": corr[2]
+                            })
+            
+            logger.info("Enhanced statistics computed successfully using ydata-profiling")
+            return enhanced_stats
+            
+        except Exception as e:
+            logger.warning(f"Failed to compute enhanced statistics with ydata-profiling: {e}")
             return None
 
 
