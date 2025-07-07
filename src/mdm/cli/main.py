@@ -10,7 +10,7 @@ from rich.console import Console
 from mdm.cli.batch import batch_app
 from mdm.cli.dataset import dataset_app
 from mdm.cli.timeseries import app as timeseries_app
-from mdm.config import get_config
+from mdm.config import get_config_manager
 from mdm.dataset.manager import DatasetManager
 
 # Create main app
@@ -38,7 +38,9 @@ def version():
 @app.command()
 def info():
     """Display system configuration and status."""
-    config = get_config()
+    config_manager = get_config_manager()
+    config = config_manager.config
+    base_path = config_manager.base_path
     manager = DatasetManager()
 
     # Header
@@ -48,20 +50,20 @@ def info():
     console.print("[bold]Configuration:[/bold]")
     config_file = Path.home() / ".mdm" / "mdm.yaml"
     console.print(f"  Config file: {config_file}")
-    console.print(f"  Default backend: {config.default_backend}")
+    console.print(f"  Default backend: {config.database.default_backend}")
 
     # Storage paths
     console.print("\n[bold]Storage paths:[/bold]")
-    console.print(f"  Datasets: {config.datasets_dir}")
-    console.print(f"  Configs: {config.dataset_registry_dir}")
-    console.print(f"  Cache: {config.cache_dir}")
-    console.print(f"  Logs: {config.logs_dir}")
+    console.print(f"  Datasets: {base_path / config.paths.datasets_path}")
+    console.print(f"  Configs: {base_path / config.paths.configs_path}")
+    console.print(f"  Cache: {base_path / 'cache'}")
+    console.print(f"  Logs: {base_path / config.paths.logs_path}")
 
     # Database settings
     console.print("\n[bold]Database settings:[/bold]")
-    console.print(f"  Backend: {config.default_backend}")
-    console.print(f"  Chunk size: {config.chunk_size:,}")
-    console.print(f"  Max workers: {config.max_workers}")
+    console.print(f"  Backend: {config.database.default_backend}")
+    console.print(f"  Chunk size: {config.performance.batch_size:,}")
+    console.print(f"  Max workers: {config.performance.max_concurrent_operations}")
 
     # System status
     console.print("\n[bold]System status:[/bold]")
@@ -72,13 +74,14 @@ def info():
 
     # Calculate storage used
     total_size = 0
-    if config.datasets_dir.exists():
-        for item in config.datasets_dir.rglob("*"):
+    datasets_dir = base_path / config.paths.datasets_path
+    if datasets_dir.exists():
+        for item in datasets_dir.rglob("*"):
             if item.is_file():
                 total_size += item.stat().st_size
 
     # Get available disk space
-    stat = shutil.disk_usage(config.datasets_dir)
+    stat = shutil.disk_usage(datasets_dir)
 
     console.print(f"  Total storage used: {_format_size(total_size)}")
     console.print(f"  Available disk space: {_format_size(stat.free)}")
@@ -87,7 +90,7 @@ def info():
     console.print("\n[bold]Environment:[/bold]")
     console.print(f"  Python: {os.sys.version.split()[0]}")
     console.print(f"  Platform: {os.sys.platform}")
-    console.print(f"  MDM home: {config.home_dir}")
+    console.print(f"  MDM home: {base_path}")
 
 
 def _format_size(size_bytes: int) -> str:

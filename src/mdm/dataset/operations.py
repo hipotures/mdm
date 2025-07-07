@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from mdm.config import get_config
+from mdm.config import get_config_manager
 from mdm.core.exceptions import DatasetError
 from mdm.dataset.exporter import DatasetExporter
 from mdm.dataset.statistics import DatasetStatistics
@@ -27,9 +27,11 @@ class DatasetOperation(ABC):
 
     def __init__(self):
         """Initialize operation."""
-        self.config = get_config()
-        self.dataset_registry_dir = self.config.dataset_registry_dir
-        self.datasets_dir = self.config.datasets_dir
+        config_manager = get_config_manager()
+        self.config = config_manager.config
+        self.base_path = config_manager.base_path
+        self.dataset_registry_dir = self.base_path / self.config.paths.configs_path
+        self.datasets_dir = self.base_path / self.config.paths.datasets_path
 
     @abstractmethod
     def execute(self, *args, **kwargs) -> Any:
@@ -73,7 +75,7 @@ class ListOperation(DatasetOperation):
             return datasets
 
         # Use thread pool for parallel YAML parsing
-        with ThreadPoolExecutor(max_workers=min(len(yaml_files), self.config.max_workers)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(yaml_files), self.config.performance.max_concurrent_operations)) as executor:
             future_to_file = {
                 executor.submit(self._parse_yaml_file, yaml_file): yaml_file
                 for yaml_file in yaml_files

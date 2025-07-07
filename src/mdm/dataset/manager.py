@@ -27,13 +27,21 @@ class DatasetManager:
             datasets_path: Optional path to datasets directory.
                           If not provided, uses config default.
         """
-        config = get_config()
+        from mdm.config import get_config_manager
+        config_manager = get_config_manager()
+        config = config_manager.config
         self.config = config
-        self.datasets_path = datasets_path or config.get_full_path("datasets_path")
+        self.base_path = config_manager.base_path
+        
+        # Get datasets path
+        if datasets_path:
+            self.datasets_path = datasets_path
+        else:
+            self.datasets_path = self.base_path / config.paths.datasets_path
         self.datasets_path.mkdir(parents=True, exist_ok=True)
 
         # Also ensure dataset registry directory exists
-        self.dataset_registry_dir = config.dataset_registry_dir
+        self.dataset_registry_dir = self.base_path / config.paths.configs_path
         self.dataset_registry_dir.mkdir(parents=True, exist_ok=True)
 
     def register_dataset(self, dataset_info: DatasetInfo) -> None:
@@ -49,7 +57,9 @@ class DatasetManager:
         dataset_name = dataset_info.name.lower()
         dataset_path = self.datasets_path / dataset_name
 
-        if dataset_path.exists():
+        # Check if YAML registry exists (more reliable than directory check)
+        yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
+        if yaml_path.exists():
             raise DatasetError(f"Dataset '{dataset_name}' already exists")
 
         try:

@@ -40,13 +40,15 @@ def get_dataset_path(dataset_name: str) -> Path:
     Returns:
         Path to dataset directory
     """
-    from mdm.core.config import get_config
+    from mdm.config import get_config_manager
 
-    config = get_config()
+    config_manager = get_config_manager()
+    config = config_manager.config
+    base_path = config_manager.base_path
     dataset_name = normalize_dataset_name(dataset_name)
 
     # First check if there's a pointer in the registry
-    pointer_path = config.dataset_registry_dir / f"{dataset_name}.yaml"
+    pointer_path = base_path / config.paths.configs_path / f"{dataset_name}.yaml"
     if pointer_path.exists():
         try:
             import yaml
@@ -57,7 +59,7 @@ def get_dataset_path(dataset_name: str) -> Path:
             raise DatasetError(f"Failed to load dataset pointer: {e}")
 
     # Otherwise, use default datasets directory
-    return config.datasets_dir / dataset_name
+    return base_path / config.paths.datasets_path / dataset_name
 
 
 def get_dataset_config_path(dataset_name: str) -> Path:
@@ -218,13 +220,15 @@ def dataset_exists(dataset_name: str) -> bool:
     Returns:
         True if dataset exists, False otherwise
     """
-    from mdm.core.config import get_config
+    from mdm.config import get_config_manager
 
-    config = get_config()
+    config_manager = get_config_manager()
+    config = config_manager.config
+    base_path = config_manager.base_path
     dataset_name = normalize_dataset_name(dataset_name)
 
     # Check if pointer exists
-    pointer_path = config.dataset_registry_dir / f"{dataset_name}.yaml"
+    pointer_path = base_path / config.paths.configs_path / f"{dataset_name}.yaml"
     if pointer_path.exists():
         # Verify the pointed path exists
         try:
@@ -237,7 +241,7 @@ def dataset_exists(dataset_name: str) -> bool:
             return False
 
     # Check default location
-    dataset_path = config.datasets_dir / dataset_name
+    dataset_path = base_path / config.paths.datasets_path / dataset_name
     return dataset_path.exists() and dataset_path.is_dir()
 
 

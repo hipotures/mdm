@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from mdm.config import get_config
+from mdm.config import get_config_manager
 from mdm.core.exceptions import DatasetError, StorageError
 from mdm.storage.factory import BackendFactory
 
@@ -20,9 +20,11 @@ class DatasetStatistics:
 
     def __init__(self):
         """Initialize statistics computer."""
-        self.config = get_config()
-        self.dataset_registry_dir = self.config.dataset_registry_dir
-        self.datasets_dir = self.config.datasets_dir
+        config_manager = get_config_manager()
+        self.config = config_manager.config
+        self.base_path = config_manager.base_path
+        self.dataset_registry_dir = self.base_path / self.config.paths.configs_path
+        self.datasets_dir = self.base_path / self.config.paths.datasets_path
 
     def compute_statistics(
         self,

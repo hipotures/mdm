@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from mdm.config import get_config
+from mdm.config import get_config_manager
 from mdm.core.exceptions import DatasetError
 from mdm.dataset.auto_detect import (
     detect_delimiter,
@@ -37,7 +37,9 @@ class DatasetRegistrar:
             manager: Optional DatasetManager instance
         """
         self.manager = manager or DatasetManager()
-        self.config = get_config()
+        config_manager = get_config_manager()
+        self.config = config_manager.config
+        self.base_path = config_manager.base_path
         self.feature_generator = FeatureGenerator()
 
     def register(
@@ -209,7 +211,7 @@ class DatasetRegistrar:
 
         if backend_type in ['sqlite', 'duckdb']:
             # File-based backends
-            db_path = self.config.get_full_path('datasets_path') / name / f"{name}.{backend_type}"
+            db_path = self.base_path / self.config.paths.datasets_path / name / f"{name}.{backend_type}"
             db_path.parent.mkdir(parents=True, exist_ok=True)
             db_info['path'] = str(db_path)
         else:
@@ -471,8 +473,9 @@ class DatasetRegistrar:
             # Determine column types from the main training table
             column_types = {}
             if 'train' in column_info:
-                for col_name, col_info in column_info['train']['columns'].items():
-                    dtype = col_info.get('dtype', 'object')
+                for col_name, col_type in column_info['train']['columns'].items():
+                    # Get dtype from dtypes dict
+                    dtype = str(column_info['train']['dtypes'].get(col_name, 'object'))
 
                     # Map pandas dtype to ColumnType
                     if 'datetime' in str(dtype):

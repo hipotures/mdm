@@ -111,10 +111,12 @@ def create_dataset_pointer(dataset_name: str, dataset_path: Path) -> Path:
     Returns:
         Path to the created pointer file
     """
-    from mdm.core.config import get_config
+    from mdm.config import get_config_manager
 
-    config = get_config()
-    pointer_dir = config.dataset_registry_dir
+    config_manager = get_config_manager()
+    config = config_manager.config
+    base_path = config_manager.base_path
+    pointer_dir = base_path / config.paths.configs_path
     pointer_dir.mkdir(parents=True, exist_ok=True)
 
     # Normalize dataset name
@@ -143,14 +145,16 @@ def load_dataset_config(dataset_name: str) -> DatasetConfig:
     Returns:
         DatasetConfig instance
     """
-    from mdm.core.config import get_config
+    from mdm.config import get_config_manager
     from mdm.dataset.utils import normalize_dataset_name
 
-    config = get_config()
+    config_manager = get_config_manager()
+    config = config_manager.config
+    base_path = config_manager.base_path
     dataset_name = normalize_dataset_name(dataset_name)
 
     # Check if pointer exists
-    pointer_path = config.dataset_registry_dir / f"{dataset_name}.yaml"
+    pointer_path = base_path / config.paths.configs_path / f"{dataset_name}.yaml"
     if not pointer_path.exists():
         raise DatasetError(f"Dataset '{dataset_name}' not found in registry")
 
