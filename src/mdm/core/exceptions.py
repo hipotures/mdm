@@ -21,6 +21,26 @@ class DatasetError(MDMError):
     pass
 
 
+class DatasetExistsError(DatasetError):
+    """Raised when dataset already exists."""
+    pass
+
+
+class DatasetNotFoundError(DatasetError):
+    """Raised when dataset is not found."""
+    pass
+
+
+class DatasetRegistrationError(DatasetError):
+    """Raised when dataset registration fails."""
+    pass
+
+
+class DatasetValidationError(DatasetError):
+    """Raised when dataset validation fails."""
+    pass
+
+
 class ValidationError(MDMError):
     """Data validation related errors."""
     pass

@@ -61,7 +61,7 @@ dev = [
 ]
 
 [project.scripts]
-mdm = "mdm.cli.main:app"
+mdm = "mdm.cli.main:main"
 
 [project.urls]
 Homepage = "https://github.com/mdm-project/mdm"
