@@ -7,7 +7,6 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from mdm.dataset.manager import DatasetManager
 from mdm.dataset.operations import (
     ExportOperation,
     InfoOperation,
@@ -156,10 +155,10 @@ def list_datasets(
             # Format row count and size
             row_count = dataset.get('row_count')
             size = dataset.get('size')
-            
+
             row_str = "?" if row_count is None else f"{row_count:,}"
             size_str = "?" if size is None else _format_size(size)
-            
+
             table.add_row(
                 dataset['name'],
                 dataset.get('problem_type') or "-",
@@ -170,7 +169,7 @@ def list_datasets(
             )
 
         console.print(table)
-        
+
         if not full and any(d.get('row_count') is None for d in datasets):
             console.print("\n[dim]Note: Row counts and sizes not available in fast mode. Use --full flag for complete information.[/dim]")
 
@@ -192,9 +191,9 @@ def dataset_info(
         # Display dataset info
         console.print(f"\n[bold cyan]Dataset: {info.get('display_name', info['name'])}[/bold cyan]")
         console.print(f"Configuration: {info.get('file', 'N/A')}")
-        
+
         if info.get('dataset_path'):
-            console.print(f"Database: {info.get('database_file', info['dataset_path'])} ({_format_size(info.get('database_size', info.get('total_size', 0)))})") 
+            console.print(f"Database: {info.get('database_file', info['dataset_path'])} ({_format_size(info.get('database_size', info.get('total_size', 0)))})")
 
         if info.get('description'):
             console.print(f"\nDescription: {info['description']}")
@@ -213,7 +212,7 @@ def dataset_info(
         console.print("\n[bold]Tables:[/bold]")
         for table_type, table_name in info.get('tables', {}).items():
             console.print(f"  - {table_type}: {table_name}")
-        
+
         # Display metadata
         if info.get('created_at'):
             console.print(f"\nRegistered: {info['created_at']}")
@@ -230,6 +229,191 @@ def dataset_info(
         raise typer.Exit(1)
 
 
+@dataset_app.command("search")
+def search_datasets(
+    query: str = typer.Argument(..., help="Search query"),
+    deep: bool = typer.Option(False, "--deep", help="Search in dataset metadata (slower)"),
+    pattern: bool = typer.Option(False, "--pattern", help="Use glob pattern matching"),
+    case_sensitive: bool = typer.Option(False, "--case-sensitive", help="Case sensitive search"),
+    limit: Optional[int] = typer.Option(None, "--limit", help="Maximum results"),
+) -> None:
+    """Search for datasets."""
+    try:
+        from mdm.dataset.operations import SearchOperation
+
+        operation = SearchOperation()
+        results = operation.execute(
+            query=query,
+            deep=deep,
+            pattern=pattern,
+            case_sensitive=case_sensitive,
+            limit=limit
+        )
+
+        if not results:
+            console.print(f"[yellow]No datasets found matching '{query}'[/yellow]")
+            return
+
+        # Display results
+        table = Table(title=f"Search Results for '{query}'")
+        table.add_column("Name", style="cyan")
+        table.add_column("Description")
+        table.add_column("Match Location", style="green")
+
+        for result in results:
+            table.add_row(
+                result['name'],
+                result.get('description', '-')[:50] + "..." if len(result.get('description', '')) > 50 else result.get('description', '-'),
+                result.get('match_location', 'name')
+            )
+
+        console.print(table)
+        console.print(f"\n[green]Found {len(results)} match(es)[/green]")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
+@dataset_app.command("stats")
+def show_statistics(
+    name: str = typer.Argument(..., help="Dataset name"),
+    full: bool = typer.Option(False, "--full", help="Show full statistics including correlations"),
+    export: Optional[Path] = typer.Option(None, "--export", help="Export statistics to file"),
+) -> None:
+    """Display dataset statistics."""
+    try:
+        from mdm.dataset.operations import StatsOperation
+
+        operation = StatsOperation()
+        stats = operation.execute(name, full=full)
+
+        if export:
+            operation.export_stats(stats, export)
+            console.print(f"[green]✓[/green] Statistics exported to {export}")
+        else:
+            # Display statistics
+            console.print(f"\n[bold cyan]Statistics for dataset: {name}[/bold cyan]\n")
+
+            # Basic info
+            console.print("[bold]Overview:[/bold]")
+            console.print(f"  Total rows: {stats['total_rows']:,}")
+            console.print(f"  Total columns: {stats['total_columns']}")
+            console.print(f"  Memory usage: {stats['memory_usage_mb']:.1f} MB")
+            console.print(f"  Missing values: {stats['total_missing']:,} ({stats['missing_percentage']:.1f}%)")
+
+            # Column types
+            console.print("\n[bold]Column Types:[/bold]")
+            for col_type, count in stats['column_types'].items():
+                console.print(f"  {col_type}: {count}")
+
+            # Data quality
+            if 'data_quality' in stats:
+                console.print("\n[bold]Data Quality:[/bold]")
+                console.print(f"  Completeness: {stats['data_quality']['completeness']:.1f}%")
+                console.print(f"  Duplicate rows: {stats['data_quality']['duplicate_rows']}")
+
+            if full and 'column_stats' in stats:
+                console.print("\n[bold]Column Statistics:[/bold]")
+                # Show detailed column stats in a table
+                col_table = Table()
+                col_table.add_column("Column")
+                col_table.add_column("Type")
+                col_table.add_column("Missing")
+                col_table.add_column("Unique")
+                col_table.add_column("Mean/Mode")
+
+                for col_name, col_stats in stats['column_stats'].items():
+                    col_table.add_row(
+                        col_name,
+                        col_stats['dtype'],
+                        f"{col_stats['missing_count']} ({col_stats['missing_percentage']:.1f}%)",
+                        str(col_stats.get('unique_count', '-')),
+                        str(col_stats.get('mean', col_stats.get('mode', '-')))
+                    )
+
+                console.print(col_table)
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
+@dataset_app.command("update")
+def update_dataset(
+    name: str = typer.Argument(..., help="Dataset name"),
+    description: Optional[str] = typer.Option(None, "--description", help="New description"),
+    target: Optional[str] = typer.Option(None, "--target", help="New target column"),
+    problem_type: Optional[str] = typer.Option(None, "--problem-type", help="New problem type"),
+    id_columns: Optional[str] = typer.Option(None, "--id-columns", help="Comma-separated ID columns"),
+) -> None:
+    """Update dataset metadata."""
+    try:
+        from mdm.dataset.operations import UpdateOperation
+
+        # Build updates dict
+        updates = {}
+        if description is not None:
+            updates['description'] = description
+        if target is not None:
+            updates['target_column'] = target
+        if problem_type is not None:
+            updates['problem_type'] = problem_type
+        if id_columns is not None:
+            updates['id_columns'] = [col.strip() for col in id_columns.split(',')]
+
+        if not updates:
+            console.print("[yellow]No updates specified[/yellow]")
+            return
+
+        operation = UpdateOperation()
+        updated_info = operation.execute(name, updates)
+
+        console.print(f"[green]✓[/green] Dataset '{name}' updated successfully")
+        console.print("\nUpdated fields:")
+        for field, value in updates.items():
+            console.print(f"  {field}: {value}")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
+@dataset_app.command("export")
+def export_dataset(
+    name: str = typer.Argument(..., help="Dataset name"),
+    output_dir: Path = typer.Option(Path(), "--output-dir", "-o", help="Output directory"),
+    table: Optional[str] = typer.Option(None, "--table", help="Export specific table only"),
+    format: str = typer.Option("csv", "--format", "-f", help="Output format: csv, parquet, json"),
+    compression: Optional[str] = typer.Option(None, "--compression", help="Compression type"),
+    metadata_only: bool = typer.Option(False, "--metadata-only", help="Export only metadata"),
+    no_header: bool = typer.Option(False, "--no-header", help="Exclude header row (CSV only)"),
+) -> None:
+    """Export dataset to files."""
+    try:
+        from mdm.dataset.operations import ExportOperation
+
+        operation = ExportOperation()
+        exported_files = operation.execute(
+            dataset_name=name,
+            output_dir=output_dir,
+            table_name=table,
+            format=format,
+            compression=compression,
+            metadata_only=metadata_only,
+            csv_header=not no_header
+        )
+
+        console.print(f"[green]✓[/green] Dataset '{name}' exported successfully")
+        console.print("\nExported files:")
+        for file_path in exported_files:
+            console.print(f"  - {file_path}")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+
 @dataset_app.command("remove")
 def remove_dataset(
     name: str = typer.Argument(..., help="Dataset name"),
@@ -239,11 +423,11 @@ def remove_dataset(
     """Remove a registered dataset."""
     try:
         remove_op = RemoveOperation()
-        
+
         if dry_run:
             # Preview mode
             info = remove_op.execute(name, force=True, dry_run=True)
-            console.print(f"\n[yellow]DRY RUN - No changes will be made[/yellow]")
+            console.print("\n[yellow]DRY RUN - No changes will be made[/yellow]")
             console.print(f"Would remove dataset: {info['name']}")
             console.print(f"- Config: {info['config_file']}")
             if info.get('dataset_directory'):
@@ -254,13 +438,13 @@ def remove_dataset(
 
         # Get removal info for confirmation
         info = remove_op.execute(name, force=True, dry_run=True)
-        
+
         if not force:
             console.print(f"\nRemoving dataset: {info['name']}")
             console.print(f"- Config: {info['config_file']}")
             if info.get('dataset_directory'):
                 console.print(f"- Database: {info['dataset_directory']} ({_format_size(info['size'])})")
-            
+
             confirm = typer.confirm("\nAre you sure?")
             if not confirm:
                 console.print("[yellow]Cancelled.[/yellow]")
@@ -309,7 +493,7 @@ def search_datasets(
         for match in matches:
             desc = match.get('description', '')
             desc_preview = desc[:50] + "..." if len(desc) > 50 else desc
-            
+
             table.add_row(
                 match['name'],
                 match.get('display_name', match['name']),
@@ -342,7 +526,7 @@ def dataset_stats(
         console.print(f"Mode: {stats['mode']}")
 
         summary = stats.get('summary', {})
-        console.print(f"\n[bold]Summary:[/bold]")
+        console.print("\n[bold]Summary:[/bold]")
         console.print(f"- Total tables: {summary.get('total_tables', 0)}")
         console.print(f"- Total rows: {summary.get('total_rows', 0):,}")
         console.print(f"- Total columns: {summary.get('total_columns', 0)}")
@@ -353,11 +537,11 @@ def dataset_stats(
             console.print(f"\n[bold]Table: {table_name}[/bold]")
             console.print(f"- Rows: {table_stats.get('row_count', 0):,}")
             console.print(f"- Columns: {table_stats.get('column_count', 0)}")
-            
+
             missing = table_stats.get('missing_values', {})
             if missing.get('total_missing_cells', 0) > 0:
                 console.print(f"- Missing cells: {missing['total_missing_cells']:,} ({missing.get('total_missing_percentage', 0):.1f}%)")
-            
+
             # Show column statistics in full mode
             if full and table_stats.get('columns'):
                 console.print("\n  Column Statistics:")
@@ -390,7 +574,7 @@ def update_dataset(
             return
 
         update_op = UpdateOperation()
-        
+
         # Prepare updates
         id_cols = None
         if id_columns:
@@ -406,7 +590,7 @@ def update_dataset(
         )
 
         console.print(f"[green]✓[/green] Dataset '{name}' updated successfully")
-        
+
         # Show what was updated
         console.print("\n[bold]Updated fields:[/bold]")
         if description:
@@ -436,7 +620,7 @@ def export_dataset(
     """Export dataset to various formats."""
     try:
         export_op = ExportOperation()
-        
+
         # Show what will be exported
         if metadata_only:
             console.print(f"Exporting metadata for dataset '{name}'...")
@@ -457,7 +641,7 @@ def export_dataset(
         )
 
         # Display results
-        console.print(f"\n[green]✓[/green] Export completed successfully")
+        console.print("\n[green]✓[/green] Export completed successfully")
         console.print("\n[bold]Exported files:[/bold]")
         for file_path in exported_files:
             size = file_path.stat().st_size if file_path.exists() else 0

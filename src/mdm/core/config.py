@@ -91,14 +91,13 @@ class MDMConfig(BaseSettings):
         """
         if path_type == "datasets_path":
             return self.datasets_dir
-        elif path_type == "config_path":
+        if path_type == "config_path":
             return self.config_dir
-        elif path_type == "cache_path":
+        if path_type == "cache_path":
             return self.cache_dir
-        elif path_type == "logs_path":
+        if path_type == "logs_path":
             return self.logs_dir
-        else:
-            raise ValueError(f"Unknown path type: {path_type}")
+        raise ValueError(f"Unknown path type: {path_type}")
 
     def ensure_directories(self) -> None:
         """Ensure all required directories exist."""

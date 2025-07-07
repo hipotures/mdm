@@ -9,15 +9,14 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import yaml
 
 from mdm.config import get_config
-from mdm.core.exceptions import DatasetError, StorageError
+from mdm.core.exceptions import DatasetError
 from mdm.dataset.exporter import DatasetExporter
 from mdm.dataset.statistics import DatasetStatistics
-from mdm.models.dataset import DatasetInfo
 from mdm.storage.factory import BackendFactory
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ class ListOperation(DatasetOperation):
 
         # Parse YAML files in parallel
         yaml_files = list(self.dataset_registry_dir.glob("*.yaml"))
-        
+
         if not yaml_files:
             return datasets
 
@@ -112,9 +111,9 @@ class ListOperation(DatasetOperation):
     def _parse_yaml_file(self, yaml_file: Path) -> Optional[Dict[str, Any]]:
         """Parse a single YAML file quickly."""
         try:
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 data = yaml.safe_load(f)
-            
+
             # Extract essential fields
             return {
                 'name': data.get('name', yaml_file.stem),
@@ -138,7 +137,7 @@ class ListOperation(DatasetOperation):
     def _apply_filters(self, datasets: List[Dict[str, Any]], filter_str: str) -> List[Dict[str, Any]]:
         """Apply filters to dataset list."""
         filtered = []
-        
+
         # Parse filter string (e.g., "problem_type=classification")
         filters = {}
         for part in filter_str.split(','):
@@ -170,9 +169,8 @@ class ListOperation(DatasetOperation):
                 key=lambda d: d.get('registration_date') or datetime.min.isoformat(),
                 reverse=True
             )
-        else:
-            # Default: sort by name
-            return sorted(datasets, key=lambda d: d.get('name', ''))
+        # Default: sort by name
+        return sorted(datasets, key=lambda d: d.get('name', ''))
 
     def _add_full_info(self, datasets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Add full information by querying databases."""
@@ -181,7 +179,7 @@ class ListOperation(DatasetOperation):
                 # Get database path
                 dataset_name = dataset['name']
                 dataset_dir = self.datasets_dir / dataset_name
-                
+
                 if dataset_dir.exists():
                     # Calculate directory size
                     size = sum(f.stat().st_size for f in dataset_dir.rglob('*') if f.is_file())
@@ -206,7 +204,7 @@ class ListOperation(DatasetOperation):
             import duckdb
             conn = duckdb.connect(str(db_path), read_only=True)
             total_rows = 0
-            
+
             for table_type, table_name in tables.items():
                 if table_type in ['train', 'test', 'validation']:
                     try:
@@ -215,7 +213,7 @@ class ListOperation(DatasetOperation):
                             total_rows += result[0]
                     except:
                         pass
-            
+
             conn.close()
             return total_rows
         except:
@@ -236,19 +234,19 @@ class InfoOperation(DatasetOperation):
             Dataset information dictionary
         """
         yaml_file = self.dataset_registry_dir / f"{name}.yaml"
-        
+
         if not yaml_file.exists():
             raise DatasetError(f"Dataset '{name}' not found")
 
         try:
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 data = yaml.safe_load(f)
 
             # Add dataset directory info
             dataset_dir = self.datasets_dir / name
             if dataset_dir.exists():
                 data['dataset_path'] = str(dataset_dir)
-                
+
                 # Calculate size
                 size = sum(f.stat().st_size for f in dataset_dir.rglob('*') if f.is_file())
                 data['total_size'] = size
@@ -317,7 +315,7 @@ class SearchOperation(DatasetOperation):
 
             try:
                 if self._matches_file(yaml_file, query, pattern, case_sensitive, deep):
-                    with open(yaml_file, 'r') as f:
+                    with open(yaml_file) as f:
                         data = yaml.safe_load(f)
                     matches.append({
                         'name': data.get('name', yaml_file.stem),
@@ -356,11 +354,11 @@ class SearchOperation(DatasetOperation):
 
         # Then check file contents
         try:
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 content = f.read()
                 if not case_sensitive:
                     content = content.lower()
-                
+
                 if query in content:
                     return True
 
@@ -434,14 +432,14 @@ class StatsOperation(DatasetOperation):
             Statistics dictionary
         """
         stats_computer = DatasetStatistics()
-        
+
         # Try to load pre-computed statistics first
         stats = stats_computer.load_statistics(name)
-        
+
         if not stats or full:
             # Compute fresh statistics
             stats = stats_computer.compute_statistics(name, full=full, save=True)
-        
+
         # Export if requested
         if export:
             export_path = Path(export)
@@ -456,7 +454,7 @@ class StatsOperation(DatasetOperation):
                 logger.info(f"Statistics exported to {export_path}")
             except Exception as e:
                 logger.error(f"Failed to export statistics: {e}")
-        
+
         return stats
 
 
@@ -484,13 +482,13 @@ class UpdateOperation(DatasetOperation):
             Updated dataset information
         """
         yaml_file = self.dataset_registry_dir / f"{name}.yaml"
-        
+
         if not yaml_file.exists():
             raise DatasetError(f"Dataset '{name}' not found")
 
         try:
             # Load existing data
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 data = yaml.safe_load(f)
 
             # Update fields
@@ -527,13 +525,13 @@ class UpdateOperation(DatasetOperation):
 
             backend_type = data.get('database', {}).get('backend', 'duckdb')
             backend_config = data.get('database', {})
-            
+
             # Create backend instance
             backend = BackendFactory.create(backend_type, backend_config)
-            
+
             # Update metadata table
             # TODO: Implement metadata update in backend
-            
+
         except Exception as e:
             logger.warning(f"Failed to update database metadata: {e}")
 
@@ -573,7 +571,7 @@ class RemoveOperation(DatasetOperation):
 
         # Check for PostgreSQL database
         try:
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 data = yaml.safe_load(f)
                 if data.get('database', {}).get('backend') == 'postgresql':
                     removal_info['postgresql_db'] = f"{data.get('database', {}).get('database_prefix', 'mdm_')}{name}"

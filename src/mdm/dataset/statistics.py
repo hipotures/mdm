@@ -2,8 +2,7 @@
 
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -43,7 +42,7 @@ class DatasetStatistics:
         """
         # Load dataset info
         dataset_info = self._load_dataset_info(dataset_name)
-        
+
         # Get backend
         backend = self._get_backend(dataset_name, dataset_info)
 
@@ -58,11 +57,11 @@ class DatasetStatistics:
             # Compute statistics for each table
             for table_type, table_name in dataset_info.get('tables', {}).items():
                 logger.info(f"Computing statistics for table '{table_type}' ({table_name})")
-                
+
                 table_stats = self._compute_table_statistics(
                     backend, table_name, table_type, full
                 )
-                
+
                 if table_stats:
                     stats['tables'][table_type] = table_stats
 
@@ -83,12 +82,12 @@ class DatasetStatistics:
     def _load_dataset_info(self, dataset_name: str) -> Dict[str, Any]:
         """Load dataset information from YAML."""
         yaml_file = self.dataset_registry_dir / f"{dataset_name}.yaml"
-        
+
         if not yaml_file.exists():
             raise DatasetError(f"Dataset '{dataset_name}' not found")
 
         try:
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 return yaml.safe_load(f)
         except Exception as e:
             raise DatasetError(f"Failed to load dataset info: {e}") from e
@@ -97,14 +96,14 @@ class DatasetStatistics:
         """Get storage backend for dataset."""
         backend_type = dataset_info.get('database', {}).get('backend', 'duckdb')
         backend_config = dataset_info.get('database', {}).copy()
-        
+
         # Add dataset-specific paths
         dataset_dir = self.datasets_dir / dataset_name
         if backend_type == 'duckdb':
             backend_config['database'] = str(dataset_dir / 'dataset.duckdb')
         elif backend_type == 'sqlite':
             backend_config['database'] = str(dataset_dir / 'dataset.db')
-        
+
         try:
             return BackendFactory.create(backend_type, backend_config)
         except Exception as e:
@@ -122,7 +121,7 @@ class DatasetStatistics:
             # Get basic info
             row_count = self._get_row_count(backend, table_name)
             columns_info = self._get_columns_info(backend, table_name)
-            
+
             if not columns_info:
                 return None
 
@@ -141,19 +140,19 @@ class DatasetStatistics:
                     query = f"SELECT * FROM {table_name} USING SAMPLE {sample_size}"
                 else:
                     query = f"SELECT * FROM {table_name}"
-                
+
                 df = backend.query(query)
-                
+
                 if df is not None and not df.empty:
                     # Compute column statistics
                     for col in df.columns:
                         col_stats = self._compute_column_statistics(df[col], full)
                         if col_stats:
                             stats['columns'][col] = col_stats
-                    
+
                     # Compute missing values
                     stats['missing_values'] = self._compute_missing_values(df)
-                    
+
                     # Compute correlations if full mode
                     if full:
                         stats['correlations'] = self._compute_correlations(df)
@@ -221,7 +220,7 @@ class DatasetStatistics:
                     'max': float(non_null.max()),
                     'median': float(non_null.median()),
                 })
-                
+
                 if full:
                     # Add percentiles
                     percentiles = [0.01, 0.05, 0.25, 0.75, 0.95, 0.99]
@@ -229,7 +228,7 @@ class DatasetStatistics:
                         f"p{int(p*100)}": float(non_null.quantile(p))
                         for p in percentiles
                     }
-                    
+
                     # Add skewness and kurtosis
                     try:
                         stats['skewness'] = float(non_null.skew())
@@ -244,7 +243,7 @@ class DatasetStatistics:
                 'unique_values': list(value_counts.index[:10].astype(str)),  # Top 10
                 'value_counts': value_counts.head(10).to_dict(),
             })
-            
+
             if full and len(value_counts) > 0:
                 # Add cardinality metrics
                 stats['cardinality'] = float(len(value_counts) / len(series))
@@ -268,7 +267,7 @@ class DatasetStatistics:
         missing_counts = df.isna().sum()
         total_cells = len(df) * len(df.columns)
         total_missing = missing_counts.sum()
-        
+
         return {
             'total_missing_cells': int(total_missing),
             'total_missing_percentage': float(total_missing / total_cells * 100) if total_cells > 0 else 0,
@@ -287,14 +286,14 @@ class DatasetStatistics:
     def _compute_correlations(self, df: pd.DataFrame) -> Dict[str, Any]:
         """Compute correlation matrix for numeric columns."""
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        
+
         if len(numeric_cols) < 2:
             return {}
-        
+
         try:
             # Compute correlation matrix
             corr_matrix = df[numeric_cols].corr()
-            
+
             # Find high correlations
             high_corr_pairs = []
             for i in range(len(numeric_cols)):
@@ -306,13 +305,13 @@ class DatasetStatistics:
                             'column2': numeric_cols[j],
                             'correlation': float(corr_value),
                         })
-            
+
             return {
                 'numeric_columns': numeric_cols,
                 'correlation_matrix': corr_matrix.to_dict(),
                 'high_correlations': high_corr_pairs,
             }
-        
+
         except Exception as e:
             logger.warning(f"Failed to compute correlations: {e}")
             return {}
@@ -324,14 +323,14 @@ class DatasetStatistics:
             'duplicate_rows': int(df.duplicated().sum()),
             'duplicate_percentage': float(df.duplicated().mean() * 100),
         }
-        
+
         # Check for potential ID columns with duplicates
         potential_issues = []
         for col in df.columns:
             if df[col].nunique() == len(df):
                 # Potential ID column
                 continue
-            elif df[col].nunique() / len(df) > 0.95:
+            if df[col].nunique() / len(df) > 0.95:
                 # High cardinality column with duplicates
                 dup_count = len(df) - df[col].nunique()
                 potential_issues.append({
@@ -339,10 +338,10 @@ class DatasetStatistics:
                     'issue': 'high_cardinality_with_duplicates',
                     'duplicate_count': dup_count,
                 })
-        
+
         if potential_issues:
             quality_metrics['potential_issues'] = potential_issues
-        
+
         return quality_metrics
 
     def _estimate_memory_usage(
@@ -359,11 +358,11 @@ class DatasetStatistics:
             'datetime': 8,
             'bool': 1,
         }
-        
+
         total_bytes = 0
         for col_info in columns_info:
             dtype = col_info.get('dtype', 'object').lower()
-            
+
             # Map dtype to bytes
             if 'int' in dtype:
                 bytes_estimate = bytes_per_column['int']
@@ -375,9 +374,9 @@ class DatasetStatistics:
                 bytes_estimate = bytes_per_column['bool']
             else:
                 bytes_estimate = bytes_per_column['object']
-            
+
             total_bytes += bytes_estimate * row_count
-        
+
         return total_bytes
 
     def _compute_summary(self, tables_stats: Dict[str, Any]) -> Dict[str, Any]:
@@ -386,17 +385,17 @@ class DatasetStatistics:
         total_columns = 0
         total_missing = 0
         total_cells = 0
-        
+
         for table_name, stats in tables_stats.items():
             if stats:
                 total_rows += stats.get('row_count', 0)
                 total_columns += stats.get('column_count', 0)
-                
+
                 # Calculate missing cells
                 missing_info = stats.get('missing_values', {})
                 total_missing += missing_info.get('total_missing_cells', 0)
                 total_cells += stats.get('row_count', 0) * stats.get('column_count', 0)
-        
+
         return {
             'total_rows': total_rows,
             'total_columns': total_columns,
@@ -409,9 +408,9 @@ class DatasetStatistics:
         """Save statistics to metadata directory."""
         metadata_dir = self.datasets_dir / dataset_name / "metadata"
         metadata_dir.mkdir(parents=True, exist_ok=True)
-        
+
         stats_file = metadata_dir / "statistics.json"
-        
+
         try:
             with open(stats_file, 'w') as f:
                 json.dump(statistics, f, indent=2, default=str)
@@ -422,12 +421,12 @@ class DatasetStatistics:
     def load_statistics(self, dataset_name: str) -> Optional[Dict[str, Any]]:
         """Load pre-computed statistics for a dataset."""
         stats_file = self.datasets_dir / dataset_name / "metadata" / "statistics.json"
-        
+
         if not stats_file.exists():
             return None
-        
+
         try:
-            with open(stats_file, 'r') as f:
+            with open(stats_file) as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load statistics: {e}")

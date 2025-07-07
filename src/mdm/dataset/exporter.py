@@ -3,10 +3,9 @@
 import gzip
 import json
 import logging
-import shutil
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import yaml
@@ -58,15 +57,13 @@ class DatasetExporter:
 
         # Set default compression based on format
         if compression is None:
-            if format == "csv":
-                compression = "zip"
-            elif format == "json":
+            if format == "csv" or format == "json":
                 compression = "zip"
             # Parquet has built-in compression, default to None
 
         # Get dataset info
         dataset_info = self._load_dataset_info(dataset_name)
-        
+
         # Set output directory
         if output_dir is None:
             output_dir = Path.cwd()
@@ -96,17 +93,17 @@ class DatasetExporter:
             # Export each table
             for table_type, table_name in tables_to_export.items():
                 logger.info(f"Exporting table '{table_type}' ({table_name}) for dataset '{dataset_name}'")
-                
+
                 # Read data from backend
                 df = self._read_table(backend, table_name)
-                
+
                 if df is None or df.empty:
                     logger.warning(f"Table '{table_name}' is empty or not found")
                     continue
 
                 # Generate output filename
                 output_file = output_dir / f"{dataset_name}_{table_type}.{format}"
-                
+
                 # Export based on format
                 if format == "csv":
                     exported_file = self._export_csv(df, output_file, compression, no_header)
@@ -114,7 +111,7 @@ class DatasetExporter:
                     exported_file = self._export_parquet(df, output_file, compression)
                 elif format == "json":
                     exported_file = self._export_json(df, output_file, compression)
-                
+
                 exported_files.append(exported_file)
                 logger.info(f"Exported {table_type} to {exported_file}")
 
@@ -128,12 +125,12 @@ class DatasetExporter:
     def _load_dataset_info(self, dataset_name: str) -> Dict[str, Any]:
         """Load dataset information from YAML."""
         yaml_file = self.dataset_registry_dir / f"{dataset_name}.yaml"
-        
+
         if not yaml_file.exists():
             raise DatasetError(f"Dataset '{dataset_name}' not found")
 
         try:
-            with open(yaml_file, 'r') as f:
+            with open(yaml_file) as f:
                 return yaml.safe_load(f)
         except Exception as e:
             raise DatasetError(f"Failed to load dataset info: {e}") from e
@@ -142,14 +139,14 @@ class DatasetExporter:
         """Get storage backend for dataset."""
         backend_type = dataset_info.get('database', {}).get('backend', 'duckdb')
         backend_config = dataset_info.get('database', {}).copy()
-        
+
         # Add dataset-specific paths
         dataset_dir = self.datasets_dir / dataset_name
         if backend_type == 'duckdb':
             backend_config['database'] = str(dataset_dir / 'dataset.duckdb')
         elif backend_type == 'sqlite':
             backend_config['database'] = str(dataset_dir / 'dataset.db')
-        
+
         try:
             return BackendFactory.create(backend_type, backend_config)
         except Exception as e:
@@ -162,20 +159,18 @@ class DatasetExporter:
     ) -> Dict[str, str]:
         """Determine which tables to export."""
         all_tables = dataset_info.get('tables', {})
-        
+
         if specific_table:
             # Export only the specified table
             if specific_table in all_tables:
                 return {specific_table: all_tables[specific_table]}
-            else:
-                # Try to find by table name
-                for table_type, table_name in all_tables.items():
-                    if table_name == specific_table:
-                        return {table_type: table_name}
-                raise DatasetError(f"Table '{specific_table}' not found in dataset")
-        else:
-            # Export all tables by default
-            return all_tables
+            # Try to find by table name
+            for table_type, table_name in all_tables.items():
+                if table_name == specific_table:
+                    return {table_type: table_name}
+            raise DatasetError(f"Table '{specific_table}' not found in dataset")
+        # Export all tables by default
+        return all_tables
 
     def _read_table(self, backend: Any, table_name: str) -> Optional[pd.DataFrame]:
         """Read table from backend."""
@@ -199,12 +194,12 @@ class DatasetExporter:
             'export_timestamp': pd.Timestamp.now().isoformat(),
             'dataset_info': dataset_info,
         }
-        
+
         # Add statistics if available
         stats_file = self.datasets_dir / dataset_name / "metadata" / "statistics.json"
         if stats_file.exists():
             try:
-                with open(stats_file, 'r') as f:
+                with open(stats_file) as f:
                     metadata['statistics'] = json.load(f)
             except Exception as e:
                 logger.warning(f"Failed to load statistics: {e}")
@@ -213,7 +208,7 @@ class DatasetExporter:
         output_file = output_dir / f"{dataset_name}_metadata.json"
         with open(output_file, 'w') as f:
             json.dump(metadata, f, indent=2, default=str)
-        
+
         return output_file
 
     def _export_csv(
@@ -229,30 +224,29 @@ class DatasetExporter:
             'index': False,
             'header': not no_header,
         }
-        
+
         if compression == "zip":
             # Export to temporary CSV first
             temp_csv = output_file.with_suffix('.csv')
             df.to_csv(temp_csv, **csv_options)
-            
+
             # Create zip file
             zip_file = output_file.with_suffix('.csv.zip')
             with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zf:
                 zf.write(temp_csv, temp_csv.name)
-            
+
             # Remove temporary file
             temp_csv.unlink()
             return zip_file
-            
-        elif compression == "gzip":
+
+        if compression == "gzip":
             gz_file = output_file.with_suffix('.csv.gz')
             df.to_csv(gz_file, compression='gzip', **csv_options)
             return gz_file
-            
-        else:
-            # No compression
-            df.to_csv(output_file, **csv_options)
-            return output_file
+
+        # No compression
+        df.to_csv(output_file, **csv_options)
+        return output_file
 
     def _export_parquet(
         self,
@@ -266,7 +260,7 @@ class DatasetExporter:
         if compression not in valid_compressions:
             logger.warning(f"Invalid compression '{compression}' for Parquet. Using 'snappy'")
             compression = 'snappy'
-        
+
         # Export to Parquet
         try:
             df.to_parquet(output_file, compression=compression, index=False)
@@ -286,33 +280,32 @@ class DatasetExporter:
         """Export DataFrame to JSON."""
         # Convert DataFrame to records format
         json_data = df.to_json(orient='records', date_format='iso')
-        
+
         if compression == "zip":
             # Write to temporary file first
             temp_json = output_file.with_suffix('.json')
             with open(temp_json, 'w') as f:
                 f.write(json_data)
-            
+
             # Create zip file
             zip_file = output_file.with_suffix('.json.zip')
             with zipfile.ZipFile(zip_file, 'w', zipfile.ZIP_DEFLATED) as zf:
                 zf.write(temp_json, temp_json.name)
-            
+
             # Remove temporary file
             temp_json.unlink()
             return zip_file
-            
-        elif compression == "gzip":
+
+        if compression == "gzip":
             gz_file = output_file.with_suffix('.json.gz')
             with gzip.open(gz_file, 'wt', encoding='utf-8') as f:
                 f.write(json_data)
             return gz_file
-            
-        else:
-            # No compression
-            with open(output_file, 'w') as f:
-                f.write(json_data)
-            return output_file
+
+        # No compression
+        with open(output_file, 'w') as f:
+            f.write(json_data)
+        return output_file
 
 
 def export_dataset(
