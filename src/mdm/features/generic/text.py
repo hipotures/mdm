@@ -1,6 +1,6 @@
 """Text feature transformations for text columns."""
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 
@@ -50,7 +50,7 @@ class TextFeatures(GenericFeatureOperation):
 
     def _generate_column_features(
         self, df: pd.DataFrame, column: str, **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Generate text features for a column.
 
         Args:

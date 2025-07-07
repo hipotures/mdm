@@ -1,7 +1,7 @@
 """Base class for custom domain-specific features."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
 import pandas as pd
 from loguru import logger
@@ -11,7 +11,7 @@ from mdm.features.base import CustomFeatureOperation
 
 class BaseDomainFeatures(CustomFeatureOperation, ABC):
     """Base class for domain-specific custom features.
-    
+
     Users should create a subclass of this in their custom features file.
     """
 
@@ -23,18 +23,18 @@ class BaseDomainFeatures(CustomFeatureOperation, ABC):
             min_signal_ratio: Minimum unique value ratio for signal detection
         """
         super().__init__(dataset_name, min_signal_ratio)
-        self._operation_registry: Dict[str, Callable] = {}
+        self._operation_registry: dict[str, Callable] = {}
         self._register_operations()
 
     @abstractmethod
     def _register_operations(self) -> None:
         """Register all custom operations.
-        
+
         Should populate self._operation_registry with operation name to method mapping.
         """
         pass
 
-    def generate_all_features(self, df: pd.DataFrame) -> Dict[str, pd.Series]:
+    def generate_all_features(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         """Generate all registered custom features.
 
         Args:
@@ -68,6 +68,6 @@ class BaseDomainFeatures(CustomFeatureOperation, ABC):
 
     def _generate_column_features(
         self, df: pd.DataFrame, column: str, **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Not used for custom features - we use generate_all_features instead."""
         return {}

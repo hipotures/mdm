@@ -1,6 +1,7 @@
 """Statistical feature transformations for numeric columns."""
 
-from typing import Any, Dict
+import contextlib
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -52,7 +53,7 @@ class StatisticalFeatures(GenericFeatureOperation):
 
     def _generate_column_features(
         self, df: pd.DataFrame, column: str, **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Generate statistical features for a numeric column.
 
         Args:
@@ -98,20 +99,16 @@ class StatisticalFeatures(GenericFeatureOperation):
         # Binning
         if self.enable_binning and len(non_null_series.unique()) > self.n_bins:
             # Equal-width bins
-            try:
+            with contextlib.suppress(Exception):
                 features[f"{column}_bin_equal"] = pd.cut(
                     series, bins=self.n_bins, labels=False
                 )
-            except Exception:
-                pass
 
             # Quantile bins
-            try:
+            with contextlib.suppress(Exception):
                 features[f"{column}_bin_quantile"] = pd.qcut(
                     series, q=self.n_bins, labels=False, duplicates='drop'
                 )
-            except Exception:
-                pass
 
         # Power transformations
         if (non_null_series > 0).all():

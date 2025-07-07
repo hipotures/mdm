@@ -2,7 +2,7 @@
 
 import importlib.util
 import time
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pandas as pd
 from loguru import logger
@@ -30,9 +30,9 @@ class FeatureGenerator:
         self,
         df: pd.DataFrame,
         dataset_name: str,
-        column_types: Dict[str, ColumnType],
+        column_types: dict[str, ColumnType],
         target_column: Optional[str] = None,
-        id_columns: Optional[List[str]] = None,
+        id_columns: Optional[list[str]] = None,
     ) -> pd.DataFrame:
         """Generate features for a DataFrame.
 
@@ -106,11 +106,11 @@ class FeatureGenerator:
         self,
         engine: Engine,
         dataset_name: str,
-        source_tables: Dict[str, str],
-        column_types: Dict[str, ColumnType],
+        source_tables: dict[str, str],
+        column_types: dict[str, ColumnType],
         target_column: Optional[str] = None,
-        id_columns: Optional[List[str]] = None,
-    ) -> Dict[str, str]:
+        id_columns: Optional[list[str]] = None,
+    ) -> dict[str, str]:
         """Generate feature tables for all source tables.
 
         Args:

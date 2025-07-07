@@ -2,7 +2,7 @@
 
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 from loguru import logger
@@ -21,7 +21,7 @@ class BaseFeatureOperation(ABC):
 
     def generate_features(
         self, df: pd.DataFrame, columns: list[str], **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Generate features with automatic signal checking and timing.
 
         Args:
@@ -68,7 +68,7 @@ class BaseFeatureOperation(ABC):
     @abstractmethod
     def _generate_column_features(
         self, df: pd.DataFrame, column: str, **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Generate features for a single column.
 
         Args:
@@ -114,11 +114,7 @@ class BaseFeatureOperation(ABC):
             return False
 
         # For numeric features, check variance
-        if pd.api.types.is_numeric_dtype(sample):
-            if sample.std() == 0:
-                return False
-
-        return True
+        return not (pd.api.types.is_numeric_dtype(sample) and sample.std() == 0)
 
 
 class GenericFeatureOperation(BaseFeatureOperation):

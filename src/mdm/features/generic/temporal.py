@@ -1,6 +1,6 @@
 """Temporal feature transformations for datetime columns."""
 
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -43,7 +43,7 @@ class TemporalFeatures(GenericFeatureOperation):
 
     def _generate_column_features(
         self, df: pd.DataFrame, column: str, **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Generate temporal features for a datetime column.
 
         Args:

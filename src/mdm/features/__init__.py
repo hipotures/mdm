@@ -1,6 +1,6 @@
-"""Feature engineering module for MDM."""
+"""MDM Feature Engineering module."""
 
-from mdm.features.generator import FeatureGenerator
-from mdm.features.registry import FeatureRegistry
+from mdm.features.engine import FeatureEngine
+from mdm.features.signal import SignalDetector
 
-__all__ = ["FeatureGenerator", "FeatureRegistry"]
+__all__ = ["FeatureEngine", "SignalDetector"]

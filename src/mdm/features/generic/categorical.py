@@ -1,6 +1,6 @@
 """Categorical feature transformations for low cardinality columns."""
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 from loguru import logger
@@ -62,7 +62,7 @@ class CategoricalFeatures(GenericFeatureOperation):
 
     def _generate_column_features(
         self, df: pd.DataFrame, column: str, **kwargs: Any
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """Generate categorical features for a column.
 
         Args:

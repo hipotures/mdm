@@ -1,6 +1,5 @@
 """Feature transformer registry."""
 
-from typing import Dict, List, Type
 
 from loguru import logger
 
@@ -19,7 +18,7 @@ class FeatureRegistry:
 
     def __init__(self):
         """Initialize feature registry."""
-        self._transformers: Dict[ColumnType, List[Type[GenericFeatureOperation]]] = {
+        self._transformers: dict[ColumnType, list[type[GenericFeatureOperation]]] = {
             ColumnType.DATETIME: [TemporalFeatures],
             ColumnType.CATEGORICAL: [CategoricalFeatures],
             ColumnType.NUMERIC: [StatisticalFeatures],
@@ -27,11 +26,11 @@ class FeatureRegistry:
         }
 
         # Default transformer instances
-        self._default_instances: Dict[Type[GenericFeatureOperation], GenericFeatureOperation] = {}
+        self._default_instances: dict[type[GenericFeatureOperation], GenericFeatureOperation] = {}
 
     def get_transformers(
         self, column_type: ColumnType
-    ) -> List[GenericFeatureOperation]:
+    ) -> list[GenericFeatureOperation]:
         """Get transformer instances for a column type.
 
         Args:
@@ -55,7 +54,7 @@ class FeatureRegistry:
     def register_transformer(
         self,
         column_type: ColumnType,
-        transformer_class: Type[GenericFeatureOperation],
+        transformer_class: type[GenericFeatureOperation],
     ) -> None:
         """Register a new transformer for a column type.
 
@@ -72,7 +71,7 @@ class FeatureRegistry:
                 f"Registered {transformer_class.__name__} for {column_type.value}"
             )
 
-    def get_all_transformers(self) -> List[GenericFeatureOperation]:
+    def get_all_transformers(self) -> list[GenericFeatureOperation]:
         """Get all registered transformer instances.
 
         Returns:
