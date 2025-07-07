@@ -104,6 +104,12 @@ def _format_size(size_bytes: int) -> str:
 
 def main():
     """Main entry point."""
+    import sys
+    
+    # If no arguments provided (just 'mdm'), show help
+    if len(sys.argv) == 1:
+        sys.argv.append("--help")
+    
     app()
 
 
