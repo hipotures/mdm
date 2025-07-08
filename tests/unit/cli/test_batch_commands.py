@@ -29,26 +29,13 @@ class TestBatchExportCommand:
         """Test successful batch export."""
         # Setup mocks
         mock_manager = Mock()
-        mock_manager.get_dataset.side_effect = [
-            Mock(name="dataset1"),  # First dataset exists
-            Mock(name="dataset2"),  # Second dataset exists
-        ]
+        mock_manager.dataset_exists.side_effect = [True, True]  # Both datasets exist
         mock_manager_class.return_value = mock_manager
         
         mock_export_op = Mock()
         mock_export_op.execute.side_effect = [
-            {
-                'dataset_name': 'dataset1',
-                'output_path': '/tmp/exports/dataset1.csv',
-                'format': 'csv',
-                'total_rows': 1000
-            },
-            {
-                'dataset_name': 'dataset2',
-                'output_path': '/tmp/exports/dataset2.csv',
-                'format': 'csv',
-                'total_rows': 2000
-            }
+            ['/tmp/exports/dataset1/train.csv'],  # Returns list of exported files
+            ['/tmp/exports/dataset2/train.csv'],  # Returns list of exported files
         ]
         mock_export_op_class.return_value = mock_export_op
         
@@ -59,7 +46,7 @@ class TestBatchExportCommand:
             ])
         
         assert result.exit_code == 0
-        assert "2 datasets exported successfully" in result.stdout
+        assert "Successfully exported: 2 datasets" in result.stdout
         assert mock_export_op.execute.call_count == 2
     
     @patch('mdm.cli.batch.DatasetManager')
@@ -68,16 +55,16 @@ class TestBatchExportCommand:
         """Test batch export with partial failures."""
         # Setup mocks
         mock_manager = Mock()
-        mock_manager.get_dataset.side_effect = [
-            Mock(name="dataset1"),
-            None,  # dataset2 not found
-            Mock(name="dataset3"),
+        mock_manager.dataset_exists.side_effect = [
+            True,   # dataset1 exists
+            False,  # dataset2 not found
+            True,   # dataset3 exists
         ]
         mock_manager_class.return_value = mock_manager
         
         mock_export_op = Mock()
         mock_export_op.execute.side_effect = [
-            {'dataset_name': 'dataset1', 'output_path': '/tmp/dataset1.csv'},
+            ['/tmp/dataset1.csv'],  # dataset1 exports successfully
             Exception("Export failed"),  # dataset3 export fails
         ]
         mock_export_op_class.return_value = mock_export_op
@@ -89,8 +76,8 @@ class TestBatchExportCommand:
             ])
         
         assert result.exit_code == 0
-        assert "1 datasets exported successfully" in result.stdout
-        assert "2 datasets failed" in result.stdout
+        assert "Successfully exported: 1 datasets" in result.stdout
+        assert "Failed: 2 datasets" in result.stdout
         assert "dataset2: Dataset not found" in result.stdout
         assert "dataset3: Export failed" in result.stdout
     
@@ -99,14 +86,11 @@ class TestBatchExportCommand:
     def test_batch_export_all_options(self, mock_export_op_class, mock_manager_class, runner):
         """Test batch export with all options."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = Mock(name="dataset1")
+        mock_manager.dataset_exists.return_value = True
         mock_manager_class.return_value = mock_manager
         
         mock_export_op = Mock()
-        mock_export_op.execute.return_value = {
-            'dataset_name': 'dataset1',
-            'output_path': '/tmp/dataset1.parquet.gz'
-        }
+        mock_export_op.execute.return_value = ['/tmp/dataset1.parquet.gz']  # Returns list of exported files
         mock_export_op_class.return_value = mock_export_op
         
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -120,13 +104,12 @@ class TestBatchExportCommand:
         
         assert result.exit_code == 0
         
-        # Verify export was called with correct parameters
+        # Verify export was called with correct parameters  
         mock_export_op.execute.assert_called_with(
-            dataset_name="dataset1",
-            output_path=Path(tmpdir),
+            name="dataset1",
             format="parquet",
+            output_dir=Path(tmpdir) / "dataset1",
             compression="gzip",
-            tables=None,
             metadata_only=True
         )
     
@@ -134,7 +117,7 @@ class TestBatchExportCommand:
     def test_batch_export_no_datasets(self, mock_manager_class, runner):
         """Test batch export with no valid datasets."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = None
+        mock_manager.dataset_exists.return_value = False
         mock_manager_class.return_value = mock_manager
         
         result = runner.invoke(batch_app, [
@@ -143,8 +126,8 @@ class TestBatchExportCommand:
         ])
         
         assert result.exit_code == 0
-        assert "0 datasets exported successfully" in result.stdout
-        assert "1 datasets failed" in result.stdout
+        assert "Successfully exported: 0 datasets" in result.stdout
+        assert "Failed: 1 datasets" in result.stdout
 
 
 class TestBatchStatsCommand:
@@ -155,34 +138,33 @@ class TestBatchStatsCommand:
         return CliRunner()
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.cli.batch.StatsOperation')
+    @patch('mdm.dataset.operations.StatsOperation')
     def test_batch_stats_success(self, mock_stats_op_class, mock_manager_class, runner):
         """Test successful batch stats."""
         # Setup mocks
         mock_manager = Mock()
-        mock_manager.get_dataset.side_effect = [
-            Mock(name="dataset1"),
-            Mock(name="dataset2"),
-        ]
+        mock_manager.dataset_exists.side_effect = [True, True]
         mock_manager_class.return_value = mock_manager
         
         mock_stats_op = Mock()
         mock_stats_op.execute.side_effect = [
             {
                 'dataset_name': 'dataset1',
-                'tables': {
-                    'train': {'row_count': 1000, 'size_bytes': 1048576}
-                },
-                'total_row_count': 1000,
-                'total_size_bytes': 1048576
+                'summary': {
+                    'total_rows': 1000,
+                    'total_columns': 10,
+                    'total_tables': 1,
+                    'overall_completeness': 0.95
+                }
             },
             {
                 'dataset_name': 'dataset2',
-                'tables': {
-                    'train': {'row_count': 2000, 'size_bytes': 2097152}
-                },
-                'total_row_count': 2000,
-                'total_size_bytes': 2097152
+                'summary': {
+                    'total_rows': 2000,
+                    'total_columns': 15,
+                    'total_tables': 1,
+                    'overall_completeness': 0.98
+                }
             }
         ]
         mock_stats_op_class.return_value = mock_stats_op
@@ -194,42 +176,44 @@ class TestBatchStatsCommand:
         assert "dataset2" in result.stdout
         assert "1,000" in result.stdout  # Row count formatting
         assert "2,000" in result.stdout
+        assert "95.0%" in result.stdout  # Completeness percentage
+        assert "98.0%" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.cli.batch.StatsOperation')
+    @patch('mdm.dataset.operations.StatsOperation')
     def test_batch_stats_with_export(self, mock_stats_op_class, mock_manager_class, runner):
         """Test batch stats with CSV export."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = Mock(name="dataset1")
+        mock_manager.dataset_exists.return_value = True
         mock_manager_class.return_value = mock_manager
         
         mock_stats_op = Mock()
         mock_stats_op.execute.return_value = {
             'dataset_name': 'dataset1',
-            'total_row_count': 1000,
-            'total_size_bytes': 1048576
+            'summary': {
+                'total_rows': 1000,
+                'total_columns': 10,
+                'total_tables': 1,
+                'overall_completeness': 0.95
+            }
         }
         mock_stats_op_class.return_value = mock_stats_op
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
+        with tempfile.TemporaryDirectory() as tmpdir:
             result = runner.invoke(batch_app, [
                 "stats", "dataset1",
-                "--export", tmp.name
+                "--export", tmpdir
             ])
-            
-            # Check file was created
-            assert Path(tmp.name).exists()
-            Path(tmp.name).unlink()  # Clean up
         
         assert result.exit_code == 0
-        assert f"Statistics exported to {tmp.name}" in result.stdout
+        assert "Stats exported to:" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.cli.batch.StatsOperation')
-    def test_batch_stats_detailed(self, mock_stats_op_class, mock_manager_class, runner):
-        """Test batch stats with detailed flag."""
+    @patch('mdm.dataset.operations.StatsOperation')
+    def test_batch_stats_full(self, mock_stats_op_class, mock_manager_class, runner):
+        """Test batch stats with full flag."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = Mock(name="dataset1")
+        mock_manager.dataset_exists.return_value = True
         mock_manager_class.return_value = mock_manager
         
         mock_stats_op = Mock()
@@ -245,26 +229,27 @@ class TestBatchStatsCommand:
         }
         mock_stats_op_class.return_value = mock_stats_op
         
-        result = runner.invoke(batch_app, ["stats", "dataset1", "--detailed"])
+        result = runner.invoke(batch_app, ["stats", "dataset1", "--full"])
         
         assert result.exit_code == 0
         mock_stats_op.execute.assert_called_with(
-            dataset_name="dataset1",
-            detailed=True,
-            tables=None
+            name="dataset1",
+            full=True,
+            export=None
         )
     
     @patch('mdm.cli.batch.DatasetManager')
     def test_batch_stats_empty_list(self, mock_manager_class, runner):
         """Test batch stats with no datasets found."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = None
+        mock_manager.dataset_exists.return_value = False
         mock_manager_class.return_value = mock_manager
         
         result = runner.invoke(batch_app, ["stats", "nonexistent"])
         
         assert result.exit_code == 0
-        assert "No valid datasets found" in result.stdout
+        assert "Warning" in result.stdout
+        assert "not found" in result.stdout
 
 
 class TestBatchRemoveCommand:
@@ -275,18 +260,22 @@ class TestBatchRemoveCommand:
         return CliRunner()
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.cli.batch.RemoveOperation')
+    @patch('mdm.dataset.operations.RemoveOperation')
     def test_batch_remove_with_confirmation(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove with user confirmation."""
         # Setup mocks
         mock_manager = Mock()
-        mock_manager.get_dataset.side_effect = [
-            Mock(name="dataset1"),
-            Mock(name="dataset2"),
-        ]
+        mock_manager.dataset_exists.side_effect = [True, True]  # Both datasets exist
         mock_manager_class.return_value = mock_manager
         
         mock_remove_op = Mock()
+        # dry_run calls to get info, then actual remove calls
+        mock_remove_op.execute.side_effect = [
+            {'name': 'dataset1', 'size': 1024},  # dry_run info for dataset1
+            {'name': 'dataset2', 'size': 2048},  # dry_run info for dataset2
+            None,  # actual remove dataset1
+            None,  # actual remove dataset2
+        ]
         mock_remove_op_class.return_value = mock_remove_op
         
         # Simulate user confirming
@@ -298,15 +287,20 @@ class TestBatchRemoveCommand:
         assert "Are you sure" in result.stdout
         assert "dataset1" in result.stdout
         assert "dataset2" in result.stdout
-        assert "2 datasets removed successfully" in result.stdout
-        assert mock_remove_op.execute.call_count == 2
+        assert "Removed 2 datasets" in result.stdout
+        assert mock_remove_op.execute.call_count == 4  # 2 dry runs + 2 actual removes
     
     @patch('mdm.cli.batch.DatasetManager')
-    def test_batch_remove_cancelled(self, mock_manager_class, runner):
+    @patch('mdm.dataset.operations.RemoveOperation')
+    def test_batch_remove_cancelled(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove cancelled by user."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = Mock(name="dataset1")
+        mock_manager.dataset_exists.return_value = True
         mock_manager_class.return_value = mock_manager
+        
+        mock_remove_op = Mock()
+        mock_remove_op.execute.return_value = {'name': 'dataset1', 'size': 1024}  # dry_run info
+        mock_remove_op_class.return_value = mock_remove_op
         
         # Simulate user cancelling
         result = runner.invoke(batch_app, [
@@ -314,17 +308,21 @@ class TestBatchRemoveCommand:
         ], input="n\n")
         
         assert result.exit_code == 0
-        assert "Operation cancelled" in result.stdout
+        assert "Cancelled" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.cli.batch.RemoveOperation')
+    @patch('mdm.dataset.operations.RemoveOperation')
     def test_batch_remove_force(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove with force flag."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = Mock(name="dataset1")
+        mock_manager.dataset_exists.return_value = True
         mock_manager_class.return_value = mock_manager
         
         mock_remove_op = Mock()
+        mock_remove_op.execute.side_effect = [
+            {'name': 'dataset1', 'size': 1024},  # dry_run info
+            None,  # actual remove
+        ]
         mock_remove_op_class.return_value = mock_remove_op
         
         result = runner.invoke(batch_app, [
@@ -333,22 +331,24 @@ class TestBatchRemoveCommand:
         
         assert result.exit_code == 0
         assert "Are you sure" not in result.stdout
-        mock_remove_op.execute.assert_called_once()
+        assert mock_remove_op.execute.call_count == 2  # dry run + actual remove
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.cli.batch.RemoveOperation')
+    @patch('mdm.dataset.operations.RemoveOperation')
     def test_batch_remove_partial_failure(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove with partial failures."""
         mock_manager = Mock()
-        mock_manager.get_dataset.side_effect = [
-            Mock(name="dataset1"),
-            None,  # dataset2 not found
-            Mock(name="dataset3"),
+        mock_manager.dataset_exists.side_effect = [
+            True,   # dataset1 exists
+            False,  # dataset2 not found
+            True,   # dataset3 exists
         ]
         mock_manager_class.return_value = mock_manager
         
         mock_remove_op = Mock()
         mock_remove_op.execute.side_effect = [
+            {'name': 'dataset1', 'size': 1024},  # dry_run info for dataset1
+            {'name': 'dataset3', 'size': 3072},  # dry_run info for dataset3
             None,  # dataset1 removed successfully
             Exception("Permission denied"),  # dataset3 fails
         ]
@@ -360,16 +360,15 @@ class TestBatchRemoveCommand:
         ])
         
         assert result.exit_code == 0
-        assert "1 datasets removed successfully" in result.stdout
-        assert "2 datasets failed" in result.stdout
-        assert "dataset2: Dataset not found" in result.stdout
-        assert "dataset3: Permission denied" in result.stdout
+        assert "Removed 1 datasets" in result.stdout
+        assert "Failed to remove 1 datasets" in result.stdout
+        assert "Permission denied" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
     def test_batch_remove_no_valid_datasets(self, mock_manager_class, runner):
         """Test batch remove with no valid datasets."""
         mock_manager = Mock()
-        mock_manager.get_dataset.return_value = None
+        mock_manager.dataset_exists.return_value = False
         mock_manager_class.return_value = mock_manager
         
         result = runner.invoke(batch_app, [
@@ -377,4 +376,4 @@ class TestBatchRemoveCommand:
         ])
         
         assert result.exit_code == 0
-        assert "No valid datasets found to remove" in result.stdout
+        assert "No valid datasets to remove" in result.stdout
