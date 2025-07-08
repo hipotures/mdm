@@ -168,7 +168,12 @@ class DatasetRegistrar:
                            'id_columns', 'time_column', 'group_column']}
         )
 
-        # Step 11.5: Compute initial statistics including memory size
+        # Step 11.5: Save detected datetime columns in metadata
+        if self._detected_datetime_columns:
+            dataset_info.metadata['datetime_columns'] = self._detected_datetime_columns
+            logger.info(f"Saved datetime columns in metadata: {self._detected_datetime_columns}")
+        
+        # Step 11.6: Compute initial statistics including memory size
         statistics = self._compute_initial_statistics(normalized_name, db_info, table_mappings)
         if statistics:
             dataset_info.metadata['statistics'] = statistics
@@ -321,6 +326,8 @@ class DatasetRegistrar:
         
         # Store column types detected from first chunk for later use
         self._detected_column_types = {}
+        # Store detected datetime columns for parsing
+        self._detected_datetime_columns = []
 
         try:
             # Get database path/connection string
@@ -363,6 +370,13 @@ class DatasetRegistrar:
                     if file_path.suffix.lower() in ['.csv', '.tsv']:
                         delimiter = detect_delimiter(file_path)
                         
+                        # First, detect datetime columns on a small sample
+                        # Check on first table or 'train' table
+                        if (table_name in ['train', 'data'] or not self._detected_datetime_columns) and not self._detected_datetime_columns:
+                            sample_df = pd.read_csv(file_path, delimiter=delimiter, nrows=100)
+                            self._detect_datetime_columns_from_sample(sample_df)
+                            logger.info(f"Detected datetime columns: {self._detected_datetime_columns}")
+                        
                         # First, get total row count for progress bar
                         total_rows = sum(1 for _ in open(file_path)) - 1  # Subtract header
                         
@@ -375,10 +389,14 @@ class DatasetRegistrar:
                         # Read in chunks
                         first_chunk = True
                         chunk_count = 0
+                        
+                        # Prepare parse_dates parameter
+                        parse_dates_param = self._detected_datetime_columns if self._detected_datetime_columns else None
+                        
                         for chunk_df in pd.read_csv(
                             file_path, 
                             delimiter=delimiter, 
-                            parse_dates=True,
+                            parse_dates=parse_dates_param,
                             chunksize=batch_size
                         ):
                             chunk_count += 1
@@ -483,6 +501,13 @@ class DatasetRegistrar:
                         if '.tsv' in file_path.suffixes:
                             delimiter = '\t'
                         
+                        # First, detect datetime columns on a small sample
+                        # Check on first table or 'train' table
+                        if (table_name in ['train', 'data'] or not self._detected_datetime_columns) and not self._detected_datetime_columns:
+                            sample_df = pd.read_csv(file_path, delimiter=delimiter, compression='gzip', nrows=100)
+                            self._detect_datetime_columns_from_sample(sample_df)
+                            logger.info(f"Detected datetime columns: {self._detected_datetime_columns}")
+                        
                         # Count lines in compressed file for progress bar
                         import gzip
                         with gzip.open(file_path, 'rt') as f:
@@ -496,11 +521,15 @@ class DatasetRegistrar:
                         # Read compressed file in chunks
                         first_chunk = True
                         chunk_count = 0
+                        
+                        # Prepare parse_dates parameter
+                        parse_dates_param = self._detected_datetime_columns if self._detected_datetime_columns else None
+                        
                         for chunk_df in pd.read_csv(
                             file_path, 
                             delimiter=delimiter, 
                             compression='gzip',
-                            parse_dates=True,
+                            parse_dates=parse_dates_param,
                             chunksize=batch_size
                         ):
                             chunk_count += 1
@@ -536,6 +565,19 @@ class DatasetRegistrar:
                         # Excel file
                         df = pd.read_excel(file_path)
                         total_rows = len(df)
+                        
+                        # Detect datetime columns if this is the first table
+                        if (table_name in ['train', 'data'] or not self._detected_datetime_columns) and not self._detected_datetime_columns:
+                            sample_df = df.head(100)
+                            self._detect_datetime_columns_from_sample(sample_df)
+                            logger.info(f"Detected datetime columns: {self._detected_datetime_columns}")
+                            
+                            # Convert datetime columns in the full dataframe
+                            for col in self._detected_datetime_columns:
+                                import warnings
+                                with warnings.catch_warnings():
+                                    warnings.simplefilter("ignore")
+                                    df[col] = pd.to_datetime(df[col], errors='coerce')
                         
                         task = progress.add_task(
                             f"Loading {file_path.name} into {table_name}",
@@ -599,6 +641,78 @@ class DatasetRegistrar:
 
         return table_mappings
     
+    def _convert_datetime_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Detect and convert datetime columns in DataFrame.
+        
+        Args:
+            df: Input DataFrame
+            
+        Returns:
+            DataFrame with datetime columns converted
+        """
+        df_copy = df.copy()
+        
+        for col in df_copy.columns:
+            if df_copy[col].dtype == 'object':
+                
+                try:
+                    # Try to parse as datetime
+                    # Use infer_datetime_format for better detection
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        parsed = pd.to_datetime(df_copy[col], errors='coerce')
+                    
+                    # Check success rate
+                    success_rate = parsed.notna().sum() / len(parsed)
+                    
+                    # If more than 80% parsed successfully, convert the column
+                    if success_rate >= 0.8:
+                        df_copy[col] = parsed
+                        logger.debug(f"Detected datetime column: {col} (success rate: {success_rate:.0%})")
+                        # Store for later parsing in all chunks
+                        if col not in self._detected_datetime_columns:
+                            self._detected_datetime_columns.append(col)
+                    
+                except Exception as e:
+                    # If parsing fails, skip this column
+                    logger.debug(f"Could not parse {col} as datetime: {e}")
+                    
+        return df_copy
+    
+    def _detect_datetime_columns_from_sample(self, df: pd.DataFrame) -> None:
+        """Detect datetime columns from a sample DataFrame.
+        
+        Args:
+            df: Sample DataFrame
+        """
+        logger.debug(f"Detecting datetime columns from sample with {len(df)} rows")
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                logger.debug(f"Checking column {col} for datetime patterns")
+                # For datetime detection, we don't skip based on unique values
+                # Dates can be very unique (timestamps) but still valid dates
+                logger.debug(f"Checking if column {col} contains datetime values")
+                
+                try:
+                    # Try to parse as datetime
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        parsed = pd.to_datetime(df[col], errors='coerce')
+                    
+                    # Check success rate
+                    success_rate = parsed.notna().sum() / len(parsed)
+                    
+                    # If more than 80% parsed successfully, mark as datetime
+                    if success_rate >= 0.8:
+                        self._detected_datetime_columns.append(col)
+                        logger.debug(f"Detected datetime column: {col} (success rate: {success_rate:.0%})")
+                    
+                except Exception as e:
+                    # If parsing fails, skip this column
+                    logger.debug(f"Could not parse {col} as datetime: {e}")
+    
     def _detect_and_store_column_types(self, df: pd.DataFrame, table_name: str) -> None:
         """Detect column types from first chunk using ydata-profiling.
         
@@ -606,6 +720,9 @@ class DatasetRegistrar:
         Results are stored for later use in feature generation.
         """
         logger.info(f"Detecting column types from first chunk of {table_name}")
+        
+        # First, try to detect and convert datetime columns
+        df = self._convert_datetime_columns(df)
         
         try:
             # Suppress ydata-profiling output
@@ -870,7 +987,8 @@ class DatasetRegistrar:
                 column_types=column_types,
                 target_column=target_column,
                 id_columns=id_columns,
-                progress=progress
+                progress=progress,
+                datetime_columns=self._detected_datetime_columns
             )
 
             logger.info(f"Generated {len(feature_tables)} feature tables")
@@ -947,7 +1065,19 @@ class DatasetRegistrar:
                             elif var_type == "DateTime":
                                 column_types[col_name] = ColumnType.DATETIME
                             elif var_type in ["Text", "URL", "Path", "File"]:
-                                column_types[col_name] = ColumnType.TEXT
+                                # Check cardinality for Text columns
+                                # If low cardinality, treat as categorical
+                                n_unique = df[col_name].nunique() if col_name in df.columns else 0
+                                threshold = self.config.feature_engineering.type_detection.categorical_threshold
+                                
+                                logger.info(f"Checking column {col_name}: type={var_type}, unique={n_unique}, threshold={threshold}")
+                                
+                                if n_unique > 0 and n_unique <= threshold:
+                                    logger.info(f"Column {col_name} has {n_unique} unique values (<= {threshold}), treating as categorical")
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                                else:
+                                    logger.info(f"Column {col_name} has {n_unique} unique values (> {threshold}), keeping as text")
+                                    column_types[col_name] = ColumnType.TEXT
                             elif var_type == "Boolean":
                                 column_types[col_name] = ColumnType.CATEGORICAL
                             else:
@@ -1009,7 +1139,19 @@ class DatasetRegistrar:
                             elif var_type == "DateTime":
                                 column_types[col_name] = ColumnType.DATETIME
                             elif var_type in ["Text", "URL", "Path", "File"]:
-                                column_types[col_name] = ColumnType.TEXT
+                                # Check cardinality for Text columns
+                                # If low cardinality, treat as categorical
+                                n_unique = df[col_name].nunique() if col_name in df.columns else 0
+                                threshold = self.config.feature_engineering.type_detection.categorical_threshold
+                                
+                                logger.info(f"Checking column {col_name}: type={var_type}, unique={n_unique}, threshold={threshold}")
+                                
+                                if n_unique > 0 and n_unique <= threshold:
+                                    logger.info(f"Column {col_name} has {n_unique} unique values (<= {threshold}), treating as categorical")
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                                else:
+                                    logger.info(f"Column {col_name} has {n_unique} unique values (> {threshold}), keeping as text")
+                                    column_types[col_name] = ColumnType.TEXT
                             elif var_type == "Boolean":
                                 # Treat boolean as categorical
                                 column_types[col_name] = ColumnType.CATEGORICAL

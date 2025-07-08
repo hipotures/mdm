@@ -159,11 +159,31 @@ class GenericFeaturesConfig(BaseModel):
     binning: BinningConfig = Field(default_factory=BinningConfig)
 
 
+class TypeDetectionConfig(BaseModel):
+    """Type detection configuration."""
+    
+    categorical_threshold: int = Field(
+        default=20, 
+        ge=2, 
+        description="Max unique values to consider as categorical"
+    )
+    text_min_avg_length: int = Field(
+        default=50,
+        ge=1,
+        description="Min average length to consider as text"
+    )
+    detect_datetime: bool = Field(
+        default=True,
+        description="Automatically detect datetime columns"
+    )
+
+
 class FeatureEngineeringConfig(BaseModel):
     """Feature engineering configuration."""
 
     enabled: bool = Field(default=True, description="Enable feature engineering")
     generic: GenericFeaturesConfig = Field(default_factory=GenericFeaturesConfig)
+    type_detection: TypeDetectionConfig = Field(default_factory=TypeDetectionConfig)
 
 
 class ExportConfig(BaseModel):

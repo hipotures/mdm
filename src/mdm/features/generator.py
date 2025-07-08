@@ -109,6 +109,7 @@ class FeatureGenerator:
         target_column: Optional[str] = None,
         id_columns: Optional[list[str]] = None,
         progress: Optional[Any] = None,
+        datetime_columns: Optional[list[str]] = None,
     ) -> dict[str, str]:
         """Generate feature tables for all source tables.
         
@@ -178,12 +179,22 @@ class FeatureGenerator:
                 for offset in range(0, total_rows, batch_size):
                     # Read chunk from source table
                     query = f"SELECT * FROM {table_name} LIMIT {batch_size} OFFSET {offset}"
-                    chunk_df = pd.read_sql_query(query, engine)
+                    
+                    # If we have datetime columns, parse them when reading from SQL
+                    if datetime_columns:
+                        logger.debug(f"Reading chunk with parse_dates={datetime_columns}")
+                        chunk_df = pd.read_sql_query(query, engine, parse_dates=datetime_columns)
+                    else:
+                        chunk_df = pd.read_sql_query(query, engine)
                     
                     if len(chunk_df) == 0:
                         break
                     
                     # Generate features for this chunk
+                    logger.debug(f"Generating features for chunk with columns: {list(chunk_df.columns)}")
+                    logger.debug(f"Column types: {column_types}")
+                    logger.debug(f"DataFrame dtypes: {chunk_df.dtypes.to_dict()}")
+                    
                     chunk_features = self.generate_features(
                         chunk_df, dataset_name, column_types, target_column, id_columns
                     )
