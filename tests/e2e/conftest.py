@@ -17,6 +17,15 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "mdm_id(test_id): mark test with MDM test ID from MANUAL_TEST_CHECKLIST.md"
     )
+    
+    # SAFETY CHECK: Prevent tests from accidentally destroying user data
+    if "MDM_HOME_DIR" not in os.environ:
+        # Force tests to use a safe temporary directory
+        test_safety_dir = Path(f"/tmp/mdm_test_safety_{uuid.uuid4().hex[:8]}")
+        test_safety_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["MDM_HOME_DIR"] = str(test_safety_dir)
+        print(f"\n⚠️  SAFETY: MDM_HOME_DIR not set, using temporary directory: {test_safety_dir}")
+        print("   This prevents tests from accidentally modifying ~/.mdm\n")
 
 
 @pytest.fixture(scope="session")
@@ -47,6 +56,23 @@ def clean_mdm_env():
     # Import here to avoid circular imports
     from mdm.core.config import reset_config
     from mdm.config import reset_config_manager
+    
+    # SAFETY: Check and ensure safe test environment
+    current_mdm_home = os.environ.get("MDM_HOME_DIR", "")
+    home_mdm = str(Path.home() / ".mdm")
+    
+    # If MDM_HOME_DIR is not set or points to production directory, force safe directory
+    if not current_mdm_home or current_mdm_home == home_mdm or not current_mdm_home.startswith("/tmp"):
+        # Create a safety directory
+        safety_dir = Path(f"/tmp/mdm_test_safety_{os.getpid()}_{uuid.uuid4().hex[:4]}")
+        safety_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["MDM_HOME_DIR"] = str(safety_dir)
+        
+        if not current_mdm_home:
+            print(f"\n⚠️  SAFETY: MDM_HOME_DIR not set, using temporary: {safety_dir}")
+        else:
+            print(f"\n⚠️  SAFETY: MDM_HOME_DIR was unsafe ({current_mdm_home}), using: {safety_dir}")
+        print("   This prevents tests from accidentally modifying production data.\n")
     
     # Reset MDM config to force reload with new environment
     reset_config()
