@@ -9,6 +9,9 @@ import os
 # Suppress ydata-profiling promotional banner
 os.environ["YDATA_SUPPRESS_BANNER"] = "1"
 
+# Suppress all tqdm progress bars globally
+os.environ["TQDM_DISABLE"] = "1"
+
 __version__ = "0.1.0"
 __author__ = "MDM Development Team"
 

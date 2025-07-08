@@ -133,12 +133,27 @@ def register(
         # Display success message
         console.print(f"\n[green]✓[/green] Dataset '{dataset_info.name}' registered successfully!")
 
-        # Display dataset info
-        console.print("\nConfiguration:")
-        console.print(f"- Target: {dataset_info.target_column or 'None'}")
-        console.print(f"- Problem Type: {dataset_info.problem_type or 'Unknown'}")
-        console.print(f"- ID Columns: {', '.join(dataset_info.id_columns) if dataset_info.id_columns else 'None'}")
-        console.print(f"- Tables: {', '.join(dataset_info.tables.keys())}")
+        # Display dataset info in a nice table
+        from rich.table import Table
+        from rich.panel import Panel
+        
+        config_table = Table(show_header=False, box=None, padding=(0, 1))
+        config_table.add_column(style="cyan", no_wrap=True)
+        config_table.add_column(style="white")
+        
+        config_table.add_row("Target", dataset_info.target_column or "[dim]None[/dim]")
+        config_table.add_row("Problem Type", dataset_info.problem_type or "[dim]Unknown[/dim]")
+        config_table.add_row("ID Columns", ', '.join(dataset_info.id_columns) if dataset_info.id_columns else "[dim]None[/dim]")
+        
+        # Format tables nicely
+        tables = list(dataset_info.tables.keys())
+        if len(tables) <= 3:
+            tables_str = ', '.join(tables)
+        else:
+            tables_str = ', '.join(tables[:3]) + f", [dim]...({len(tables)} total)[/dim]"
+        config_table.add_row("Tables", tables_str)
+        
+        console.print(Panel(config_table, title="[bold blue]Configuration[/bold blue]", expand=False))
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")

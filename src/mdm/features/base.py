@@ -36,7 +36,7 @@ class BaseFeatureOperation(ABC):
 
         for column in columns:
             if column not in df.columns:
-                logger.warning(f"Column '{column}' not found in DataFrame")
+                logger.debug(f"Column '{column}' not found in DataFrame - skipping")
                 continue
 
             start_time = time.time()

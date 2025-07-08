@@ -530,11 +530,17 @@ class DatasetRegistrar:
                 original_trange = tqdm.trange
                 
                 # Create dummy tqdm that does nothing
-                def dummy_tqdm(*args, **kwargs):
-                    # Return the first argument if it's an iterable, otherwise empty list
-                    if args:
-                        return args[0]
-                    return []
+                def dummy_tqdm(iterable=None, *args, **kwargs):
+                    # Return the iterable itself, or an empty iterator
+                    # This properly handles progress bars without displaying anything
+                    if iterable is not None:
+                        # Convert to list to consume any generators/ranges
+                        # but return an iterator to match tqdm behavior
+                        try:
+                            return iter(list(iterable))
+                        except:
+                            return iter([])
+                    return iter([])
                 
                 # Replace tqdm temporarily
                 tqdm.tqdm = dummy_tqdm
@@ -813,115 +819,110 @@ class DatasetRegistrar:
             
             # Create minimal profile for type detection
             try:
-                # Show our own progress indicator
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    console=None,
-                    transient=True
-                ) as progress:
-                    task = progress.add_task("Analyzing column types with ydata-profiling...", total=None)
-                    
-                    # Suppress tqdm progress bars from ydata-profiling
-                    import os
-                    old_tqdm = os.environ.get('TQDM_DISABLE')
-                    os.environ['TQDM_DISABLE'] = '1'
-                    
-                    try:
-                        # Use stored column types if available
-                        if hasattr(self, '_detected_column_types') and self._detected_column_types:
-                            # We already have column types from first chunk
-                            logger.info("Using column types detected during data loading")
-                            for col_name, var_type in self._detected_column_types.items():
-                                if col_name not in df.columns:
-                                    continue
-                                    
-                                # Map to MDM ColumnType
-                                if col_name in id_columns:
-                                    column_types[col_name] = ColumnType.ID
-                                elif col_name == target_column:
-                                    column_types[col_name] = ColumnType.TARGET
-                                elif var_type == "Numeric":
-                                    column_types[col_name] = ColumnType.NUMERIC
-                                elif var_type == "Categorical":
-                                    column_types[col_name] = ColumnType.CATEGORICAL
-                                elif var_type == "DateTime":
-                                    column_types[col_name] = ColumnType.DATETIME
-                                elif var_type in ["Text", "URL", "Path", "File"]:
-                                    column_types[col_name] = ColumnType.TEXT
-                                elif var_type == "Boolean":
-                                    column_types[col_name] = ColumnType.CATEGORICAL
-                                else:
-                                    column_types[col_name] = ColumnType.CATEGORICAL
-                        else:
-                            # Fallback: run profiling on sample
-                            # Suppress all output
-                            import tqdm
-                            import sys
-                            from io import StringIO
-                            
-                            original_tqdm = tqdm.tqdm
-                            original_trange = tqdm.trange
-                            
-                            def dummy_tqdm(*args, **kwargs):
-                                if args:
-                                    return args[0]
-                                return []
-                            
-                            tqdm.tqdm = dummy_tqdm
-                            tqdm.trange = dummy_tqdm
-                            old_stdout = sys.stdout
-                            sys.stdout = StringIO()
-                            
-                            try:
-                                profile = ProfileReport(
-                                    df,
-                                    minimal=True,
-                                    type_schema=type_schema,
-                                    progress_bar=False
-                                )
-                            finally:
-                                tqdm.tqdm = original_tqdm
-                                tqdm.trange = original_trange
-                                sys.stdout = old_stdout
-                            
-                            # Extract column types from profile
-                            description = profile.get_description()
-                            variables = description.variables
-                            
-                            for col_name, var_info in variables.items():
-                                if isinstance(var_info, dict):
-                                    var_type = var_info.get('type', 'Unsupported')
-                                else:
-                                    var_type = getattr(var_info, 'type', 'Unsupported')
+                # Don't create a new progress if we already have one active
+                logger.info("Analyzing column types with ydata-profiling...")
+                
+                # Suppress tqdm progress bars from ydata-profiling
+                import os
+                old_tqdm = os.environ.get('TQDM_DISABLE')
+                os.environ['TQDM_DISABLE'] = '1'
+                
+                try:
+                    # Use stored column types if available
+                    if hasattr(self, '_detected_column_types') and self._detected_column_types:
+                        # We already have column types from first chunk
+                        logger.info("Using column types detected during data loading")
+                        for col_name, var_type in self._detected_column_types.items():
+                            if col_name not in df.columns:
+                                continue
                                 
-                                # Map ydata-profiling types to MDM ColumnType
-                                if col_name in id_columns:
-                                    column_types[col_name] = ColumnType.ID
-                                elif col_name == target_column:
-                                    column_types[col_name] = ColumnType.TARGET
-                                elif var_type == "Numeric":
-                                    column_types[col_name] = ColumnType.NUMERIC
-                                elif var_type == "Categorical":
-                                    column_types[col_name] = ColumnType.CATEGORICAL
-                                elif var_type == "DateTime":
-                                    column_types[col_name] = ColumnType.DATETIME
-                                elif var_type in ["Text", "URL", "Path", "File"]:
-                                    column_types[col_name] = ColumnType.TEXT
-                                elif var_type == "Boolean":
-                                    # Treat boolean as categorical
-                                    column_types[col_name] = ColumnType.CATEGORICAL
-                                else:
-                                    # Default to categorical for unknown types
-                                    column_types[col_name] = ColumnType.CATEGORICAL
-                    finally:
-                        # Restore original TQDM setting
-                        if old_tqdm is None:
-                            os.environ.pop('TQDM_DISABLE', None)
-                        else:
-                            os.environ['TQDM_DISABLE'] = old_tqdm
-                    
-                    progress.update(task, completed=True)
+                            # Map to MDM ColumnType
+                            if col_name in id_columns:
+                                column_types[col_name] = ColumnType.ID
+                            elif col_name == target_column:
+                                column_types[col_name] = ColumnType.TARGET
+                            elif var_type == "Numeric":
+                                column_types[col_name] = ColumnType.NUMERIC
+                            elif var_type == "Categorical":
+                                column_types[col_name] = ColumnType.CATEGORICAL
+                            elif var_type == "DateTime":
+                                column_types[col_name] = ColumnType.DATETIME
+                            elif var_type in ["Text", "URL", "Path", "File"]:
+                                column_types[col_name] = ColumnType.TEXT
+                            elif var_type == "Boolean":
+                                column_types[col_name] = ColumnType.CATEGORICAL
+                            else:
+                                column_types[col_name] = ColumnType.CATEGORICAL
+                    else:
+                        # Fallback: run profiling on sample
+                        # Suppress all output
+                        import tqdm
+                        import sys
+                        from io import StringIO
+                        
+                        original_tqdm = tqdm.tqdm
+                        original_trange = tqdm.trange
+                        
+                        def dummy_tqdm(iterable=None, *args, **kwargs):
+                            if iterable is not None:
+                                try:
+                                    return iter(list(iterable))
+                                except:
+                                    return iter([])
+                            return iter([])
+                        
+                        tqdm.tqdm = dummy_tqdm
+                        tqdm.trange = dummy_tqdm
+                        old_stdout = sys.stdout
+                        sys.stdout = StringIO()
+                        
+                        try:
+                            profile = ProfileReport(
+                                df,
+                                minimal=True,
+                                type_schema=type_schema,
+                                progress_bar=False
+                            )
+                        finally:
+                            tqdm.tqdm = original_tqdm
+                            tqdm.trange = original_trange
+                            sys.stdout = old_stdout
+                        
+                        # Extract column types from profile
+                        description = profile.get_description()
+                        variables = description.variables
+                        
+                        for col_name, var_info in variables.items():
+                            if isinstance(var_info, dict):
+                                var_type = var_info.get('type', 'Unsupported')
+                            else:
+                                var_type = getattr(var_info, 'type', 'Unsupported')
+                            
+                            # Map ydata-profiling types to MDM ColumnType
+                            if col_name in id_columns:
+                                column_types[col_name] = ColumnType.ID
+                            elif col_name == target_column:
+                                column_types[col_name] = ColumnType.TARGET
+                            elif var_type == "Numeric":
+                                column_types[col_name] = ColumnType.NUMERIC
+                            elif var_type == "Categorical":
+                                column_types[col_name] = ColumnType.CATEGORICAL
+                            elif var_type == "DateTime":
+                                column_types[col_name] = ColumnType.DATETIME
+                            elif var_type in ["Text", "URL", "Path", "File"]:
+                                column_types[col_name] = ColumnType.TEXT
+                            elif var_type == "Boolean":
+                                # Treat boolean as categorical
+                                column_types[col_name] = ColumnType.CATEGORICAL
+                            else:
+                                # Default to categorical for unknown types
+                                column_types[col_name] = ColumnType.CATEGORICAL
+                finally:
+                    # Restore original TQDM setting
+                    if old_tqdm is None:
+                        os.environ.pop('TQDM_DISABLE', None)
+                    else:
+                        os.environ['TQDM_DISABLE'] = old_tqdm
                         
                 logger.info(f"Detected column types using ydata-profiling: {column_types}")
                 
@@ -1066,10 +1067,13 @@ class DatasetRegistrar:
                                     original_tqdm = tqdm.tqdm
                                     original_trange = tqdm.trange
                                     
-                                    def dummy_tqdm(*args, **kwargs):
-                                        if args:
-                                            return args[0]
-                                        return []
+                                    def dummy_tqdm(iterable=None, *args, **kwargs):
+                                        if iterable is not None:
+                                            try:
+                                                return iter(list(iterable))
+                                            except:
+                                                return iter([])
+                                        return iter([])
                                     
                                     tqdm.tqdm = dummy_tqdm
                                     tqdm.trange = dummy_tqdm
