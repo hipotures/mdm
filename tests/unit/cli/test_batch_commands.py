@@ -180,7 +180,7 @@ class TestBatchStatsCommand:
         assert "98.0%" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.StatsOperation')
     def test_batch_stats_with_export(self, mock_stats_op_class, mock_manager_class, runner):
         """Test batch stats with CSV export."""
         mock_manager = Mock()
@@ -209,7 +209,7 @@ class TestBatchStatsCommand:
         assert "Stats exported to:" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.StatsOperation')
     def test_batch_stats_full(self, mock_stats_op_class, mock_manager_class, runner):
         """Test batch stats with full flag."""
         mock_manager = Mock()
@@ -260,7 +260,7 @@ class TestBatchRemoveCommand:
         return CliRunner()
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.RemoveOperation')
+    @patch('mdm.cli.batch.RemoveOperation')
     def test_batch_remove_with_confirmation(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove with user confirmation."""
         # Setup mocks
@@ -291,7 +291,7 @@ class TestBatchRemoveCommand:
         assert mock_remove_op.execute.call_count == 4  # 2 dry runs + 2 actual removes
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.RemoveOperation')
+    @patch('mdm.cli.batch.RemoveOperation')
     def test_batch_remove_cancelled(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove cancelled by user."""
         mock_manager = Mock()
@@ -311,7 +311,7 @@ class TestBatchRemoveCommand:
         assert "Cancelled" in result.stdout
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.RemoveOperation')
+    @patch('mdm.cli.batch.RemoveOperation')
     def test_batch_remove_force(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove with force flag."""
         mock_manager = Mock()
@@ -334,7 +334,7 @@ class TestBatchRemoveCommand:
         assert mock_remove_op.execute.call_count == 2  # dry run + actual remove
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.RemoveOperation')
+    @patch('mdm.cli.batch.RemoveOperation')
     def test_batch_remove_partial_failure(self, mock_remove_op_class, mock_manager_class, runner):
         """Test batch remove with partial failures."""
         mock_manager = Mock()
