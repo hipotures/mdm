@@ -483,24 +483,21 @@ class TestBatchCLI90Coverage:
         csv_buffer = StringIO()
         mock_file.return_value.write = csv_buffer.write
         
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
-            try:
-                result = runner.invoke(batch_app, [
-                    "stats", "ds1", "ds2",
-                    "--export", tmp.name,
-                    "--full"  # Changed from --detailed to --full
-                ])
-                
-                if result.exit_code != 0:
-                    print(f"Command failed with exit code {result.exit_code}")
-                    print(f"Output: {result.stdout}")
-                    print(f"Exception: {result.exception}")
-                
-                assert result.exit_code == 0
-                # The batch stats command exports to a directory, not a single file
-                assert "Statistics Summary:" in result.stdout
-            finally:
-                Path(tmp.name).unlink()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = runner.invoke(batch_app, [
+                "stats", "ds1", "ds2",
+                "--export", tmpdir,
+                "--full"  # Changed from --detailed to --full
+            ])
+            
+            if result.exit_code != 0:
+                print(f"Command failed with exit code {result.exit_code}")
+                print(f"Output: {result.stdout}")
+                print(f"Exception: {result.exception}")
+            
+            assert result.exit_code == 0
+            # The batch stats command exports to a directory, not a single file
+            assert "Statistics Summary:" in result.stdout
 
 
 class TestTimeseriesCLI90Coverage:

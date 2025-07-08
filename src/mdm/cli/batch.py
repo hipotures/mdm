@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 
 from mdm.dataset.manager import DatasetManager
-from mdm.dataset.operations import ExportOperation
+from mdm.dataset.operations import ExportOperation, StatsOperation, RemoveOperation
 
 # Create batch app
 batch_app = typer.Typer(help="Batch operations for multiple datasets")
@@ -103,8 +103,6 @@ def batch_stats(
 ):
     """Compute statistics for multiple datasets."""
     manager = DatasetManager()
-    from mdm.dataset.operations import StatsOperation
-
     stats_op = StatsOperation()
 
     # Track results
@@ -178,8 +176,6 @@ def batch_remove(
 ):
     """Remove multiple datasets in batch."""
     manager = DatasetManager()
-    from mdm.dataset.operations import RemoveOperation
-
     remove_op = RemoveOperation()
 
     # Get info about datasets to remove
