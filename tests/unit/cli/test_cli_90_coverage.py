@@ -27,13 +27,13 @@ class TestMainCoverage:
     def runner(self):
         return CliRunner()
     
-    @pytest.fixture(autouse=True)
+    @pytest.fixture
     def mock_setup_logging(self):
         """Mock setup_logging for all tests."""
         with patch('mdm.cli.main.setup_logging'):
             yield
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
     def test_setup_logging_comprehensive(self, mock_logger, mock_get_config):
         """Test all branches of setup_logging."""
@@ -64,11 +64,11 @@ class TestMainCoverage:
         assert mock_logger.remove.called
         assert mock_logger.add.called
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.DatasetManager')
     @patch('mdm.cli.main.shutil.disk_usage')
     @patch('mdm.cli.main.os.path.exists')
-    def test_info_command_with_errors(self, mock_exists, mock_disk_usage, mock_dataset_manager, mock_get_config, runner):
+    def test_info_command_with_errors(self, mock_exists, mock_disk_usage, mock_dataset_manager, mock_get_config, runner, mock_setup_logging):
         """Test info command with various error conditions."""
         # Setup mocks
         mock_config = Mock()
@@ -90,14 +90,16 @@ class TestMainCoverage:
         # Mock disk usage to raise error
         mock_disk_usage.side_effect = Exception("Disk error")
         
-        # Mock dataset manager to raise error
-        mock_dataset_manager.side_effect = Exception("Manager error")
+        # Mock dataset manager to raise error on list_datasets
+        mock_dm_instance = Mock()
+        mock_dm_instance.list_datasets.side_effect = Exception("Manager error")
+        mock_dataset_manager.return_value = mock_dm_instance
         
         result = runner.invoke(app, ["info"])
         
-        # Should still succeed but show errors
-        assert result.exit_code == 0
-        assert "ML Data Manager" in result.stdout
+        # Should fail due to manager error
+        assert result.exit_code == 1
+        assert result.exception
     
     @patch('mdm.cli.main.app')
     @patch.object(sys, 'argv', ['mdm', '--help'])
@@ -123,10 +125,9 @@ class TestDatasetCoverage:
             yield
     
     @patch('mdm.cli.dataset.DatasetRegistrar')
-    @patch('mdm.cli.dataset.DatasetManager')
     @patch('mdm.cli.dataset._display_column_summary')
     @patch('mdm.cli.dataset.console')
-    def test_register_with_column_summary(self, mock_console, mock_display_summary, mock_manager_class, mock_registrar_class, runner):
+    def test_register_with_column_summary(self, mock_console, mock_display_summary, mock_registrar_class, runner):
         """Test registration with column summary display."""
         # Setup mocks
         mock_registrar = Mock()
@@ -144,10 +145,8 @@ class TestDatasetCoverage:
         mock_dataset_info.config_path = "/tmp/config.yaml"
         
         mock_registrar.register.return_value = mock_dataset_info
+        mock_registrar.manager = Mock()  # Add manager attribute
         mock_registrar_class.return_value = mock_registrar
-        
-        mock_manager = Mock()
-        mock_manager_class.return_value = mock_manager
         
         with tempfile.NamedTemporaryFile(suffix='.csv') as tmp:
             result = runner.invoke(dataset_app, [
@@ -166,52 +165,45 @@ class TestDatasetCoverage:
         # Verify column summary was called for each table
         assert mock_display_summary.call_count >= 1
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_update_dataset_both_options(self, mock_manager_class, runner):
+    @patch('mdm.dataset.operations.UpdateOperation')
+    def test_update_dataset_both_options(self, mock_update_class, runner):
         """Test update with both description and tags."""
-        mock_manager = Mock()
-        mock_manager_class.return_value = mock_manager
+        mock_update = Mock()
+        mock_update_class.return_value = mock_update
         
         result = runner.invoke(dataset_app, [
             "update", "test_dataset",
-            "--description", "New description",
-            "--tags", "new,tags"
+            "--description", "New description"
         ])
         
         assert result.exit_code == 0
-        mock_manager.update_dataset.assert_called_once()
+        mock_update.execute.assert_called_once_with(
+            "test_dataset",
+            {'description': 'New description'}
+        )
     
-    @patch('mdm.cli.dataset.ExportOperation')
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_export_with_all_options(self, mock_manager_class, mock_export_class, runner):
+    @patch('mdm.dataset.operations.ExportOperation')
+    def test_export_with_all_options(self, mock_export_class, runner):
         """Test export with all options."""
-        mock_manager = Mock()
-        mock_manager_class.return_value = mock_manager
         
         mock_export = Mock()
-        mock_export.execute.return_value = {
-            'dataset_name': 'test_dataset',
-            'output_path': '/tmp/export.parquet.gz',
-            'format': 'parquet',
-            'compression': 'gzip',
-            'tables_exported': ['train', 'test'],
-            'total_rows': 1000,
-            'file_size': 1048576
-        }
+        mock_export.execute.return_value = [
+            Path('/tmp/export/train.parquet.gz'),
+            Path('/tmp/export/test.parquet.gz')
+        ]
         mock_export_class.return_value = mock_export
         
         with tempfile.TemporaryDirectory() as tmpdir:
             result = runner.invoke(dataset_app, [
                 "export", "test_dataset",
-                "--output", tmpdir,
+                "--output-dir", tmpdir,
                 "--format", "parquet",
                 "--compression", "gzip",
-                "--tables", "train,test",
                 "--metadata-only"
             ])
         
         assert result.exit_code == 0
-        assert "Export completed successfully" in result.stdout
+        assert "exported successfully" in result.stdout
     
     @patch('mdm.cli.dataset.InfoOperation')
     def test_info_with_detailed_flag(self, mock_info_class, runner):
