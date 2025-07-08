@@ -33,6 +33,7 @@ def _format_size(size_bytes: int) -> str:
 
 def _display_column_summary(dataset_info: Any, manager: Any, table_type: str = 'train') -> None:
     """Display a summary table of columns with types and null percentages."""
+    backend = None
     try:
         # Get backend to query the data
         backend = BackendFactory.create(
