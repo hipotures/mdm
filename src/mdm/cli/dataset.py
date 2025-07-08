@@ -547,8 +547,8 @@ def update_dataset(
             updates['id_columns'] = [col.strip() for col in id_columns.split(',')]
 
         if not updates:
-            console.print("[yellow]No updates specified[/yellow]")
-            return
+            console.print("No updates specified")
+            raise typer.Exit(1)
 
         operation = UpdateOperation()
         operation.execute(name, updates)
