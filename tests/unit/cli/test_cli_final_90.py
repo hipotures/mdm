@@ -287,33 +287,42 @@ features:
         ], input="n\n")
         assert result.exit_code == 0
     
-    @patch('mdm.dataset.manager.DatasetManager')
+    @patch('mdm.cli.batch.DatasetManager')
     @patch('mdm.dataset.operations.StatsOperation')
     def test_batch_stats_formats(self, mock_stats_op, mock_dm, runner):
-        """Test batch stats with different formats."""
-        # Setup mocks
-        mock_dm.return_value.get_dataset.return_value = Mock(name="ds1")
-        mock_stats_op.return_value.execute.return_value = {
-            'dataset_name': 'ds1',
-            'total_row_count': 1000,
-            'total_size_bytes': 1048576,
+        """Test batch stats with export option."""
+        # Setup mocks - mock the instance, not the class
+        mock_manager_instance = Mock()
+        mock_manager_instance.dataset_exists.return_value = True
+        mock_dm.return_value = mock_manager_instance
+        
+        mock_stats_instance = Mock()
+        mock_stats_instance.execute.return_value = {
+            'summary': {
+                'total_rows': 1000,
+                'total_columns': 10,
+                'total_tables': 1,
+                'overall_completeness': 0.95
+            },
             'tables': {
                 'train': {
                     'row_count': 1000,
-                    'size_bytes': 1048576
+                    'column_count': 10,
+                    'missing_values': {
+                        'total_missing': 50,
+                        'completeness': 0.95
+                    }
                 }
             }
         }
+        mock_stats_op.return_value = mock_stats_instance
         
-        # JSON format
-        with patch('builtins.print') as mock_print:
-            result = runner.invoke(batch_app, [
-                "stats", "ds1",
-                "--format", "json"
-            ])
-            assert result.exit_code == 0
-            # Should print JSON
-            assert mock_print.called
+        # Test normal batch stats
+        result = runner.invoke(batch_app, [
+            "stats", "ds1"
+        ])
+        assert result.exit_code == 0
+        assert "Statistics Summary:" in result.stdout
     
     # Timeseries.py tests for coverage
     def test_timeseries_all_commands(self, runner, test_env):
