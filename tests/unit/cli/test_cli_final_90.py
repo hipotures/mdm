@@ -289,7 +289,7 @@ features:
         assert result.exit_code == 0
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.StatsOperation')
     def test_batch_stats_formats(self, mock_stats_op, mock_dm, runner):
         """Test batch stats with export option."""
         # Setup mocks - mock the instance, not the class
