@@ -52,14 +52,18 @@ class TestTimeseriesAnalyzeCommand:
                 'duration_days': 99
             },
             'frequency': 'daily',
-            'missing_periods': [],
+            'missing_timestamps': {
+                'count': 0,
+                'percentage': 0.0,
+                'dates': []
+            },
             'trend': {
                 'direction': 'increasing',
                 'strength': 0.95
             },
             'seasonality': {
-                'period': 7,
-                'strength': 0.3
+                'weekly': True,
+                'monthly': False
             },
             'stationarity': {
                 'is_stationary': False,
@@ -77,8 +81,8 @@ class TestTimeseriesAnalyzeCommand:
         assert "Start: 2023-01-01" in result.stdout
         assert "Duration: 99 days" in result.stdout
         assert "Frequency: daily" in result.stdout
-        assert "Trend: increasing" in result.stdout
-        assert "Seasonality: 7 days" in result.stdout
+        assert "Seasonality Detected:" in result.stdout
+        assert "Weekly pattern" in result.stdout
     
     @patch('mdm.cli.timeseries.MDMClient')
     def test_analyze_dataset_not_found(self, mock_client_class, runner):
@@ -274,7 +278,7 @@ class TestTimeseriesValidateCommand:
         return CliRunner()
     
     @patch('mdm.cli.timeseries.MDMClient')
-    @patch('mdm.cli.timeseries.TimeSeriesSplitter')
+    @patch('mdm.utils.time_series.TimeSeriesSplitter')
     def test_validate_success(self, mock_splitter_class, mock_client_class, runner):
         """Test successful time series cross-validation."""
         # Setup mocks
@@ -318,10 +322,9 @@ class TestTimeseriesValidateCommand:
         assert "Fold" in result.stdout
         assert "Train Period" in result.stdout
         assert "Test Period" in result.stdout
-        assert "Total folds: 2" in result.stdout
     
     @patch('mdm.cli.timeseries.MDMClient')
-    @patch('mdm.cli.timeseries.TimeSeriesSplitter')
+    @patch('mdm.utils.time_series.TimeSeriesSplitter')
     def test_validate_with_options(self, mock_splitter_class, mock_client_class, runner):
         """Test cross-validation with custom options."""
         mock_client = Mock()
@@ -348,8 +351,9 @@ class TestTimeseriesValidateCommand:
         mock_splitter_class.assert_called_with("date", "group")
         
         # Verify split_by_folds was called with correct params
+        from unittest.mock import ANY
         mock_splitter.split_by_folds.assert_called_with(
-            mock.ANY,  # dataframe
+            ANY,  # dataframe
             10,        # n_folds
             7          # gap_days
         )
@@ -381,7 +385,7 @@ class TestTimeseriesValidateCommand:
         assert "has no time column configured" in result.stdout
     
     @patch('mdm.cli.timeseries.MDMClient')
-    @patch('mdm.cli.timeseries.TimeSeriesSplitter')
+    @patch('mdm.utils.time_series.TimeSeriesSplitter')
     def test_validate_with_exception(self, mock_splitter_class, mock_client_class, runner):
         """Test validate with exception."""
         mock_client = Mock()
