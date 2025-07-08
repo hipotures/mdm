@@ -2,7 +2,7 @@
 
 import importlib.util
 import time
-from typing import Optional
+from typing import Optional, Any
 
 import pandas as pd
 from loguru import logger
@@ -110,8 +110,11 @@ class FeatureGenerator:
         column_types: dict[str, ColumnType],
         target_column: Optional[str] = None,
         id_columns: Optional[list[str]] = None,
+        progress: Optional[Any] = None,
     ) -> dict[str, str]:
         """Generate feature tables for all source tables.
+        
+        This now processes data in chunks to avoid loading entire dataset into memory.
 
         Args:
             engine: SQLAlchemy engine
@@ -124,28 +127,93 @@ class FeatureGenerator:
         Returns:
             Mapping of feature table type to table name
         """
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
+        import sqlalchemy as sa
+        
         feature_tables = {}
+        
+        # Get batch size from config
+        try:
+            from mdm.config import get_config_manager
+            config = get_config_manager().config
+            batch_size = config.performance.batch_size
+        except:
+            batch_size = 10000
 
         for table_type, table_name in source_tables.items():
             logger.info(f"Generating features for {table_type} table")
-
-            # Read source table
-            df = pd.read_sql_table(table_name, engine)
-
-            # Generate features
-            feature_df = self.generate_features(
-                df, dataset_name, column_types, target_column, id_columns
-            )
-
-            # Save feature table
+            
             feature_table_name = f"{table_type}_features"
-            feature_df.to_sql(
-                feature_table_name, engine, if_exists="replace", index=False
-            )
+            
+            # Get total row count
+            with engine.connect() as conn:
+                row_count_query = sa.text(f"SELECT COUNT(*) FROM {table_name}")
+                result = conn.execute(row_count_query)
+                total_rows = result.scalar()
+            
+            # Use passed progress or create new one
+            if progress is None:
+                from rich.progress import Progress as RichProgress
+                progress_ctx = RichProgress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TaskProgressColumn(),
+                    TimeRemainingColumn(),
+                    console=None,
+                    transient=True,
+                )
+                progress = progress_ctx.__enter__()
+                own_progress = True
+            else:
+                own_progress = False
+                
+            try:
+                task = progress.add_task(
+                    f"Generating and saving features for {feature_table_name}",
+                    total=total_rows
+                )
+                
+                first_batch = True
+                
+                # Process data in chunks
+                for offset in range(0, total_rows, batch_size):
+                    # Read chunk from source table
+                    query = f"SELECT * FROM {table_name} LIMIT {batch_size} OFFSET {offset}"
+                    chunk_df = pd.read_sql_query(query, engine)
+                    
+                    if len(chunk_df) == 0:
+                        break
+                    
+                    # Generate features for this chunk
+                    chunk_features = self.generate_features(
+                        chunk_df, dataset_name, column_types, target_column, id_columns
+                    )
+                    
+                    # Save chunk to feature table
+                    if first_batch:
+                        chunk_features.to_sql(
+                            feature_table_name, engine, if_exists="replace", index=False
+                        )
+                        first_batch = False
+                    else:
+                        chunk_features.to_sql(
+                            feature_table_name, engine, if_exists="append", index=False
+                        )
+                    
+                    progress.update(task, advance=len(chunk_df))
+                    
+                    # Free memory
+                    del chunk_df
+                    del chunk_features
+                    
+            finally:
+                if own_progress:
+                    progress_ctx.__exit__(None, None, None)
 
             feature_tables[f"{table_type}_features"] = feature_table_name
             logger.info(
-                f"Created {feature_table_name} with {len(feature_df.columns)} columns"
+                f"Created {feature_table_name} with features generated in chunks"
             )
 
         return feature_tables

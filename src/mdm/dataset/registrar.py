@@ -104,32 +104,44 @@ class DatasetRegistrar:
         # Step 6: Create database
         db_info = self._create_database(normalized_name)
 
-        # Step 7: Load data files
-        table_mappings = self._load_data_files(files, db_info)
+        # Create a single progress context for all operations
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            console=None,
+        ) as progress:
+            # Step 7: Load data files
+            table_mappings = self._load_data_files(files, db_info, progress)
 
-        # Step 8: Detect columns and types
-        column_info = self._analyze_columns(db_info, table_mappings)
+            # Step 8: Detect columns and types
+            task = progress.add_task("Analyzing columns and data types...", total=None)
+            column_info = self._analyze_columns(db_info, table_mappings)
+            progress.update(task, completed=True, visible=False)
 
-        # Step 9: Detect ID columns
-        id_columns = detected_info.get('id_columns', [])
-        if not id_columns and auto_detect:
-            id_columns = self._detect_id_columns(column_info)
+            # Step 9: Detect ID columns
+            id_columns = detected_info.get('id_columns', [])
+            if not id_columns and auto_detect:
+                id_columns = self._detect_id_columns(column_info)
 
-        # Step 10: Determine problem type and target
-        target_column = detected_info.get('target_column') or kwargs.get('target_column')
-        problem_type = detected_info.get('problem_type') or kwargs.get('problem_type')
+            # Step 10: Determine problem type and target
+            target_column = detected_info.get('target_column') or kwargs.get('target_column')
+            problem_type = detected_info.get('problem_type') or kwargs.get('problem_type')
 
-        if auto_detect and not problem_type and target_column:
-            problem_type = self._infer_problem_type(column_info, target_column)
+            if auto_detect and not problem_type and target_column:
+                problem_type = self._infer_problem_type(column_info, target_column)
 
-        # Step 10.5: Generate feature tables
-        feature_tables = {}
-        if kwargs.get('generate_features', True):
-            feature_tables = self._generate_features(
-                normalized_name, db_info, table_mappings, column_info,
-                target_column, id_columns, kwargs.get('type_schema')
-            )
-            table_mappings.update(feature_tables)
+            # Step 10.5: Generate feature tables
+            feature_tables = {}
+            if kwargs.get('generate_features', True):
+                feature_tables = self._generate_features(
+                    normalized_name, db_info, table_mappings, column_info,
+                    target_column, id_columns, kwargs.get('type_schema'),
+                    progress
+                )
+                table_mappings.update(feature_tables)
 
         # Step 11: Create dataset info
         dataset_info = DatasetInfo(
@@ -282,7 +294,8 @@ class DatasetRegistrar:
     def _load_data_files(
         self,
         files: Dict[str, Path],
-        db_info: Dict[str, Any]
+        db_info: Dict[str, Any],
+        progress: Optional[Progress] = None
     ) -> Dict[str, str]:
         """Step 7: Load data files into database with true batch processing.
         
@@ -316,25 +329,28 @@ class DatasetRegistrar:
             engine = backend.get_engine(db_path)
 
             for file_key, file_path in files.items():
-                if file_key == 'sample_submission':
-                    continue  # Skip sample submission
-
                 table_name = file_key
                 logger.info(f"Loading {file_path} as table '{table_name}'")
 
                 # Read and load based on file type with batch processing
                 batch_size = self.config.performance.batch_size
                 
-                # Create progress bar
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TaskProgressColumn(),
-                    TimeRemainingColumn(),
-                    console=None,  # Use default console
-                ) as progress:
-                    
+                # Use passed progress or create new one
+                if progress is None:
+                    progress_ctx = Progress(
+                        SpinnerColumn(),
+                        TextColumn("[progress.description]{task.description}"),
+                        BarColumn(),
+                        TaskProgressColumn(),
+                        TimeRemainingColumn(),
+                        console=None,
+                    )
+                    progress = progress_ctx.__enter__()
+                    own_progress = True
+                else:
+                    own_progress = False
+                
+                try:
                     if file_path.suffix.lower() in ['.csv', '.tsv']:
                         delimiter = detect_delimiter(file_path)
                         
@@ -455,23 +471,27 @@ class DatasetRegistrar:
                     else:
                         logger.warning(f"Unsupported file type: {file_path}")
                         continue
-                
-                table_mappings[file_key] = table_name
-                
-                # Get final row count from database
-                try:
-                    if hasattr(backend, 'query'):
-                        row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
-                        if row_count_result is not None and not row_count_result.empty:
-                            row_count = int(row_count_result.iloc[0]['count'])
+                    
+                    table_mappings[file_key] = table_name
+                    
+                    # Get final row count from database
+                    try:
+                        if hasattr(backend, 'query'):
+                            row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
+                            if row_count_result is not None and not row_count_result.empty:
+                                row_count = int(row_count_result.iloc[0]['count'])
+                                logger.info(f"Loaded {row_count} rows into '{table_name}'")
+                        else:
+                            # Alternative: use pandas to read and count
+                            count_df = pd.read_sql_query(f"SELECT COUNT(*) as count FROM {table_name}", engine)
+                            row_count = int(count_df.iloc[0]['count'])
                             logger.info(f"Loaded {row_count} rows into '{table_name}'")
-                    else:
-                        # Alternative: use pandas to read and count
-                        count_df = pd.read_sql_query(f"SELECT COUNT(*) as count FROM {table_name}", engine)
-                        row_count = int(count_df.iloc[0]['count'])
-                        logger.info(f"Loaded {row_count} rows into '{table_name}'")
-                except Exception as e:
-                    logger.info(f"Loaded data into '{table_name}'")
+                    except Exception as e:
+                        logger.info(f"Loaded data into '{table_name}'")
+                
+                finally:
+                    if own_progress:
+                        progress_ctx.__exit__(None, None, None)
 
         except Exception as e:
             raise DatasetError(f"Failed to load data files: {e}")
@@ -694,7 +714,8 @@ class DatasetRegistrar:
         column_info: Dict[str, Dict[str, Any]],
         target_column: Optional[str],
         id_columns: List[str],
-        type_schema: Optional[Dict[str, str]] = None
+        type_schema: Optional[Dict[str, str]] = None,
+        progress: Optional[Progress] = None
     ) -> Dict[str, str]:
         """Generate feature tables for the dataset.
         
@@ -743,7 +764,8 @@ class DatasetRegistrar:
                 source_tables=table_mappings,
                 column_types=column_types,
                 target_column=target_column,
-                id_columns=id_columns
+                id_columns=id_columns,
+                progress=progress
             )
 
             logger.info(f"Generated {len(feature_tables)} feature tables")
@@ -978,6 +1000,8 @@ class DatasetRegistrar:
             db_info: Database connection info
             table_mappings: Mapping of table types to table names
         """
+        from rich.progress import Progress, SpinnerColumn, TextColumn
+        
         try:
             logger.info(f"Computing initial statistics for dataset '{dataset_name}'")
             
@@ -994,82 +1018,94 @@ class DatasetRegistrar:
             total_rows = 0
             total_memory_bytes = 0
             
-            # Focus on main data tables for statistics
-            for table_type, table_name in table_mappings.items():
-                if table_type in ['train', 'test', 'validation', 'data']:
-                    try:
-                        # Get row count
+            # Use progress indicator for statistics computation
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=None,
+                transient=True,
+            ) as progress:
+                task = progress.add_task("Computing dataset statistics...", total=None)
+                
+                # Focus on main data tables for statistics
+                for table_type, table_name in table_mappings.items():
+                    if table_type in ['train', 'test', 'validation', 'data']:
                         try:
-                            # Try using query method if available
-                            if hasattr(backend, 'query'):
-                                row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
-                                if row_count_result is not None and not row_count_result.empty:
-                                    row_count = int(row_count_result.iloc[0]['count'])
-                                    total_rows += row_count
-                            else:
-                                # Fallback to reading dataframe
-                                df = backend.read_table_to_dataframe(table_name, engine)
-                                row_count = len(df)
-                                total_rows += row_count
-                        except Exception as e:
-                            logger.debug(f"Failed to get row count: {e}")
-                            row_count = 0
-                        
-                        # Get sample data for memory estimation
-                        sample_size = min(10000, row_count) if row_count > 0 else 0
-                        if sample_size > 0:
-                            df = backend.read_table_to_dataframe(table_name, engine, limit=sample_size)
+                            progress.update(task, description=f"Analyzing {table_name}...")
                             
-                            # Use ydata-profiling to get memory size
+                            # Get row count
                             try:
-                                # Suppress all output
-                                import tqdm
-                                import sys
-                                from io import StringIO
-                                
-                                original_tqdm = tqdm.tqdm
-                                original_trange = tqdm.trange
-                                
-                                def dummy_tqdm(*args, **kwargs):
-                                    if args:
-                                        return args[0]
-                                    return []
-                                
-                                tqdm.tqdm = dummy_tqdm
-                                tqdm.trange = dummy_tqdm
-                                old_stdout = sys.stdout
-                                sys.stdout = StringIO()
-                                
-                                try:
-                                    profile = ProfileReport(
-                                        df, 
-                                        minimal=True,
-                                        progress_bar=False
-                                    )
-                                finally:
-                                    tqdm.tqdm = original_tqdm
-                                    tqdm.trange = original_trange
-                                    sys.stdout = old_stdout
-                                description = profile.get_description()
-                                
-                                # Get memory size from profile
-                                table_stats = description.table if hasattr(description, 'table') else {}
-                                memory_size = getattr(table_stats, 'memory_size', df.memory_usage(deep=True).sum())
-                                
-                                # Scale memory size to full dataset if sampling
-                                if sample_size < row_count:
-                                    memory_size = int(memory_size * (row_count / sample_size))
-                                
-                                total_memory_bytes += memory_size
-                                
+                                # Try using query method if available
+                                if hasattr(backend, 'query'):
+                                    row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
+                                    if row_count_result is not None and not row_count_result.empty:
+                                        row_count = int(row_count_result.iloc[0]['count'])
+                                        total_rows += row_count
+                                else:
+                                    # Fallback to reading dataframe
+                                    df = backend.read_table_to_dataframe(table_name, engine)
+                                    row_count = len(df)
+                                    total_rows += row_count
                             except Exception as e:
-                                logger.debug(f"Failed to use ydata-profiling for memory estimation: {e}")
-                                # Fallback to pandas memory usage
-                                memory_per_row = df.memory_usage(deep=True).sum() / len(df)
-                                total_memory_bytes += int(memory_per_row * row_count)
+                                logger.debug(f"Failed to get row count: {e}")
+                                row_count = 0
+                            
+                            # Get sample data for memory estimation
+                            sample_size = min(10000, row_count) if row_count > 0 else 0
+                            if sample_size > 0:
+                                progress.update(task, description=f"Estimating memory usage for {table_name}...")
+                                df = backend.read_table_to_dataframe(table_name, engine, limit=sample_size)
                                 
-                    except Exception as e:
-                        logger.warning(f"Failed to compute statistics for table {table_name}: {e}")
+                                # Use ydata-profiling to get memory size
+                                try:
+                                    # Suppress all output
+                                    import tqdm
+                                    import sys
+                                    from io import StringIO
+                                    
+                                    original_tqdm = tqdm.tqdm
+                                    original_trange = tqdm.trange
+                                    
+                                    def dummy_tqdm(*args, **kwargs):
+                                        if args:
+                                            return args[0]
+                                        return []
+                                    
+                                    tqdm.tqdm = dummy_tqdm
+                                    tqdm.trange = dummy_tqdm
+                                    old_stdout = sys.stdout
+                                    sys.stdout = StringIO()
+                                    
+                                    try:
+                                        profile = ProfileReport(
+                                            df, 
+                                            minimal=True,
+                                            progress_bar=False
+                                        )
+                                    finally:
+                                        tqdm.tqdm = original_tqdm
+                                        tqdm.trange = original_trange
+                                        sys.stdout = old_stdout
+                                    description = profile.get_description()
+                                    
+                                    # Get memory size from profile
+                                    table_stats = description.table if hasattr(description, 'table') else {}
+                                    memory_size = getattr(table_stats, 'memory_size', df.memory_usage(deep=True).sum())
+                                    
+                                    # Scale memory size to full dataset if sampling
+                                    if sample_size < row_count:
+                                        memory_size = int(memory_size * (row_count / sample_size))
+                                    
+                                    total_memory_bytes += memory_size
+                                    
+                                except Exception as e:
+                                    logger.debug(f"Failed to use ydata-profiling for memory estimation: {e}")
+                                    # Fallback to pandas memory usage
+                                    memory_per_row = df.memory_usage(deep=True).sum() / len(df)
+                                    total_memory_bytes += int(memory_per_row * row_count)
+                                    
+                        except Exception as e:
+                            logger.warning(f"Failed to compute statistics for table {table_name}: {e}")
             
             # Return statistics
             statistics = {
