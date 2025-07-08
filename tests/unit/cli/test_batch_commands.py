@@ -138,7 +138,7 @@ class TestBatchStatsCommand:
         return CliRunner()
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.StatsOperation')
     def test_batch_stats_success(self, mock_stats_op_class, mock_manager_class, runner):
         """Test successful batch stats."""
         # Setup mocks
