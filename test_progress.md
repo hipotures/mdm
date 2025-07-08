@@ -57,7 +57,7 @@
 ✅ Verify database operations work correctly
 ❌ DuckDB backend - missing sqlalchemy dialect (not critical)
 ❌ PostgreSQL backend - requires database server
-✅ SQLAlchemy echo setting (FIXED 2025-01-08)
+✅ SQLAlchemy echo setting (FIXED 2025-07-08)
 ✅ Connection pooling settings work
 
 #### Logging Configuration (4/7 items tested)
@@ -82,7 +82,7 @@
 4. Logging system respects configuration but file logging not implemented
 5. Performance settings are loaded correctly
 
-### UPDATE 2025-01-08: CLI Parameter Fixes & Logging System Migration
+### UPDATE 2025-07-08: CLI Parameter Fixes & Logging System Migration
 ✅ **FIXED** - Multiple values for keyword argument errors:
 - `--id-columns` now works with comma-separated values (e.g., "id,feature2")
 - `--time-column` parameter now works correctly
@@ -104,14 +104,14 @@
 ✅ Register directory with multiple files
 ✅ Register with uppercase names (converted to lowercase)
 ✅ Register with --target column specification
-✅ Register with --id-columns (FIXED 2025-01-08)
+✅ Register with --id-columns (FIXED 2025-07-08)
 ✅ Register with --description text
 ✅ Register with --tags (comma-separated)
 ✅ Problem type auto-detection (multiclass_classification)
 ✅ Feature engineering runs automatically
 ✅ Multiple table detection (train/test)
 ❌ Register with special characters in name
-✅ ML-specific options (--time-column, --group-column FIXED 2025-01-08)
+✅ ML-specific options (--time-column, --group-column FIXED 2025-07-08)
 ❌ Control flags (--no-auto, --skip-analysis, --dry-run)
 ❌ Error handling for non-existent files
 
@@ -300,17 +300,17 @@
 3. Create final test report with all findings ✅ (Completed)
 4. Document recommended fixes for found issues ✅ (Completed)
 
-## Summary of Configuration Issues Fixed (2025-01-08)
+## Summary of Configuration Issues Fixed (2025-07-08)
 
 ### Fixed Issues:
 1. **CLI Parameters** - "multiple values for keyword argument" errors (--id-columns, --time-column, --group-column)
 2. **SQLAlchemy echo** - SQL queries now display correctly with DEBUG or INFO log levels
 
 ### Still Outstanding:
-1. ~~**SQLite pragmas** - cache_size, temp_store, mmap_size not applied~~ **FIXED 2025-01-08** - Pragmas are properly applied on each connection
-2. ~~**Log file creation** - File logging not implemented~~ **FIXED 2025-01-08** - Logs now written to /tmp/mdm.log or configured path
-3. ~~**Logging format** - JSON format option ignored~~ **FIXED 2025-01-08** - JSON logging works with MDM_LOGGING_FORMAT=json
-4. ~~**Export defaults** - Default format and compression settings ignored~~ **FIXED 2025-01-08** - Export now uses config defaults
+1. ~~**SQLite pragmas** - cache_size, temp_store, mmap_size not applied~~ **FIXED 2025-07-08** - Pragmas are properly applied on each connection
+2. ~~**Log file creation** - File logging not implemented~~ **FIXED 2025-07-08** - Logs now written to /tmp/mdm.log or configured path
+3. ~~**Logging format** - JSON format option ignored~~ **FIXED 2025-07-08** - JSON logging works with MDM_LOGGING_FORMAT=json
+4. ~~**Export defaults** - Default format and compression settings ignored~~ **FIXED 2025-07-08** - Export now uses config defaults
 5. **Custom features** - Not loaded from ~/.mdm/config/custom_features/
 
 ## Additional Testing - 5 New Tests (2025-07-07)
@@ -318,7 +318,7 @@
 ### Test 1: SQLAlchemy Configuration - echo setting ✅
 - Added `sqlalchemy.echo: true` to mdm.yaml
 - Tested with dataset registration and stats
-- ~~Result: Echo setting not working (SQL queries not printed)~~ **FIXED 2025-01-08**
+- ~~Result: Echo setting not working (SQL queries not printed)~~ **FIXED 2025-07-08**
 - ~~Tried env var MDM_DATABASE_SQLALCHEMY_ECHO=true - also not working~~
 - **Finding**: SQLAlchemy echo now works when log level is DEBUG or INFO
 
@@ -326,13 +326,13 @@
 - Changed `logging.format` from "console" to "json" in mdm.yaml
 - Tested with `mdm dataset list` and `mdm dataset info`
 - Tried env var MDM_LOGGING_FORMAT=json
-- ~~Result: Format setting has no effect on output~~ **FIXED 2025-01-08**
+- ~~Result: Format setting has no effect on output~~ **FIXED 2025-07-08**
 - **Finding**: Logging format configuration now works correctly with loguru migration
 
 ### Test 3: Dataset Registration - with datetime columns ✅
 - Created test_datetime.csv with order_date and delivery_date columns
 - Attempted to use --datetime-columns option (doesn't exist)
-- ~~Tried --time-column option but got "multiple values for keyword argument" error~~ **FIXED 2025-01-08**
+- ~~Tried --time-column option but got "multiple values for keyword argument" error~~ **FIXED 2025-07-08**
 - Dataset registered successfully but datetime columns stored as TEXT
 - **Finding**: --time-column now works correctly after fix
 
@@ -486,7 +486,7 @@
 - **Finding**: Working correctly! ✅
 
 ### Test 24: --group-column (line 198) ✅
-- ~~Error: "multiple values for keyword argument 'time_column'"~~ **FIXED 2025-01-08**
+- ~~Error: "multiple values for keyword argument 'time_column'"~~ **FIXED 2025-07-08**
 - Parameter now works correctly after kwargs fix
 - **Finding**: --group-column now functional
 
@@ -539,25 +539,25 @@
 ### Test 31: SQLite cache_size configuration (line 42) ✅
 - Changed cache_size from -64000 to -128000 in mdm.yaml
 - Registered new dataset and checked PRAGMA cache_size
-- ~~Result: Shows -2000 (default) instead of configured value~~ **FIXED 2025-01-08**
+- ~~Result: Shows -2000 (default) instead of configured value~~ **FIXED 2025-07-08**
 - **Finding**: SQLite pragmas are connection-specific and properly applied through MDM connections
 
 ### Test 32: SQLite temp_store setting (line 43) ✅
 - Set temp_store to "MEMORY" and "FILE" in mdm.yaml
 - Checked PRAGMA temp_store in new databases
-- ~~Result: Always shows 0 (DEFAULT) instead of configured value~~ **FIXED 2025-01-08**
+- ~~Result: Always shows 0 (DEFAULT) instead of configured value~~ **FIXED 2025-07-08**
 - **Finding**: SQLite temp_store properly set (1=FILE, 2=MEMORY) on MDM connections
 
 ### Test 33: Export default format configuration (line 129) ✅
 - Set export.default_format: "parquet" in mdm.yaml
 - Exported dataset without specifying format
-- ~~Result: Still exports as CSV.zip (default hardcoded)~~ **FIXED 2025-01-08**
+- ~~Result: Still exports as CSV.zip (default hardcoded)~~ **FIXED 2025-07-08**
 - **Finding**: Export now correctly uses parquet format from configuration
 
 ### Test 34: Export compression configuration (line 131) ✅
 - CLI compression options work: none, gzip, zip
 - Set export.compression: "gzip" in mdm.yaml
-- ~~Result: Configuration ignored, but CLI options work correctly~~ **FIXED 2025-01-08**
+- ~~Result: Configuration ignored, but CLI options work correctly~~ **FIXED 2025-07-08**
 - **Finding**: Export now uses gzip compression from configuration for CSV files
 
 ### Test 35: Simple filter - exact match (line 236) ✅
@@ -609,13 +609,13 @@
 ### Test 41: SQLite mmap_size setting (line 44) ✅
 - Set mmap_size: 268435456 in mdm.yaml
 - Checked PRAGMA mmap_size in new database
-- ~~Result: Shows 0 instead of configured value~~ **FIXED 2025-01-08**
+- ~~Result: Shows 0 instead of configured value~~ **FIXED 2025-07-08**
 - **Finding**: SQLite mmap_size properly applied (268435456) on MDM connections
 
 ### Test 42: Log file creation (line 74) ✅
 - Configured logging.file: "/tmp/mdm.log" in mdm.yaml
 - Tested with both ERROR and DEBUG log levels
-- ~~Result: Log file never created~~ **FIXED 2025-01-08**
+- ~~Result: Log file never created~~ **FIXED 2025-07-08**
 - **Finding**: Log file now created with rotation support via loguru
 
 ### Test 43: Date filter - exact date (line 250) ⚠️
@@ -798,7 +798,7 @@
 - **Finding**: Good performance for large datasets
 
 ### Test 69: Time Series Registration (line 464-465) ✅
-- ~~Attempted registration with --time-column and --group-column~~ **FIXED 2025-01-08**
+- ~~Attempted registration with --time-column and --group-column~~ **FIXED 2025-07-08**
 - ~~Got "multiple values for keyword argument 'time_column'" error~~
 - **Finding**: Time series registration now works correctly
 
@@ -820,7 +820,7 @@
 - Success rate: 47%
 - Test coverage: 183/190 checkable items (96%)
 
-## Additional Testing - Test Batch 9 (2025-01-08)
+## Additional Testing - Test Batch 9 (2025-07-08)
 
 ### Test 71: Log Level WARNING Configuration (line 122) ✅
 - Set logging.level to WARNING in mdm.yaml
@@ -842,7 +842,7 @@
 
 ### Test 74: Dataset Registration --id-columns (line 188) ✅
 - Created dataset with multiple ID columns (user_id, order_id)
-- ~~Attempted registration with --id-columns user_id,order_id~~ **FIXED 2025-01-08**
+- ~~Attempted registration with --id-columns user_id,order_id~~ **FIXED 2025-07-08**
 - ~~Got "multiple values for keyword argument 'id_columns'" error~~
 - **Finding**: --id-columns parameter now works correctly
 
@@ -889,7 +889,7 @@
 - Success rate: 45%
 - Test coverage: 193/200 checkable items (96.5%)
 
-## Additional Testing - Test Batch 10 (2025-01-08)
+## Additional Testing - Test Batch 10 (2025-07-08)
 
 ### Test 81: Log Level ERROR Configuration (line 72) ✅
 - Set logging.level to ERROR in mdm.yaml
@@ -955,7 +955,7 @@
 - Success rate: 48% → 60%
 - Test coverage: 203/210 checkable items (96.7%)
 
-### Major Fixes Applied (2025-01-08)
+### Major Fixes Applied (2025-07-08)
 
 ✅ **FIXED**: CLI parameter "multiple values for keyword argument" errors
 - Fixed --id-columns with comma-separated values
