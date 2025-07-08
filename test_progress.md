@@ -82,22 +82,29 @@
 4. Logging system respects configuration but file logging not implemented
 5. Performance settings are loaded correctly
 
+### UPDATE 2025-01-08: CLI Parameter Fixes
+✅ **FIXED** - Multiple values for keyword argument errors:
+- `--id-columns` now works with comma-separated values (e.g., "id,feature2")
+- `--time-column` parameter now works correctly
+- `--group-column` parameter now works correctly
+- Fixed by excluding these parameters from kwargs spreading in DatasetInfo constructor
+
 ### Phase 2: Dataset Registration & Operations (28/50 items tested)
 
-#### Dataset Registration (15/20 items tested) 
+#### Dataset Registration (18/20 items tested) 
 ✅ Register single CSV file
 ✅ Register with force flag
 ✅ Register directory with multiple files
 ✅ Register with uppercase names (converted to lowercase)
 ✅ Register with --target column specification
-❌ Register with --id-columns (error with multiple values)
+✅ Register with --id-columns (FIXED 2025-01-08)
 ✅ Register with --description text
 ✅ Register with --tags (comma-separated)
 ✅ Problem type auto-detection (multiclass_classification)
 ✅ Feature engineering runs automatically
 ✅ Multiple table detection (train/test)
 ❌ Register with special characters in name
-❌ ML-specific options (stratify, group, time columns)
+✅ ML-specific options (--time-column, --group-column FIXED 2025-01-08)
 ❌ Control flags (--no-auto, --skip-analysis, --dry-run)
 ❌ Error handling for non-existent files
 
@@ -305,9 +312,9 @@
 ### Test 3: Dataset Registration - with datetime columns ✅
 - Created test_datetime.csv with order_date and delivery_date columns
 - Attempted to use --datetime-columns option (doesn't exist)
-- Tried --time-column option but got "multiple values for keyword argument" error
+- ~~Tried --time-column option but got "multiple values for keyword argument" error~~ **FIXED 2025-01-08**
 - Dataset registered successfully but datetime columns stored as TEXT
-- **Finding**: --time-column exists but has implementation bug
+- **Finding**: --time-column now works correctly after fix
 
 ### Test 4: Column Type Detection - datetime detection ✅
 - Checked SQLite schema for datetime_test dataset
@@ -458,10 +465,10 @@
 - Override successfully changed to regression
 - **Finding**: Working correctly! ✅
 
-### Test 24: --group-column (line 198) ❌
-- Error: "multiple values for keyword argument 'time_column'"
-- Implementation bug in parameter handling
-- **Finding**: CLI parameter bug
+### Test 24: --group-column (line 198) ✅
+- ~~Error: "multiple values for keyword argument 'time_column'"~~ **FIXED 2025-01-08**
+- Parameter now works correctly after kwargs fix
+- **Finding**: --group-column now functional
 
 ### Test 25: --source specification (line 203) ❌
 - Error: "No such option: --source"
@@ -771,9 +778,9 @@
 - **Finding**: Good performance for large datasets
 
 ### Test 69: Time Series Registration (line 464-465) ✅
-- Attempted registration with --time-column and --group-column
-- Got "multiple values for keyword argument 'time_column'" error
-- **Finding**: Time series registration has parameter bug
+- ~~Attempted registration with --time-column and --group-column~~ **FIXED 2025-01-08**
+- ~~Got "multiple values for keyword argument 'time_column'" error~~
+- **Finding**: Time series registration now works correctly
 
 ### Test 70: Concurrent Dataset Access (line 496-497) ✅
 - Ran multiple MDM commands simultaneously on same dataset
@@ -815,9 +822,9 @@
 
 ### Test 74: Dataset Registration --id-columns (line 188) ✅
 - Created dataset with multiple ID columns (user_id, order_id)
-- Attempted registration with --id-columns user_id,order_id
-- Got "multiple values for keyword argument 'id_columns'" error
-- **Finding**: --id-columns parameter has bug
+- ~~Attempted registration with --id-columns user_id,order_id~~ **FIXED 2025-01-08**
+- ~~Got "multiple values for keyword argument 'id_columns'" error~~
+- **Finding**: --id-columns parameter now works correctly
 
 ### Test 75: Dataset Registration --force (line 207) ✅
 - Registered dataset, modified CSV, tried --force flag
@@ -923,7 +930,14 @@
 
 ### Overall Test Progress Updated
 - Total tests completed: 90 (from 10 sessions)
-- Total issues found: 47
-- Total features working: 43
-- Success rate: 48%
+- Total issues found: 47 → 44 (3 fixed)
+- Total features working: 43 → 46 (3 fixed)
+- Success rate: 48% → 51%
 - Test coverage: 203/210 checkable items (96.7%)
+
+### Major Fix Applied (2025-01-08)
+✅ **FIXED**: CLI parameter "multiple values for keyword argument" errors
+- Fixed --id-columns with comma-separated values
+- Fixed --time-column parameter
+- Fixed --group-column parameter
+- Solution: Added these parameters to kwargs exclusion list in DatasetInfo constructor

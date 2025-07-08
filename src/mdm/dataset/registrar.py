@@ -159,7 +159,8 @@ class DatasetRegistrar:
             tags=tags or [],
             source=str(path),
             **{k: v for k, v in kwargs.items()
-               if k not in ['display_name', 'target_column', 'problem_type']}
+               if k not in ['display_name', 'target_column', 'problem_type', 
+                           'id_columns', 'time_column', 'group_column']}
         )
 
         # Step 11.5: Compute initial statistics including memory size
