@@ -282,7 +282,16 @@ def list_datasets(
         )
 
         if not datasets:
-            console.print("[yellow]No datasets registered yet.[/yellow]")
+            if format == "json":
+                console.print("[]")
+            else:
+                console.print("[yellow]No datasets registered yet.[/yellow]")
+            return
+
+        # Handle JSON format
+        if format == "json":
+            import json
+            console.print(json.dumps(datasets, indent=2))
             return
 
         # Create table
