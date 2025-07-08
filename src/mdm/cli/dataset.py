@@ -1,11 +1,12 @@
 """Dataset management CLI commands."""
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
+import pandas as pd
 
 from mdm.dataset.operations import (
     InfoOperation,
@@ -14,6 +15,7 @@ from mdm.dataset.operations import (
     StatsOperation,
 )
 from mdm.dataset.registrar import DatasetRegistrar
+from mdm.storage.factory import BackendFactory
 
 # Create dataset app
 dataset_app = typer.Typer(help="Dataset management commands")
@@ -27,6 +29,98 @@ def _format_size(size_bytes: int) -> str:
             return f"{size_bytes:.1f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.1f} PB"
+
+
+def _display_column_summary(dataset_info: Any, manager: Any, table_type: str = 'train') -> None:
+    """Display a summary table of columns with types and null percentages."""
+    try:
+        # Get backend to query the data
+        backend = BackendFactory.create(
+            dataset_info.database['backend'], 
+            dataset_info.database
+        )
+        
+        # Get database path
+        if 'path' in dataset_info.database:
+            db_path = dataset_info.database['path']
+        else:
+            db_path = f"{dataset_info.database['backend']}://{dataset_info.database['user']}:{dataset_info.database['password']}@{dataset_info.database['host']}:{dataset_info.database['port']}/{dataset_info.database['database']}"
+        
+        engine = backend.get_engine(db_path)
+        
+        # Get table name
+        table_name = dataset_info.tables[table_type]
+        
+        # Query to get column info with null counts
+        query = f"""
+        SELECT COUNT(*) as total_rows
+        FROM {table_name}
+        """
+        
+        result = backend.query(query)
+        total_rows = int(result.iloc[0]['total_rows'])
+        
+        # Get table info for column types
+        table_info = backend.get_table_info(table_name, engine)
+        
+        # Create summary table
+        table_title = f"\n[bold blue]Dataset Summary - {table_type.capitalize()} Table[/bold blue]"
+        summary_table = Table(title=table_title)
+        summary_table.add_column("Column", style="cyan")
+        summary_table.add_column("Type", style="green")
+        summary_table.add_column("% Null", style="yellow", justify="right")
+        
+        # For each column, get null count (limit to 20 columns)
+        columns = table_info['columns']
+        total_columns = len(columns)
+        columns_to_show = columns[:20]  # Limit to first 20 columns
+        
+        for col_info in columns_to_show:
+            col_name = col_info['name']
+            col_type = col_info['type']
+            
+            # Get null count for this column
+            null_query = f"""
+            SELECT COUNT(*) as null_count
+            FROM {table_name}
+            WHERE {col_name} IS NULL
+            """
+            
+            try:
+                null_result = backend.query(null_query)
+                null_count = int(null_result.iloc[0]['null_count'])
+                null_percentage = (null_count / total_rows) * 100 if total_rows > 0 else 0
+                null_str = f"{null_percentage:.1f}%"
+            except:
+                null_str = "?"
+            
+            # Format type name
+            type_str = str(col_type).split('(')[0].upper()
+            
+            summary_table.add_row(
+                col_name,
+                type_str,
+                null_str
+            )
+        
+        # Add ... if there are more than 20 columns
+        if total_columns > 20:
+            summary_table.add_row(
+                f"[dim]... ({total_columns - 20} more columns)[/dim]",
+                "[dim]...[/dim]",
+                "[dim]...[/dim]"
+            )
+        
+        # Add total row count info
+        console.print(summary_table)
+        console.print(f"\n[dim]Total rows in {table_type} table: {total_rows:,}[/dim]")
+        
+    except Exception as e:
+        # Don't fail registration if summary fails
+        console.print(f"\n[yellow]Could not generate column summary: {e}[/yellow]")
+    finally:
+        if hasattr(backend, 'close_connections'):
+            backend.close_connections()
 
 
 @dataset_app.command("register")
@@ -157,6 +251,12 @@ def register(
         config_table.add_row("Tables", tables_str)
         
         console.print(Panel(config_table, title="[bold blue]Configuration[/bold blue]", expand=False))
+        
+        # Display column summary for train or data table
+        if 'train' in dataset_info.tables:
+            _display_column_summary(dataset_info, registrar.manager, 'train')
+        elif 'data' in dataset_info.tables:
+            _display_column_summary(dataset_info, registrar.manager, 'data')
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
