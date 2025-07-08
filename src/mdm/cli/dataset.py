@@ -59,6 +59,7 @@ def register(
         # Prepare kwargs
         kwargs = {
             "generate_features": not no_features,
+            "force": force,
         }
 
         if target:
@@ -150,7 +151,6 @@ def list_datasets(
     filter_str: Optional[str] = typer.Option(None, "--filter", help="Filter datasets (e.g., 'problem_type=classification')"),
     sort_by: str = typer.Option("name", "--sort-by", help="Sort field (name, registration_date)"),
     limit: Optional[int] = typer.Option(None, "--limit", help="Maximum number of results"),
-    full: bool = typer.Option(False, "--full", help="Get full information from databases (slower)"),
 ):
     """List all registered datasets."""
     try:
@@ -160,7 +160,6 @@ def list_datasets(
             filter_str=filter_str,
             sort_by=sort_by,
             limit=limit,
-            full=full,
         )
 
         if not datasets:
@@ -174,7 +173,7 @@ def list_datasets(
         table.add_column("Target")
         table.add_column("Tables")
         table.add_column("Total Rows")
-        table.add_column("DB Size")
+        table.add_column("MEM Size")
 
         for dataset in datasets:
             # Format row count and size
@@ -194,9 +193,6 @@ def list_datasets(
             )
 
         console.print(table)
-
-        if not full and any(d.get('row_count') is None for d in datasets):
-            console.print("\n[dim]Note: Row counts and sizes not available in fast mode. Use --full flag for complete information.[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")

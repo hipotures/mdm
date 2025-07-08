@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
+import yaml
 from ydata_profiling import ProfileReport
 
 from mdm.config import get_config_manager
@@ -75,7 +76,17 @@ class DatasetRegistrar:
 
         # Step 2: Check if dataset already exists
         if self.manager.dataset_exists(normalized_name):
-            raise DatasetError(f"Dataset '{normalized_name}' already exists")
+            if kwargs.get('force', False):
+                logger.info(f"Dataset '{normalized_name}' exists, removing due to --force flag")
+                # Remove existing dataset
+                from mdm.dataset.operations import RemoveOperation
+                remove_op = RemoveOperation()
+                try:
+                    remove_op.execute(normalized_name, force=True, dry_run=False)
+                except Exception as e:
+                    logger.warning(f"Failed to remove existing dataset: {e}")
+            else:
+                raise DatasetError(f"Dataset '{normalized_name}' already exists")
 
         # Step 3: Validate path
         path = self._validate_path(path)
@@ -137,6 +148,11 @@ class DatasetRegistrar:
             **{k: v for k, v in kwargs.items()
                if k not in ['display_name', 'target_column', 'problem_type']}
         )
+
+        # Step 11.5: Compute initial statistics including memory size
+        statistics = self._compute_initial_statistics(normalized_name, db_info, table_mappings)
+        if statistics:
+            dataset_info.metadata['statistics'] = statistics
 
         # Step 12: Save registration
         self.manager.register_dataset(dataset_info)
@@ -640,3 +656,101 @@ class DatasetRegistrar:
             break  # Only process first table
             
         return column_types
+    
+    def _compute_initial_statistics(
+        self,
+        dataset_name: str,
+        db_info: Dict[str, Any],
+        table_mappings: Dict[str, str]
+    ) -> Optional[Dict[str, Any]]:
+        """Compute initial statistics including memory size from ydata-profiling.
+        
+        Args:
+            dataset_name: Name of the dataset
+            db_info: Database connection info
+            table_mappings: Mapping of table types to table names
+        """
+        try:
+            logger.info(f"Computing initial statistics for dataset '{dataset_name}'")
+            
+            backend = BackendFactory.create(db_info['backend'], db_info)
+            
+            # Get database path/connection string
+            if 'path' in db_info:
+                db_path = db_info['path']
+            else:
+                db_path = f"{db_info['backend']}://{db_info['user']}:{db_info['password']}@{db_info['host']}:{db_info['port']}/{db_info['database']}"
+            
+            engine = backend.get_engine(db_path)
+            
+            total_rows = 0
+            total_memory_bytes = 0
+            
+            # Focus on main data tables for statistics
+            for table_type, table_name in table_mappings.items():
+                if table_type in ['train', 'test', 'validation', 'data']:
+                    try:
+                        # Get row count
+                        try:
+                            # Try using query method if available
+                            if hasattr(backend, 'query'):
+                                row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
+                                if row_count_result is not None and not row_count_result.empty:
+                                    row_count = int(row_count_result.iloc[0]['count'])
+                                    total_rows += row_count
+                            else:
+                                # Fallback to reading dataframe
+                                df = backend.read_table_to_dataframe(table_name, engine)
+                                row_count = len(df)
+                                total_rows += row_count
+                        except Exception as e:
+                            logger.debug(f"Failed to get row count: {e}")
+                            row_count = 0
+                        
+                        # Get sample data for memory estimation
+                        sample_size = min(10000, row_count) if row_count > 0 else 0
+                        if sample_size > 0:
+                            df = backend.read_table_to_dataframe(table_name, engine, limit=sample_size)
+                            
+                            # Use ydata-profiling to get memory size
+                            try:
+                                profile = ProfileReport(df, minimal=True)
+                                description = profile.get_description()
+                                
+                                # Get memory size from profile
+                                table_stats = description.table if hasattr(description, 'table') else {}
+                                memory_size = getattr(table_stats, 'memory_size', df.memory_usage(deep=True).sum())
+                                
+                                # Scale memory size to full dataset if sampling
+                                if sample_size < row_count:
+                                    memory_size = int(memory_size * (row_count / sample_size))
+                                
+                                total_memory_bytes += memory_size
+                                
+                            except Exception as e:
+                                logger.debug(f"Failed to use ydata-profiling for memory estimation: {e}")
+                                # Fallback to pandas memory usage
+                                memory_per_row = df.memory_usage(deep=True).sum() / len(df)
+                                total_memory_bytes += int(memory_per_row * row_count)
+                                
+                    except Exception as e:
+                        logger.warning(f"Failed to compute statistics for table {table_name}: {e}")
+            
+            # Return statistics
+            statistics = {
+                'row_count': total_rows,
+                'memory_size_bytes': total_memory_bytes,
+                'computed_at': pd.Timestamp.now().isoformat()
+            }
+            
+            logger.info(f"Computed initial statistics: {total_rows} rows, {total_memory_bytes} bytes memory")
+            return statistics
+                    
+        except Exception as e:
+            logger.error(f"Failed to compute initial statistics: {e}")
+            # Not critical - continue without statistics
+            return None
+        
+        finally:
+            if hasattr(backend, 'close_connections'):
+                backend.close_connections()

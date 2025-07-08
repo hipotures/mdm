@@ -48,7 +48,6 @@ class ListOperation(DatasetOperation):
         filter_str: Optional[str] = None,
         sort_by: str = "name",
         limit: Optional[int] = None,
-        full: bool = False,
     ) -> List[Dict[str, Any]]:
         """List datasets.
 
@@ -57,7 +56,6 @@ class ListOperation(DatasetOperation):
             filter_str: Filter string (e.g., "problem_type=classification")
             sort_by: Sort field (name, registration_date)
             limit: Maximum number of results
-            full: Whether to query databases for complete info
 
         Returns:
             List of dataset information dictionaries
@@ -101,10 +99,6 @@ class ListOperation(DatasetOperation):
         if limit:
             datasets = datasets[:limit]
 
-        # Add full information if requested
-        if full:
-            datasets = self._add_full_info(datasets)
-
         elapsed = time.time() - start_time
         logger.info(f"Listed {len(datasets)} datasets in {elapsed:.3f}s")
 
@@ -117,6 +111,7 @@ class ListOperation(DatasetOperation):
                 data = yaml.safe_load(f)
 
             # Extract essential fields
+            stats = data.get('metadata', {}).get('statistics', {})
             return {
                 'name': data.get('name', yaml_file.stem),
                 'display_name': data.get('display_name', data.get('name', yaml_file.stem)),
@@ -129,8 +124,8 @@ class ListOperation(DatasetOperation):
                 'registration_date': data.get('created_at'),  # Alias for sorting
                 'database': data.get('database', {}),
                 'source': data.get('source', 'Unknown'),
-                'row_count': None,  # Will be filled if --full
-                'size': None,  # Will be filled if --full
+                'row_count': stats.get('row_count'),  # From saved statistics
+                'size': stats.get('memory_size_bytes'),  # Memory size from statistics
             }
         except Exception as e:
             logger.error(f"Failed to parse {yaml_file}: {e}")
@@ -174,52 +169,6 @@ class ListOperation(DatasetOperation):
         # Default: sort by name
         return sorted(datasets, key=lambda d: d.get('name', ''))
 
-    def _add_full_info(self, datasets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Add full information by querying databases."""
-        for dataset in datasets:
-            try:
-                # Get database path
-                dataset_name = dataset['name']
-                dataset_dir = self.datasets_dir / dataset_name
-
-                if dataset_dir.exists():
-                    # Calculate directory size
-                    size = sum(f.stat().st_size for f in dataset_dir.rglob('*') if f.is_file())
-                    dataset['size'] = size
-
-                    # Try to get row count from database
-                    backend_type = dataset.get('database', {}).get('backend', 'duckdb')
-                    if backend_type == 'duckdb':
-                        db_path = dataset_dir / 'dataset.duckdb'
-                        if db_path.exists():
-                            dataset['row_count'] = self._get_duckdb_row_count(db_path, dataset['tables'])
-                    # Add support for other backends as needed
-
-            except Exception as e:
-                logger.warning(f"Failed to get full info for {dataset['name']}: {e}")
-
-        return datasets
-
-    def _get_duckdb_row_count(self, db_path: Path, tables: Dict[str, str]) -> int:
-        """Get total row count from DuckDB database."""
-        try:
-            import duckdb
-            conn = duckdb.connect(str(db_path), read_only=True)
-            total_rows = 0
-
-            for table_type, table_name in tables.items():
-                if table_type in ['train', 'test', 'validation']:
-                    try:
-                        result = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
-                        if result:
-                            total_rows += result[0]
-                    except:
-                        pass
-
-            conn.close()
-            return total_rows
-        except:
-            return 0
 
 
 class InfoOperation(DatasetOperation):
