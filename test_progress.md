@@ -49,7 +49,7 @@
 4. Unknown configuration keys are silently ignored (good for forward compatibility)
 5. Environment variable mapping works with underscore handling
 
-#### Database Backend Configuration (11/16 items tested)
+#### Database Backend Configuration (12/16 items tested)
 ✅ Register dataset with SQLite backend
 ✅ Verify .sqlite file is created
 ✅ Check if WAL mode is enabled
@@ -57,7 +57,7 @@
 ✅ Verify database operations work correctly
 ❌ DuckDB backend - missing sqlalchemy dialect (not critical)
 ❌ PostgreSQL backend - requires database server
-✅ SQLAlchemy echo setting
+✅ SQLAlchemy echo setting (FIXED 2025-01-08)
 ✅ Connection pooling settings work
 
 #### Logging Configuration (4/7 items tested)
@@ -293,14 +293,27 @@
 3. Create final test report with all findings ✅ (Completed)
 4. Document recommended fixes for found issues ✅ (Completed)
 
+## Summary of Configuration Issues Fixed (2025-01-08)
+
+### Fixed Issues:
+1. **CLI Parameters** - "multiple values for keyword argument" errors (--id-columns, --time-column, --group-column)
+2. **SQLAlchemy echo** - SQL queries now display correctly with DEBUG or INFO log levels
+
+### Still Outstanding:
+1. **SQLite pragmas** - cache_size, temp_store, mmap_size not applied
+2. **Log file creation** - File logging not implemented
+3. **Logging format** - JSON format option ignored
+4. **Export defaults** - Default format and compression settings ignored
+5. **Custom features** - Not loaded from ~/.mdm/config/custom_features/
+
 ## Additional Testing - 5 New Tests (2025-07-07)
 
 ### Test 1: SQLAlchemy Configuration - echo setting ✅
 - Added `sqlalchemy.echo: true` to mdm.yaml
 - Tested with dataset registration and stats
-- Result: Echo setting not working (SQL queries not printed)
-- Tried env var MDM_DATABASE_SQLALCHEMY_ECHO=true - also not working
-- **Finding**: SQLAlchemy echo configuration not implemented
+- ~~Result: Echo setting not working (SQL queries not printed)~~ **FIXED 2025-01-08**
+- ~~Tried env var MDM_DATABASE_SQLALCHEMY_ECHO=true - also not working~~
+- **Finding**: SQLAlchemy echo now works when log level is DEBUG or INFO
 
 ### Test 2: Logging Configuration - format json vs text ✅
 - Changed `logging.format` from "console" to "json" in mdm.yaml
@@ -930,14 +943,20 @@
 
 ### Overall Test Progress Updated
 - Total tests completed: 90 (from 10 sessions)
-- Total issues found: 47 → 44 (3 fixed)
-- Total features working: 43 → 46 (3 fixed)
-- Success rate: 48% → 51%
+- Total issues found: 47 → 43 (4 fixed)
+- Total features working: 43 → 47 (4 fixed)
+- Success rate: 48% → 52%
 - Test coverage: 203/210 checkable items (96.7%)
 
-### Major Fix Applied (2025-01-08)
+### Major Fixes Applied (2025-01-08)
+
 ✅ **FIXED**: CLI parameter "multiple values for keyword argument" errors
 - Fixed --id-columns with comma-separated values
 - Fixed --time-column parameter
 - Fixed --group-column parameter
 - Solution: Added these parameters to kwargs exclusion list in DatasetInfo constructor
+
+✅ **FIXED**: SQLAlchemy echo configuration
+- SQL queries now display when sqlalchemy.echo=true and log level is DEBUG or INFO
+- Added special console handler for SQLAlchemy loggers
+- Solution: Created dedicated handler that bypasses WARNING filter for SQL queries
