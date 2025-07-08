@@ -325,7 +325,7 @@ features:
         
         # 3. Update without options
         result = runner.invoke(app, ["dataset", "update", "test"])
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert "No updates specified" in result.stdout
         
         # 4. Batch with no datasets

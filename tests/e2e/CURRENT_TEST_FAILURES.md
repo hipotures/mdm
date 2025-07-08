@@ -1,20 +1,12 @@
 # Current MDM E2E Test Failures
 
-**Generated:** 2025-07-08 21:16:14
+**Generated:** 2025-07-08 21:30:00
 
-## Summary: 1 failures across 1 categories
+## Summary: 0 failures
 
-## Failures by Error Type
+All E2E tests are currently passing.
 
-### Assertion failed (1 failures)
-- **Dataset Info/Stats**: test_23_info.py::TestDatasetInformationStatistics::test_dataset_stats_null_counts
+## Recent Fixes
 
-## Detailed Failures by Category
-
-### Dataset Info/Stats (1 failures)
-
-#### test_dataset_stats_null_counts
-- **Error Type**: Assertion failed
-- **Message**: assert "900" in result.stdout  # 900 missing cells from notes column
-
-## Common Issues and Recommended Fixes
+### Dataset Info/Stats
+- **test_dataset_stats_null_counts**: Fixed by correcting the key name in dataset.py from 'total_missing' to 'total_missing_cells' to match the statistics module output.
