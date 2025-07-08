@@ -258,7 +258,10 @@ class TestCLIWorkflows:
         # List what was actually created
         if export_dir.exists():
             print(f"Export dir contents: {list(export_dir.rglob('*'))}")
-        assert len(list(export_dir.glob("*/*.csv"))) >= 3 or len(list(export_dir.glob("*/*.parquet"))) >= 3
+        # Check for CSV files (may be compressed as .csv.zip)
+        csv_files = list(export_dir.glob("*/*.csv")) + list(export_dir.glob("*/*.csv.zip"))
+        parquet_files = list(export_dir.glob("*/*.parquet"))
+        assert len(csv_files) >= 3 or len(parquet_files) >= 3
         
         # Batch remove
         result = runner.invoke(app, [
