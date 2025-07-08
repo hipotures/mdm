@@ -1,0 +1,1 @@
+"""End-to-end tests for MDM based on MANUAL_TEST_CHECKLIST.md"""

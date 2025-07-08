@@ -24,7 +24,8 @@ class ConfigManager:
             config_path: Optional path to configuration file.
                         If not provided, uses ~/.mdm/mdm.yaml
         """
-        self.base_path = Path.home() / ".mdm"
+        # Respect MDM_HOME_DIR environment variable
+        self.base_path = Path(os.environ.get("MDM_HOME_DIR", str(Path.home() / ".mdm")))
         self.config_path = config_path or self.base_path / self.CONFIG_FILE_NAME
         self._config: Optional[MDMConfig] = None
 
@@ -222,6 +223,12 @@ def get_config_manager() -> ConfigManager:
     if _config_manager is None:
         _config_manager = ConfigManager()
     return _config_manager
+
+
+def reset_config_manager() -> None:
+    """Reset configuration manager (useful for testing)."""
+    global _config_manager
+    _config_manager = None
 
 
 def get_config() -> MDMConfig:

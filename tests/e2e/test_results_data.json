@@ -1,0 +1,22 @@
+{
+  "1": {
+    "summary": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "tests": [],
+    "exitcode": 4,
+    "error_categories": {}
+  },
+  "2": {
+    "summary": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "tests": [],
+    "exitcode": 4,
+    "error_categories": {}
+  }
+}
