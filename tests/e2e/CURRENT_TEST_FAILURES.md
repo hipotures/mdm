@@ -1,18 +1,10 @@
 # Current MDM E2E Test Failures
 
-**Generated:** 2025-07-08 12:49:11
+**Generated:** 2025-07-08 12:59:41
 
-## Summary: 45 failures across 6 categories
+## Summary: 36 failures across 5 categories
 
 ## Failures by Error Type
-
-### Type error (16 failures)
-- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_change_log_level_yaml
-- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_log_level_env_override
-- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_file_logging_yaml
-- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_log_file_rotation
-- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_log_format_default
-- ... and 11 more
 
 ### Assertion failed (16 failures)
 - **Dataset Listing**: test_22_list.py::TestDatasetListingFiltering::test_list_sort_by_date
@@ -28,6 +20,14 @@
 - **Database Backends**: test_13_backends.py::TestDatabaseBackendConfiguration::test_backend_env_override
 - **Database Backends**: test_13_backends.py::TestDatabaseBackendConfiguration::test_invalid_backend_error
 - **Database Backends**: test_13_backends.py::TestDatabaseBackendConfiguration::test_backend_isolation
+- ... and 2 more
+
+### Type error (7 failures)
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_change_log_level_yaml
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_log_level_env_override
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_file_logging_yaml
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_log_file_rotation
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_log_format_default
 - ... and 2 more
 
 ### Unknown (6 failures)
@@ -99,44 +99,6 @@
 #### test_suppress_external_library_logs
 - **Error Type**: Type error
 - **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'logging'
-
-### Performance Configuration (9 failures)
-
-#### test_custom_batch_size_yaml
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_batch_size_env_override
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_parallel_processing_enabled
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_n_jobs_setting
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_memory_limit_setting
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_cache_size_setting
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_disable_progress_bars
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_optimize_dtypes_enabled
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
-
-#### test_compression_settings
-- **Error Type**: Type error
-- **Message**: E   TypeError: mdm_config_file.<locals>._create_config() got an unexpected keyword argument 'performance'
 
 ### Dataset Registration (1 failures)
 
