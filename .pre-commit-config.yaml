@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      
+  - repo: https://github.com/psf/black
+    rev: 23.12.0
+    hooks:
+      - id: black
+        args: [--line-length=100]
+        
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        
+  - repo: local
+    hooks:
+      - id: check-test-imports
+        name: Check test patch imports
+        entry: python scripts/check_test_imports.py
+        language: python
+        files: ^tests/.*\.py$
+        pass_filenames: true

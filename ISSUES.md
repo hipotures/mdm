@@ -2,6 +2,26 @@
 
 This document tracks all issues discovered during testing of MDM (ML Data Manager).
 
+## Recently Fixed Issues (2025-07-08)
+
+### Dataset Update Command Improvements
+1. **Exit Code Behavior** (FIXED)
+   - **Previous**: `mdm dataset update` returned exit code 1 when no updates specified
+   - **Fixed**: Now returns exit code 0 with message "No updates specified"
+   
+2. **Input Validation** (FIXED)
+   - **--id-columns validation**: Now rejects invalid formats like "," or ",," with helpful error message
+   - **--problem-type validation**: Only accepts valid problem types (binary_classification, multiclass_classification, regression, time_series, clustering)
+   
+3. **Error Handling** (FIXED)
+   - **Previous**: Generic exceptions showed raw error messages, potentially leaking sensitive info
+   - **Fixed**: Generic errors now show user-friendly message, actual error logged for debugging
+   
+4. **Test Coverage** (ADDED)
+   - Added 16 comprehensive unit tests for update command
+   - Added 13 integration tests for update functionality
+   - Added pre-commit hook to check test import paths
+
 ## Configuration Issues
 
 ### 1. SQLAlchemy Echo Configuration Not Working
