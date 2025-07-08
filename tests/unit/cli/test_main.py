@@ -199,7 +199,8 @@ class TestCLICommands:
         result = runner.invoke(app, ["invalid-command"])
         
         assert result.exit_code != 0
-        assert "No such command" in result.stdout or "Error" in result.stdout
+        # Typer outputs errors to stderr, not stdout
+        assert "No such command" in result.stderr or "Error" in result.stderr
 
 
 class TestHelperFunctions:
