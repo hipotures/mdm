@@ -8,7 +8,7 @@ import pandas as pd
 from loguru import logger
 from sqlalchemy import Engine
 
-from mdm.core.config import MDMConfig
+from mdm.config import get_config_manager
 from mdm.features.custom.base import BaseDomainFeatures
 from mdm.features.registry import feature_registry
 from mdm.models.enums import ColumnType
@@ -17,13 +17,11 @@ from mdm.models.enums import ColumnType
 class FeatureGenerator:
     """Generate features for datasets during registration."""
 
-    def __init__(self, config: Optional[MDMConfig] = None):
-        """Initialize feature generator.
-
-        Args:
-            config: MDM configuration
-        """
-        self.config = config or MDMConfig()
+    def __init__(self):
+        """Initialize feature generator."""
+        config_manager = get_config_manager()
+        self.config = config_manager.config
+        self.base_path = config_manager.base_path
         self.registry = feature_registry
 
     def generate_features(
@@ -230,11 +228,14 @@ class FeatureGenerator:
             Custom feature instance or None
         """
         custom_features_path = (
-            self.config.config_dir / "custom_features" / f"{dataset_name}.py"
+            self.base_path / self.config.paths.custom_features_path / f"{dataset_name}.py"
         )
 
         if not custom_features_path.exists():
+            logger.debug(f"No custom features file found at {custom_features_path}")
             return None
+        
+        logger.info(f"Loading custom features from {custom_features_path}")
 
         try:
             # Load the module
@@ -256,7 +257,13 @@ class FeatureGenerator:
                     and attr is not BaseDomainFeatures
                 ):
                     # Create instance
-                    return attr(dataset_name)
+                    logger.debug(f"Found custom feature class: {attr_name}")
+                    instance = attr(dataset_name)
+                    # Log registered operations
+                    if hasattr(instance, '_operation_registry'):
+                        operations = list(instance._operation_registry.keys())
+                        logger.debug(f"Custom operations for {dataset_name}: {operations}")
+                    return instance
 
         except Exception as e:
             logger.error(f"Failed to load custom features for {dataset_name}: {e}")
