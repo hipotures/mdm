@@ -82,12 +82,19 @@
 4. Logging system respects configuration but file logging not implemented
 5. Performance settings are loaded correctly
 
-### UPDATE 2025-01-08: CLI Parameter Fixes
+### UPDATE 2025-01-08: CLI Parameter Fixes & Logging System Migration
 ✅ **FIXED** - Multiple values for keyword argument errors:
 - `--id-columns` now works with comma-separated values (e.g., "id,feature2")
 - `--time-column` parameter now works correctly
 - `--group-column` parameter now works correctly
 - Fixed by excluding these parameters from kwargs spreading in DatasetInfo constructor
+
+✅ **FIXED** - Logging system migration to loguru:
+- Migrated from dual logging system (standard Python logging + loguru) to unified loguru
+- MDM_LOGGING_FORMAT=json now works correctly
+- MDM_LOGGING_LEVEL now properly controls log level (DEBUG/INFO/WARNING/ERROR)
+- SQLAlchemy echo continues to work with the new system
+- All 14 modules migrated to use loguru
 
 ### Phase 2: Dataset Registration & Operations (28/50 items tested)
 
@@ -301,8 +308,8 @@
 
 ### Still Outstanding:
 1. **SQLite pragmas** - cache_size, temp_store, mmap_size not applied
-2. **Log file creation** - File logging not implemented
-3. **Logging format** - JSON format option ignored
+2. ~~**Log file creation** - File logging not implemented~~ **FIXED 2025-01-08** - Logs now written to /tmp/mdm.log or configured path
+3. ~~**Logging format** - JSON format option ignored~~ **FIXED 2025-01-08** - JSON logging works with MDM_LOGGING_FORMAT=json
 4. **Export defaults** - Default format and compression settings ignored
 5. **Custom features** - Not loaded from ~/.mdm/config/custom_features/
 
@@ -319,8 +326,8 @@
 - Changed `logging.format` from "console" to "json" in mdm.yaml
 - Tested with `mdm dataset list` and `mdm dataset info`
 - Tried env var MDM_LOGGING_FORMAT=json
-- Result: Format setting has no effect on output
-- **Finding**: Logging format configuration not implemented for CLI output
+- ~~Result: Format setting has no effect on output~~ **FIXED 2025-01-08**
+- **Finding**: Logging format configuration now works correctly with loguru migration
 
 ### Test 3: Dataset Registration - with datetime columns ✅
 - Created test_datetime.csv with order_date and delivery_date columns
@@ -943,9 +950,9 @@
 
 ### Overall Test Progress Updated
 - Total tests completed: 90 (from 10 sessions)
-- Total issues found: 47 → 43 (4 fixed)
-- Total features working: 43 → 47 (4 fixed)
-- Success rate: 48% → 52%
+- Total issues found: 47 → 41 (6 fixed - 4 CLI params + 2 logging)
+- Total features working: 43 → 49 (6 fixed)
+- Success rate: 48% → 54%
 - Test coverage: 203/210 checkable items (96.7%)
 
 ### Major Fixes Applied (2025-01-08)
@@ -960,3 +967,10 @@
 - SQL queries now display when sqlalchemy.echo=true and log level is DEBUG or INFO
 - Added special console handler for SQLAlchemy loggers
 - Solution: Created dedicated handler that bypasses WARNING filter for SQL queries
+
+✅ **FIXED**: Logging system migration
+- Migrated from dual logging (standard Python logging + loguru) to unified loguru system
+- MDM_LOGGING_FORMAT=json now works correctly for log files
+- MDM_LOGGING_LEVEL properly controls log output (DEBUG/INFO/WARNING/ERROR)
+- Log files are created at /tmp/mdm.log or configured path with rotation
+- Solution: Complete migration of all 14 modules to loguru with proper interceptor
