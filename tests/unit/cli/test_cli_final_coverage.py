@@ -335,7 +335,7 @@ class TestBatchCLIFinal:
     
     @patch('mdm.cli.main.setup_logging')
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.RemoveOperation')
+    @patch('mdm.cli.batch.RemoveOperation')
     def test_batch_remove_dry_run(self, mock_remove_class, mock_manager_class, mock_setup, runner):
         """Test batch remove with dry-run mode."""
         mock_manager = Mock()
@@ -362,7 +362,7 @@ class TestBatchCLIFinal:
     
     @patch('mdm.cli.main.setup_logging')
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.StatsOperation')
     def test_batch_stats_export_option(self, mock_stats_class, mock_manager_class, mock_setup, runner):
         """Test batch stats with export option."""
         mock_manager = Mock()

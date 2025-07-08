@@ -303,7 +303,7 @@ class TestBatchCoverage:
         assert mock_progress.update.called
     
     @patch('mdm.cli.batch.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.StatsOperation')
     def test_batch_stats_csv_export(self, mock_stats_class, mock_manager_class, runner):
         """Test batch stats with CSV export."""
         # Setup mocks
@@ -315,16 +315,12 @@ class TestBatchCoverage:
         mock_stats = Mock()
         mock_stats.execute.return_value = {
             'dataset_name': 'dataset1',
-            'tables': {
-                'train': {
-                    'row_count': 1000,
-                    'column_count': 10,
-                    'size_bytes': 1048576,
-                    'completeness': 0.95
-                }
-            },
-            'total_row_count': 1000,
-            'total_size_bytes': 1048576
+            'summary': {
+                'total_rows': 1000,
+                'total_columns': 10,
+                'total_tables': 1,
+                'overall_completeness': 0.95
+            }
         }
         mock_stats_class.return_value = mock_stats
         

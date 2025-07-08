@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from mdm.config import Config, get_config
+from mdm.config import get_config, get_config_manager
+from mdm.models.config import MDMConfig
 from mdm.models.enums import LogLevel
 
 
@@ -14,7 +15,7 @@ class TestConfig:
 
     def test_default_config(self):
         """Test default configuration values."""
-        config = Config()
+        config = MDMConfig()
         
         # Check database defaults
         assert config.database.default_backend == "duckdb"
