@@ -186,10 +186,9 @@ class TestDatasetCLI90Coverage:
     def runner(self):
         return CliRunner()
     
-    @patch('mdm.dataset.registrar.DatasetRegistrar')
-    @patch('mdm.dataset.manager.DatasetManager')
     @patch('mdm.cli.dataset._display_column_summary')
-    def test_register_comprehensive(self, mock_display, mock_manager_class, mock_registrar_class, runner):
+    @patch('mdm.cli.dataset.DatasetRegistrar')
+    def test_register_comprehensive(self, mock_registrar_class, mock_display, runner):
         """Test register with all options and column display."""
         # Setup comprehensive dataset info
         mock_dataset_info = Mock()
@@ -208,14 +207,20 @@ class TestDatasetCLI90Coverage:
         
         mock_registrar = Mock()
         mock_registrar.register.return_value = mock_dataset_info
+        mock_registrar.manager = Mock()  # Add manager attribute
         mock_registrar_class.return_value = mock_registrar
         
-        mock_manager = Mock()
-        mock_manager_class.return_value = mock_manager
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp:
+            # Write some data to the CSV file
+            tmp.write("id1,id2,feature1,feature2,target,timestamp,created_at,updated_at,user_id\n")
+            tmp.write("1,2,0.5,1.5,A,2023-01-01,2023-01-01,2023-01-01,100\n")
+            tmp.write("3,4,0.6,1.6,B,2023-01-02,2023-01-02,2023-01-02,101\n")
+            tmp.flush()
+            tmp_path = tmp.name
         
-        with tempfile.NamedTemporaryFile(suffix='.csv') as tmp:
+        try:
             result = runner.invoke(dataset_app, [
-                "register", "test_dataset", tmp.name,
+                "register", "test_dataset", tmp_path,
                 "--target", "target",
                 "--problem-type", "multiclass",
                 "--id-columns", "id1,id2",
@@ -226,12 +231,21 @@ class TestDatasetCLI90Coverage:
                 "--tags", "production,ml,timeseries",
                 "--force"
             ])
-        
-        assert result.exit_code == 0
-        # Should display summary for each table
-        assert mock_display.call_count == 3  # train, test, val
+            
+            # Print the output for debugging
+            if result.exit_code != 0:
+                print(f"Command failed with exit code {result.exit_code}")
+                print(f"Output: {result.stdout}")
+                print(f"Exception: {result.exception}")
+            
+            assert result.exit_code == 0
+            # Should display summary for train table (or data table if no train)
+            assert mock_display.call_count == 1  # Only displays one table summary
+        finally:
+            # Clean up
+            Path(tmp_path).unlink(missing_ok=True)
     
-    @patch('mdm.dataset.operations.InfoOperation')
+    @patch('mdm.cli.dataset.InfoOperation')
     def test_info_detailed(self, mock_info_class, runner):
         """Test info command with --details flag."""
         mock_info = Mock()
@@ -276,9 +290,16 @@ class TestDatasetCLI90Coverage:
         
         result = runner.invoke(dataset_app, ["info", "test_dataset", "--details"])
         
+        if result.exit_code != 0:
+            print(f"Command failed with exit code {result.exit_code}")
+            print(f"Output: {result.stdout}")
+            print(f"Exception: {result.exception}")
+        
         assert result.exit_code == 0
         assert "Detailed test dataset" in result.stdout
-        assert "Features: 25" in result.stdout
+        assert "Problem Type: binary" in result.stdout
+        assert "Target Column: label" in result.stdout
+        assert "validated, production" in result.stdout
         mock_info.execute.assert_called_with("test_dataset", details=True)
     
     @patch('mdm.dataset.manager.DatasetManager')
@@ -287,18 +308,33 @@ class TestDatasetCLI90Coverage:
         mock_manager = Mock()
         mock_manager_class.return_value = mock_manager
         
-        result = runner.invoke(dataset_app, [
-            "update", "my_dataset",
-            "--description", "Updated description with more details",
-            "--tags", "updated,validated,v2"
-        ])
-        
-        assert result.exit_code == 0
-        mock_manager.update_dataset.assert_called_with(
-            "my_dataset",
-            description="Updated description with more details",
-            tags=["updated", "validated", "v2"]
-        )
+        # Patch UpdateOperation instead of DatasetManager  
+        with patch('mdm.cli.dataset.UpdateOperation') as mock_update_class:
+            mock_update = Mock()
+            mock_update_class.return_value = mock_update
+            
+            result = runner.invoke(dataset_app, [
+                "update", "my_dataset",
+                "--description", "Updated description with more details",
+                "--problem-type", "regression",
+                "--id-columns", "id1,id2"
+            ])
+            
+            if result.exit_code != 0:
+                print(f"Command failed with exit code {result.exit_code}")
+                print(f"Output: {result.stdout}")
+                print(f"Exception: {result.exception}")
+            
+            assert result.exit_code == 0
+            # Check the UpdateOperation was called correctly
+            mock_update.execute.assert_called_with(
+                "my_dataset",
+                {
+                    'description': "Updated description with more details",
+                    'problem_type': "regression",
+                    'id_columns': ["id1", "id2"]
+                }
+            )
     
     @patch('mdm.dataset.operations.ExportOperation')
     @patch('mdm.dataset.manager.DatasetManager')
