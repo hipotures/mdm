@@ -43,7 +43,12 @@ class SQLiteBackend(StorageBackend):
         )
 
         # Set SQLite-specific pragmas
-        sqlite_config = self.config.get("sqlite", {})
+        # Check if config has nested sqlite key (from DatasetManager) or flat structure (from registrar)
+        if "sqlite" in self.config:
+            sqlite_config = self.config.get("sqlite", {})
+        else:
+            # Config is already SQLite-specific from registrar
+            sqlite_config = self.config
 
         @event.listens_for(engine, "connect")
         def set_sqlite_pragma(dbapi_connection: Any, connection_record: Any) -> None:
@@ -62,8 +67,10 @@ class SQLiteBackend(StorageBackend):
             cache_size = sqlite_config.get("cache_size", -64000)
             cursor.execute(f"PRAGMA cache_size={cache_size}")
 
-            # Temp store
-            temp_store = sqlite_config.get("temp_store", "MEMORY")
+            # Temp store (need to convert string to numeric value)
+            temp_store_str = sqlite_config.get("temp_store", "MEMORY")
+            temp_store_map = {"DEFAULT": 0, "FILE": 1, "MEMORY": 2}
+            temp_store = temp_store_map.get(temp_store_str.upper(), 2)
             cursor.execute(f"PRAGMA temp_store={temp_store}")
 
             # Memory-mapped I/O

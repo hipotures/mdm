@@ -237,6 +237,9 @@ class DatasetRegistrar:
 
         # Create database info based on backend type
         db_info = {'backend': backend_type}
+        
+        # Include the full backend configuration (including SQLite pragmas)
+        db_info.update(backend_config.model_dump())
 
         if backend_type in ['sqlite', 'duckdb']:
             # File-based backends
