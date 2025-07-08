@@ -145,65 +145,157 @@ def parse_pytest_output(output: str, test_file: str, category: str,
                 failures[category].append(current_failure)
 
 
-def create_github_issue(repo, failure: TestFailure, existing_issues: set) -> Optional[str]:
-    """Create a GitHub issue for a test failure."""
-    # Check if issue already exists
-    fingerprint = failure.get_fingerprint()
-    issue_title = f"[CLI Test] {failure.category}: {failure.test_name} - {failure.error_type}"
+def group_failures_intelligently(failures: Dict[str, List[TestFailure]]) -> List[Dict]:
+    """Group failures intelligently for issue creation."""
+    groups = []
     
-    # Truncate title if too long
-    if len(issue_title) > 200:
-        issue_title = issue_title[:197] + "..."
+    # Group 1: By error type across all categories
+    by_error_type = defaultdict(list)
+    for category, category_failures in failures.items():
+        for failure in category_failures:
+            by_error_type[failure.error_type].append((category, failure))
     
-    # Check existing issues by title
+    # Keep track of individual failures separately
+    individual_failures = []
+    
+    # Create groups for each error type
+    for error_type, error_failures in list(by_error_type.items()):  # Convert to list to avoid dict modification
+        if len(error_failures) >= 3:  # Group if 3 or more similar errors
+            groups.append({
+                'type': 'error_type',
+                'name': error_type,
+                'failures': error_failures,
+                'title': f"[CLI Tests] Fix {error_type} failures ({len(error_failures)} tests)"
+            })
+        else:
+            # Add individual failures to be grouped differently
+            for cat, fail in error_failures:
+                individual_failures.append((cat, fail))
+    
+    # Group 2: By test module/functionality
+    module_groups = {
+        'setup_logging': [],
+        'display_column_summary': [],
+        'batch_commands': [],
+        'dataset_commands': [],
+        'timeseries_commands': [],
+        'integration_tests': [],
+        'coverage_tests': [],
+        'other': []
+    }
+    
+    # Categorize remaining individual failures
+    for cat, fail in individual_failures:
+        test_name = fail.test_name.lower()
+        if 'setup_logging' in test_name:
+            module_groups['setup_logging'].append((cat, fail))
+        elif 'display_column_summary' in test_name:
+            module_groups['display_column_summary'].append((cat, fail))
+        elif 'batch' in test_name:
+            module_groups['batch_commands'].append((cat, fail))
+        elif 'dataset' in test_name:
+            module_groups['dataset_commands'].append((cat, fail))
+        elif 'timeseries' in test_name:
+            module_groups['timeseries_commands'].append((cat, fail))
+        elif 'integration' in cat.lower():
+            module_groups['integration_tests'].append((cat, fail))
+        elif 'coverage' in cat.lower():
+            module_groups['coverage_tests'].append((cat, fail))
+        else:
+            module_groups['other'].append((cat, fail))
+    
+    # Create groups for modules with multiple failures
+    for module_name, module_failures in module_groups.items():
+        if len(module_failures) >= 2:  # Group if 2 or more related tests
+            groups.append({
+                'type': 'module',
+                'name': module_name,
+                'failures': module_failures,
+                'title': f"[CLI Tests] Fix {module_name.replace('_', ' ')} tests ({len(module_failures)} failures)"
+            })
+    
+    return groups
+
+
+def create_grouped_issue(repo, group: Dict, existing_issues: set) -> Optional[str]:
+    """Create a GitHub issue for a group of failures."""
+    title = group['title']
+    
+    # Check if similar issue exists
     for issue in existing_issues:
-        if failure.test_name in issue.title and failure.error_type in issue.title:
-            return f"Issue already exists: #{issue.number}"
+        if group['name'] in issue.title.lower() and 'CLI Tests' in issue.title:
+            return f"Similar issue already exists: #{issue.number}"
     
     # Create issue body
-    body = f"""## Test Failure Details
+    body = f"""## Test Failure Group: {group['name']}
 
-**Test Category:** {failure.category}
-**Test File:** `{failure.file_path}`
-**Test Name:** `{failure.test_name}`
-**Error Type:** `{failure.error_type}`
-**Fingerprint:** `{fingerprint}`
+**Group Type:** {group['type']}
+**Total Failures:** {len(group['failures'])}
+**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-### Error Message
-```
-{failure.error_message}
-```
+### Failed Tests
 
-### How to Reproduce
-```bash
-pytest {failure.file_path}::{failure.test_name.split('[')[0]}
-```
-
-### Environment
-- **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}
-- **Test Type:** CLI Test
-- **MDM Version:** 0.1.0
-
-### Labels
-- bug
-- cli
-- test-failure
-
----
-*This issue was automatically created by the CLI test analyzer.*
+| Category | Test Name | Error Type | Error Message |
+|----------|-----------|------------|---------------|
 """
     
-    # Truncate body if too long (GitHub limit is 65536)
+    # Add each failure to the table
+    for cat, fail in group['failures']:
+        error_msg = fail.error_message[:100] + "..." if len(fail.error_message) > 100 else fail.error_message
+        body += f"| {cat} | `{fail.test_name}` | {fail.error_type} | {error_msg} |\n"
+    
+    # Add reproduction steps
+    body += "\n### How to Reproduce\n\n"
+    body += "Run the following commands to reproduce these failures:\n\n```bash\n"
+    
+    # Group files for reproduction
+    files_to_test = set()
+    for cat, fail in group['failures']:
+        files_to_test.add(fail.file_path)
+    
+    for file_path in sorted(files_to_test):
+        body += f"pytest {file_path}\n"
+    
+    body += "```\n\n"
+    
+    # Add analysis
+    body += "### Analysis\n\n"
+    if group['type'] == 'error_type':
+        body += f"All these tests are failing with `{group['name']}` errors. "
+        if group['name'] == 'AssertionError':
+            body += "This typically indicates that test assertions need to be updated to match current behavior.\n"
+        elif group['name'] == 'AttributeError':
+            body += "This suggests missing attributes or incorrect mocking. Check if APIs have changed.\n"
+        elif group['name'] == 'TypeError':
+            body += "This indicates type mismatches or incorrect function signatures.\n"
+        elif group['name'] == 'Unknown':
+            body += "These failures need investigation to determine the root cause.\n"
+    else:
+        body += f"These tests are all related to `{group['name'].replace('_', ' ')}` functionality.\n"
+    
+    body += "\n### Suggested Actions\n\n"
+    body += "1. Review recent changes to the affected modules\n"
+    body += "2. Check if test mocks need updating\n"
+    body += "3. Verify that test assertions match current expected behavior\n"
+    body += "4. Consider if the implementation has bugs that need fixing\n"
+    
+    body += "\n### Labels\n- bug\n- cli\n- test-failure\n"
+    body += f"- {group['type']}-group\n"
+    
+    body += "\n---\n*This issue was automatically created by the CLI test analyzer with intelligent grouping.*\n"
+    
+    # Truncate if too long
     if len(body) > 65000:
         body = body[:64900] + "\n\n... (truncated)"
     
     try:
+        labels = ["bug", "cli", "test-failure", f"{group['type']}-group"]
         issue = repo.create_issue(
-            title=issue_title,
+            title=title,
             body=body,
-            labels=["bug", "cli", "test-failure"]
+            labels=labels
         )
-        return f"Created issue: #{issue.number}"
+        return f"Created grouped issue: #{issue.number}"
     except GithubException as e:
         return f"Failed to create issue: {e}"
 
@@ -247,25 +339,36 @@ def main():
             print("Please set it in your .env file or environment")
             return
         
-        print(f"\nCreating GitHub issues (limit: {args.limit})...")
+        print(f"\nCreating GitHub issues with intelligent grouping (limit: {args.limit})...")
         
         try:
             g = Github(token)
-            repo = g.get_repo("anthropics/mdm")  # Adjust repo name as needed
+            # Get repo name from environment or use default (same as E2E script)
+            repo_name = os.environ.get('GITHUB_REPO', 'hipotures/mdm')
+            print(f"Using repository: {repo_name}")
+            
+            repo = g.get_repo(repo_name)
             
             # Get existing issues
-            existing_issues = set(repo.get_issues(state='all'))
+            existing_issues = list(repo.get_issues(state='all'))
             
-            # Create issues
+            # Group failures intelligently
+            groups = group_failures_intelligently(failures)
+            
+            print(f"\nIdentified {len(groups)} groups of related failures:")
+            for group in groups:
+                print(f"  - {group['name']} ({len(group['failures'])} failures)")
+            
+            # Create grouped issues
             created = 0
-            for category, category_failures in failures.items():
-                for failure in category_failures:
-                    if created >= args.limit:
-                        print(f"\nReached limit of {args.limit} issues")
-                        return
-                    
-                    result = create_github_issue(repo, failure, existing_issues)
-                    print(f"  {failure.test_name}: {result}")
+            for group in groups:
+                if created >= args.limit:
+                    print(f"\nReached limit of {args.limit} issues")
+                    break
+                
+                result = create_grouped_issue(repo, group, existing_issues)
+                print(f"\n{group['title']}: {result}")
+                if "Created" in result:
                     created += 1
                     
         except Exception as e:

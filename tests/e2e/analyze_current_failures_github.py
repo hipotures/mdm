@@ -175,9 +175,17 @@ def generate_failure_report(failures):
 class GitHubIssueManager:
     """Manage GitHub issues for test failures."""
     
-    def __init__(self, token: str, owner: str = "hipotures", repo: str = "mdm", dry_run: bool = False):
-        self.owner = owner
-        self.repo = repo
+    def __init__(self, token: str, owner: str = None, repo: str = None, dry_run: bool = False):
+        # Get repo from environment variable or use defaults
+        repo_name = os.environ.get('GITHUB_REPO', 'hipotures/mdm')
+        if '/' in repo_name:
+            owner_from_env, repo_from_env = repo_name.split('/', 1)
+            self.owner = owner or owner_from_env
+            self.repo = repo or repo_from_env
+        else:
+            self.owner = owner or "hipotures"
+            self.repo = repo or "mdm"
+            
         self.dry_run = dry_run
         self.created_issues = []
         self.updated_issues = []
@@ -185,7 +193,7 @@ class GitHubIssueManager:
         if GITHUB_AVAILABLE and token:
             self.github = Github(token)
             try:
-                self.repo_obj = self.github.get_repo(f"{owner}/{repo}")
+                self.repo_obj = self.github.get_repo(f"{self.owner}/{self.repo}")
             except GithubException as e:
                 print(f"Error accessing repository: {e}")
                 self.repo_obj = None
