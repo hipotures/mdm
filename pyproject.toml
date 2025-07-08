@@ -47,6 +47,7 @@ dependencies = [
     "tqdm>=4.65.0",
     "ydata-profiling>=4.0.0",
     "loguru>=0.7.0",
+    "openpyxl>=3.0.0",
 ]
 
 [project.optional-dependencies]

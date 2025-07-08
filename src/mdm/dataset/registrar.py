@@ -477,6 +477,96 @@ class DatasetRegistrar:
                             
                             progress.update(task, advance=len(batch_df))
                             
+                    elif file_path.suffix.lower() == '.gz' and '.csv' in file_path.suffixes:
+                        # Compressed CSV file
+                        delimiter = ','  # Default to comma for .csv.gz
+                        if '.tsv' in file_path.suffixes:
+                            delimiter = '\t'
+                        
+                        # Count lines in compressed file for progress bar
+                        import gzip
+                        with gzip.open(file_path, 'rt') as f:
+                            total_rows = sum(1 for _ in f) - 1
+                        
+                        task = progress.add_task(
+                            f"Loading {file_path.name} into {table_name}",
+                            total=total_rows
+                        )
+                        
+                        # Read compressed file in chunks
+                        first_chunk = True
+                        chunk_count = 0
+                        for chunk_df in pd.read_csv(
+                            file_path, 
+                            delimiter=delimiter, 
+                            compression='gzip',
+                            parse_dates=True,
+                            chunksize=batch_size
+                        ):
+                            chunk_count += 1
+                            logger.debug(f"Processing chunk {chunk_count} with {len(chunk_df)} rows from compressed file")
+                            
+                            if first_chunk:
+                                # Log column information from first chunk
+                                logger.debug(f"Columns in {table_name}: {list(chunk_df.columns)}")
+                                logger.debug(f"Data types: {chunk_df.dtypes.to_dict()}")
+                                
+                                # Detect column types on first chunk
+                                if table_name == 'train':
+                                    self._detect_and_store_column_types(chunk_df, table_name)
+                                
+                                # Create table with first chunk
+                                backend.create_table_from_dataframe(
+                                    chunk_df, table_name, engine, if_exists='replace'
+                                )
+                                first_chunk = False
+                            else:
+                                # Append subsequent chunks
+                                backend.create_table_from_dataframe(
+                                    chunk_df, table_name, engine, if_exists='append'
+                                )
+                            
+                            # Update progress
+                            progress.update(task, advance=len(chunk_df))
+                            
+                            # Explicitly free memory
+                            del chunk_df
+                            
+                    elif file_path.suffix.lower() in ['.xlsx', '.xls']:
+                        # Excel file
+                        df = pd.read_excel(file_path)
+                        total_rows = len(df)
+                        
+                        task = progress.add_task(
+                            f"Loading {file_path.name} into {table_name}",
+                            total=total_rows
+                        )
+                        
+                        logger.debug(f"Columns in {table_name}: {list(df.columns)}")
+                        logger.debug(f"Data types: {df.dtypes.to_dict()}")
+                        
+                        # Detect column types
+                        if table_name == 'train' and len(df) > 0:
+                            first_batch = df.iloc[:min(batch_size, len(df))]
+                            self._detect_and_store_column_types(first_batch, table_name)
+                        
+                        # Process in batches
+                        for i in range(0, total_rows, batch_size):
+                            batch_df = df.iloc[i:i + batch_size]
+                            batch_num = (i // batch_size) + 1
+                            logger.debug(f"Processing batch {batch_num} (rows {i}:{i+len(batch_df)}) for Excel file")
+                            
+                            if i == 0:
+                                backend.create_table_from_dataframe(
+                                    batch_df, table_name, engine, if_exists='replace'
+                                )
+                            else:
+                                backend.create_table_from_dataframe(
+                                    batch_df, table_name, engine, if_exists='append'
+                                )
+                            
+                            progress.update(task, advance=len(batch_df))
+                            
                     else:
                         logger.warning(f"Unsupported file type: {file_path}")
                         continue

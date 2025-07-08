@@ -274,7 +274,8 @@ def discover_data_files(path: Path, extensions: Optional[list[str]] = None) -> d
         Dictionary mapping file type to path
     """
     if extensions is None:
-        extensions = ['.csv', '.parquet', '.json', '.tsv', '.xlsx', '.xls']
+        extensions = ['.csv', '.parquet', '.json', '.tsv', '.xlsx', '.xls', 
+                     '.csv.gz', '.tsv.gz']
 
     files = {}
 
@@ -304,7 +305,11 @@ def discover_data_files(path: Path, extensions: Optional[list[str]] = None) -> d
         for ext in extensions:
             for file_path in path.glob(f"*{ext}"):
                 if file_path.is_file():
-                    files[file_path.stem] = file_path
+                    # Handle double extensions like .csv.gz
+                    stem = file_path.stem
+                    if ext.count('.') > 1:  # Double extension
+                        stem = file_path.name[:file_path.name.rfind(ext)]
+                    files[stem] = file_path
 
     return files
 

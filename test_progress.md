@@ -337,9 +337,26 @@
 - **Fix**: Modified CLI to only pass `generate_features` parameter when `--no-features` flag is used
 - **Result**: Configuration setting is now properly respected, with CLI flag as override
 
+### 8. Custom Features Loading (FIXED)
+- **Issue**: Custom features weren't being loaded from config directory
+- **Fix**: Fixed path construction to use `base_path / config.paths.custom_features_path`
+- **Result**: Custom features now load from `~/.mdm/config/custom_features/{dataset_name}.py`
+- **Format**: Must define `CustomFeatureOperations` class inheriting from `BaseDomainFeatures`
+
+### 9. Compressed File Support (FIXED)
+- **Issue**: No support for compressed CSV files (.csv.gz, .tsv.gz)
+- **Fix**: Added support for gzip-compressed CSV/TSV files with chunked reading
+- **Result**: Can now register datasets with .csv.gz and .tsv.gz files
+
+### 10. Excel File Support (FIXED)
+- **Issue**: No support for Excel files (.xlsx, .xls)
+- **Fix**: Added Excel file support with openpyxl dependency
+- **Result**: Can now register datasets with .xlsx and .xls files
+
 ### Test Results After Fixes
-- Success rate improved from 48% to 71% (120/170 testable items)
+- Success rate improved from 48% to 74% (126/170 testable items)
 - All critical configuration issues resolved
+- Added support for compressed and Excel files
 - System now properly respects configuration hierarchy: defaults < YAML < environment variables < CLI flags
 
 ### Fixed Issues:
@@ -351,7 +368,9 @@
 2. ~~**Log file creation** - File logging not implemented~~ **FIXED 2025-07-08** - Logs now written to /tmp/mdm.log or configured path
 3. ~~**Logging format** - JSON format option ignored~~ **FIXED 2025-07-08** - JSON logging works with MDM_LOGGING_FORMAT=json
 4. ~~**Export defaults** - Default format and compression settings ignored~~ **FIXED 2025-07-08** - Export now uses config defaults
-5. **Custom features** - Not loaded from ~/.mdm/config/custom_features/
+5. ~~**Custom features** - Not loaded from ~/.mdm/config/custom_features/~~ **FIXED 2025-07-08** - Custom features now load correctly
+6. ~~**Compressed files** - No support for .csv.gz files~~ **FIXED 2025-07-08** - Added support for gzip-compressed CSV/TSV
+7. ~~**Excel files** - No support for .xlsx/.xls files~~ **FIXED 2025-07-08** - Added Excel support with openpyxl
 
 ## Additional Testing - 5 New Tests (2025-07-07)
 
