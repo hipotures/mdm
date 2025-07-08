@@ -339,13 +339,15 @@ features:
         result = runner.invoke(timeseries_app, ["validate", "nonexistent"])
         assert result.exit_code == 1
     
-    @patch('mdm.api.MDMClient')
+    @patch('mdm.cli.timeseries.MDMClient')
     def test_timeseries_no_time_column(self, mock_client, runner):
         """Test timeseries commands without time column."""
-        # Setup mock
+        # Setup mock client instance
+        mock_client_instance = Mock()
         mock_dataset_info = Mock()
         mock_dataset_info.time_column = None
-        mock_client.return_value.get_dataset.return_value = mock_dataset_info
+        mock_client_instance.get_dataset.return_value = mock_dataset_info
+        mock_client.return_value = mock_client_instance
         
         # Analyze
         result = runner.invoke(timeseries_app, ["analyze", "test"])
