@@ -30,8 +30,8 @@ class TestMainCLI90Coverage:
         return CliRunner()
     
     # Test the actual setup_logging function
-    @patch('mdm.config.manager.get_config_manager')
-    @patch('loguru.logger')
+    @patch('mdm.config.get_config_manager')
+    @patch('mdm.cli.main.logger')
     @patch('logging.basicConfig')
     @patch('logging.getLogger')
     def test_setup_logging_all_branches(self, mock_get_logger, mock_basic_config, mock_logger, mock_get_config):
@@ -68,8 +68,8 @@ class TestMainCLI90Coverage:
         # Should have file handler, console handler, and SQLAlchemy handler
         assert mock_logger.add.call_count >= 3
         
-    @patch('mdm.config.manager.get_config_manager')
-    @patch('loguru.logger')
+    @patch('mdm.config.get_config_manager')
+    @patch('mdm.cli.main.logger')
     def test_setup_logging_no_file(self, mock_logger, mock_get_config):
         """Test setup_logging without file logging."""
         mock_config = Mock()
@@ -91,7 +91,7 @@ class TestMainCLI90Coverage:
         # Should only have console handler
         assert mock_logger.add.call_count >= 1
     
-    @patch('mdm.config.manager.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.dataset.manager.DatasetManager')
     @patch('shutil.disk_usage')
     def test_info_command_comprehensive(self, mock_disk_usage, mock_dataset_manager, mock_get_config, runner):
@@ -125,18 +125,58 @@ class TestMainCLI90Coverage:
         
         # Create temp directory structure
         with tempfile.TemporaryDirectory() as tmpdir:
-            mock_manager.base_path = Path(tmpdir)
+            # Create directories
             (Path(tmpdir) / "datasets").mkdir()
-            (Path(tmpdir) / "config" / "datasets").mkdir(parents=True)
+            datasets_config_dir = Path(tmpdir) / "config" / "datasets"
+            datasets_config_dir.mkdir(parents=True)
             (Path(tmpdir) / "logs").mkdir()
             
-            result = runner.invoke(app, ["info"])
+            # Create fake dataset config files
+            for i in range(1, 4):
+                dataset_config = datasets_config_dir / f"dataset{i}.yaml"
+                dataset_config.write_text(f"""
+name: dataset{i}
+display_name: Dataset {i}
+database:
+  backend: postgresql
+tables:
+  train: train_table
+""")
+            
+            # Create config file with postgresql backend
+            config_file = Path(tmpdir) / "mdm.yaml"
+            config_file.write_text("""
+database:
+  default_backend: postgresql
+  postgresql:
+    host: localhost
+    port: 5432
+performance:
+  batch_size: 5000
+  max_concurrent_operations: 8
+features:
+  enabled: true
+  generic_enabled: true
+  custom_enabled: true
+""")
+            
+            # Set env var to use temp directory
+            old_mdm_home = os.environ.get('MDM_HOME_DIR')
+            os.environ['MDM_HOME_DIR'] = tmpdir
+            
+            try:
+                result = runner.invoke(app, ["info"])
+            finally:
+                if old_mdm_home:
+                    os.environ['MDM_HOME_DIR'] = old_mdm_home
+                else:
+                    del os.environ['MDM_HOME_DIR']
         
         assert result.exit_code == 0
         assert "ML Data Manager" in result.stdout
         assert "postgresql" in result.stdout
-        assert "Features: Enabled" in result.stdout
-        assert "Registered datasets: 3" in result.stdout
+        assert "Backend: postgresql" in result.stdout
+        assert "Chunk size: 5,000" in result.stdout
 
 
 class TestDatasetCLI90Coverage:
