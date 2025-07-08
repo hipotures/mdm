@@ -426,7 +426,14 @@ def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show what issues would be created without actually creating them"
+        default=True,
+        help="Show what issues would be created without actually creating them (default: True)"
+    )
+    parser.add_argument(
+        "--no-dry-run",
+        dest="dry_run",
+        action="store_false",
+        help="Actually create issues (use with caution)"
     )
     parser.add_argument(
         "--max-issues",
