@@ -60,61 +60,137 @@ def run_tests_and_collect_failures():
         ("test_02_dataset/test_23_info.py", "Dataset Info/Stats"),
     ]
     
-    print("Analyzing test failures...")
-    print("=" * 80)
-    
-    for test_file, category_name in test_categories:
-        print(f"\nTesting {category_name}...")
+    if RICH_AVAILABLE:
+        console.print("\n[bold]Analyzing E2E test failures...[/bold]")
+        console.rule()
         
-        cmd = [
-            sys.executable, "-m", "pytest",
-            str(test_dir / test_file),
-            "-v", "--tb=short",
-            "--no-header"
-        ]
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            for test_file, category_name in test_categories:
+                test_path = test_dir / test_file
+                if not test_path.exists():
+                    task = progress.add_task(f"[yellow]Skipping {category_name} (not found)[/yellow]", total=1)
+                    progress.update(task, completed=1)
+                    continue
+                
+                task = progress.add_task(f"Testing {category_name}...", total=1)
+                
+                cmd = [
+                    sys.executable, "-m", "pytest",
+                    str(test_path),
+                    "-v", "--tb=short",
+                    "--no-header"
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                # Parse output for failures
+                category_failure_count = 0
+                lines = result.stdout.split('\n')
+                for i, line in enumerate(lines):
+                    if "FAILED" in line:
+                        # Extract test name
+                        match = re.search(r'(test_\w+\.py)::([\w:]+)\s+FAILED', line)
+                        if match:
+                            test_name = f"{match.group(1)}::{match.group(2)}"
+                            category_failure_count += 1
+                            
+                            # Look for error details in subsequent lines
+                            error_info = ""
+                            for j in range(i+1, min(i+20, len(lines))):
+                                if lines[j].strip():
+                                    if "short test summary" in lines[j]:
+                                        break
+                                    error_info += lines[j] + "\n"
+                            
+                            # Extract error type
+                            error_type = "Unknown"
+                            if "AssertionError" in error_info:
+                                if "assert False" in error_info and "exists()" in error_info:
+                                    error_type = "File/Directory not found"
+                                elif "not in result.stdout" in error_info:
+                                    error_type = "Output mismatch"
+                                else:
+                                    error_type = "Assertion failed"
+                            elif "CalledProcessError" in error_info:
+                                error_type = "Command failed"
+                            elif "ModuleNotFoundError" in error_info:
+                                error_type = "Import error"
+                            elif "TypeError" in error_info:
+                                error_type = "Type error"
+                            elif "KeyError" in error_info:
+                                error_type = "Key error"
+                            
+                            failures[category_name].append({
+                                "test": test_name,
+                                "error_type": error_type,
+                                "error_info": error_info.strip()
+                            })
+                
+                # Update progress with result
+                if category_failure_count > 0:
+                    progress.update(task, description=f"[red]✗[/red] {category_name} ({category_failure_count} failures)", completed=1)
+                else:
+                    progress.update(task, description=f"[green]✓[/green] {category_name}", completed=1)
+    else:
+        print("Analyzing test failures...")
+        print("=" * 80)
         
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        # Parse output for failures
-        lines = result.stdout.split('\n')
-        for i, line in enumerate(lines):
-            if "FAILED" in line:
-                # Extract test name
-                match = re.search(r'(test_\w+\.py)::([\w:]+)\s+FAILED', line)
-                if match:
-                    test_name = f"{match.group(1)}::{match.group(2)}"
-                    
-                    # Look for error details in subsequent lines
-                    error_info = ""
-                    for j in range(i+1, min(i+20, len(lines))):
-                        if lines[j].strip():
-                            if "short test summary" in lines[j]:
-                                break
-                            error_info += lines[j] + "\n"
-                    
-                    # Extract error type
-                    error_type = "Unknown"
-                    if "AssertionError" in error_info:
-                        if "assert False" in error_info and "exists()" in error_info:
-                            error_type = "File/Directory not found"
-                        elif "not in result.stdout" in error_info:
-                            error_type = "Output mismatch"
-                        else:
-                            error_type = "Assertion failed"
-                    elif "CalledProcessError" in error_info:
-                        error_type = "Command failed"
-                    elif "ModuleNotFoundError" in error_info:
-                        error_type = "Import error"
-                    elif "TypeError" in error_info:
-                        error_type = "Type error"
-                    elif "KeyError" in error_info:
-                        error_type = "Key error"
-                    
-                    failures[category_name].append({
-                        "test": test_name,
-                        "error_type": error_type,
-                        "error_info": error_info.strip()
-                    })
+        for test_file, category_name in test_categories:
+            print(f"\nTesting {category_name}...")
+            
+            cmd = [
+                sys.executable, "-m", "pytest",
+                str(test_dir / test_file),
+                "-v", "--tb=short",
+                "--no-header"
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Parse output for failures
+            lines = result.stdout.split('\n')
+            for i, line in enumerate(lines):
+                if "FAILED" in line:
+                    # Extract test name
+                    match = re.search(r'(test_\w+\.py)::([\w:]+)\s+FAILED', line)
+                    if match:
+                        test_name = f"{match.group(1)}::{match.group(2)}"
+                        
+                        # Look for error details in subsequent lines
+                        error_info = ""
+                        for j in range(i+1, min(i+20, len(lines))):
+                            if lines[j].strip():
+                                if "short test summary" in lines[j]:
+                                    break
+                                error_info += lines[j] + "\n"
+                        
+                        # Extract error type
+                        error_type = "Unknown"
+                        if "AssertionError" in error_info:
+                            if "assert False" in error_info and "exists()" in error_info:
+                                error_type = "File/Directory not found"
+                            elif "not in result.stdout" in error_info:
+                                error_type = "Output mismatch"
+                            else:
+                                error_type = "Assertion failed"
+                        elif "CalledProcessError" in error_info:
+                            error_type = "Command failed"
+                        elif "ModuleNotFoundError" in error_info:
+                            error_type = "Import error"
+                        elif "TypeError" in error_info:
+                            error_type = "Type error"
+                        elif "KeyError" in error_info:
+                            error_type = "Key error"
+                        
+                        failures[category_name].append({
+                            "test": test_name,
+                            "error_type": error_type,
+                            "error_info": error_info.strip()
+                        })
     
     return failures
 

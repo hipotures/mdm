@@ -86,31 +86,68 @@ def run_tests_and_collect_failures():
     if RICH_AVAILABLE:
         console.print("\n[bold]Analyzing CLI test failures...[/bold]")
         console.rule()
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            for test_file, category_name in test_categories:
+                test_path = project_root / test_file
+                if not test_path.exists():
+                    task = progress.add_task(f"[yellow]Skipping {category_name} (not found)[/yellow]", total=1)
+                    progress.update(task, completed=1)
+                    continue
+                
+                task = progress.add_task(f"Testing {category_name}...", total=1)
+                
+                cmd = [
+                    sys.executable, "-m", "pytest",
+                    str(test_path),
+                    "-v", "--tb=short",
+                    "--no-header"
+                ]
+                
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
+                # Parse pytest output
+                category_failure_count = 0
+                if result.returncode != 0:
+                    initial_count = len(failures[category_name])
+                    parse_pytest_output(result.stdout + result.stderr, test_file, 
+                                      category_name, failures)
+                    category_failure_count = len(failures[category_name]) - initial_count
+                
+                # Update progress with result
+                if category_failure_count > 0:
+                    progress.update(task, description=f"[red]✗[/red] {category_name} ({category_failure_count} failures)", completed=1)
+                else:
+                    progress.update(task, description=f"[green]✓[/green] {category_name}", completed=1)
     else:
         print("Analyzing CLI test failures...")
         print("=" * 80)
-    
-    for test_file, category_name in test_categories:
-        test_path = project_root / test_file
-        if not test_path.exists():
-            print(f"\nSkipping {test_file} (not found)")
-            continue
+        
+        for test_file, category_name in test_categories:
+            test_path = project_root / test_file
+            if not test_path.exists():
+                print(f"\nSkipping {test_file} (not found)")
+                continue
+                
+            print(f"\nTesting {category_name}...")
             
-        print(f"\nTesting {category_name}...")
-        
-        cmd = [
-            sys.executable, "-m", "pytest",
-            str(test_path),
-            "-v", "--tb=short",
-            "--no-header"
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        # Parse pytest output
-        if result.returncode != 0:
-            parse_pytest_output(result.stdout + result.stderr, test_file, 
-                              category_name, failures)
+            cmd = [
+                sys.executable, "-m", "pytest",
+                str(test_path),
+                "-v", "--tb=short",
+                "--no-header"
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Parse pytest output
+            if result.returncode != 0:
+                parse_pytest_output(result.stdout + result.stderr, test_file, 
+                                  category_name, failures)
     
     return failures
 
@@ -168,8 +205,8 @@ def create_individual_issue(repo, category: str, failure: TestFailure, existing_
     
     # Check if similar issue exists
     for issue in existing_issues:
-        if failure.test_name in issue.title:
-            return f"Similar issue already exists: #{issue.number}"
+        if issue.state == 'open' and failure.test_name in issue.title:
+            return f"Issue already exists: #{issue.number}"
     
     # Create issue body
     body = f"""## Test Failure: {failure.test_name}
@@ -337,7 +374,14 @@ def create_grouped_issue(repo, group: Dict, existing_issues: set) -> Optional[st
 
 def main():
     """Main function to analyze failures and optionally create issues."""
-    parser = argparse.ArgumentParser(description='Analyze CLI test failures')
+    parser = argparse.ArgumentParser(
+        description='Analyze CLI test failures and optionally create GitHub issues',
+        epilog='Examples:\n'
+               '  %(prog)s                    # Just analyze failures\n'
+               '  %(prog)s --create-issues    # Dry run (default)\n'
+               '  %(prog)s --create-issues --no-dry-run --limit 5  # Create up to 5 issues\n',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument('--create-issues', action='store_true',
                        help='Create GitHub issues for failures')
     parser.add_argument('--limit', type=int, default=10,
@@ -448,16 +492,65 @@ def main():
             
             # Create individual issues
             created = 0
+            skipped = 0
+            existing = 0
+            limit_reached = False
+            
             for category, category_failures in failures.items():
+                if limit_reached:
+                    break
                 for failure in category_failures:
                     if created >= args.limit:
-                        print(f"\nReached limit of {args.limit} issues")
-                        return
+                        remaining = total_failures - created - skipped - existing
+                        if RICH_AVAILABLE:
+                            console.print(f"\n[yellow]Reached limit of {args.limit} issues. {remaining} failures not processed.[/yellow]")
+                        else:
+                            print(f"\nReached limit of {args.limit} issues. {remaining} failures not processed.")
+                        limit_reached = True
+                        break
                     
                     result = create_individual_issue(repo, category, failure, existing_issues, dry_run=args.dry_run)
-                    print(f"{category} - {failure.test_name}: {result}")
-                    if "Created" in result or "[DRY RUN]" in result:
+                    
+                    if "already exists" in result:
+                        existing += 1
+                        if RICH_AVAILABLE:
+                            console.print(f"[dim]{category} - {failure.test_name}: {result}[/dim]")
+                        else:
+                            print(f"{category} - {failure.test_name}: {result}")
+                    elif "Created" in result or "[DRY RUN]" in result:
                         created += 1
+                        if RICH_AVAILABLE:
+                            console.print(f"[green]{category} - {failure.test_name}: {result}[/green]")
+                        else:
+                            print(f"{category} - {failure.test_name}: {result}")
+                    else:
+                        skipped += 1
+                        if RICH_AVAILABLE:
+                            console.print(f"[red]{category} - {failure.test_name}: {result}[/red]")
+                        else:
+                            print(f"{category} - {failure.test_name}: {result}")
+            
+            # Summary
+            if RICH_AVAILABLE:
+                console.print("\n[bold]Issue Creation Summary:[/bold]")
+                console.rule()
+                if args.dry_run:
+                    console.print(f"[green]Would create: {created} issues[/green]")
+                else:
+                    console.print(f"[green]Created: {created} new issues[/green]")
+                console.print(f"[yellow]Already exist: {existing} issues[/yellow]")
+                if skipped > 0:
+                    console.print(f"[red]Skipped/Failed: {skipped} issues[/red]")
+            else:
+                print("\n" + "="*40)
+                print("Issue Creation Summary:")
+                if args.dry_run:
+                    print(f"Would create: {created} issues")
+                else:
+                    print(f"Created: {created} new issues")
+                print(f"Already exist: {existing} issues")
+                if skipped > 0:
+                    print(f"Skipped/Failed: {skipped} issues")
                     
         except Exception as e:
             print(f"\nError accessing GitHub: {e}")
