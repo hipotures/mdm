@@ -1,6 +1,6 @@
 """Advanced dataset service for low-level operations."""
 
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -11,7 +11,6 @@ from mdm.dataset.manager import DatasetManager
 from mdm.dataset.registrar import DatasetRegistrar
 from mdm.features.engine import FeatureEngine
 
-logger = logging.getLogger(__name__)
 
 
 class DatasetService:

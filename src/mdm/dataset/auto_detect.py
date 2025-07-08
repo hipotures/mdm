@@ -1,12 +1,11 @@
 """Auto-detection module for dataset structures and metadata."""
 
 import csv
-import logging
+from loguru import logger
 import re
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
-logger = logging.getLogger(__name__)
 
 
 def detect_kaggle_structure(path: Path) -> bool:

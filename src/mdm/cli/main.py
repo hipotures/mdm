@@ -1,12 +1,14 @@
 """Main CLI entry point for MDM."""
 
 import os
+import sys
 import shutil
 import logging
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from loguru import logger
 
 from mdm.cli.batch import batch_app
 from mdm.cli.dataset import dataset_app
@@ -36,76 +38,87 @@ def setup_logging():
     # Get log level from environment or config
     log_level = os.environ.get('MDM_LOGGING_LEVEL', config.logging.level)
     
-    # Configure standard logging
-    # Remove existing handlers first
-    logging.root.handlers = []
-    
-    # File handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(getattr(logging, log_level.upper()))
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    
-    # Console handler (only warnings and errors)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.WARNING)
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-    
-    # Configure root logger
-    logging.root.setLevel(getattr(logging, log_level.upper()))
-    logging.root.addHandler(file_handler)
-    logging.root.addHandler(console_handler)
-    
-    # Set specific loggers if needed
-    logging.getLogger('mdm').setLevel(getattr(logging, log_level.upper()))
-    
-    # Configure SQLAlchemy logging based on echo setting
+    # Get SQLAlchemy echo setting
     sqlalchemy_echo = config.database.sqlalchemy.echo
-    if sqlalchemy_echo and log_level.upper() in ['DEBUG', 'INFO']:
-        # When echo is enabled and log level is DEBUG or INFO, show SQL queries
-        # Create a special console handler for SQLAlchemy that shows INFO messages
-        sql_console_handler = logging.StreamHandler()
-        sql_console_handler.setLevel(logging.INFO)
-        sql_console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-        
-        # Configure SQLAlchemy loggers
-        sql_logger = logging.getLogger('sqlalchemy.engine')
-        sql_logger.setLevel(logging.INFO)
-        sql_logger.addHandler(sql_console_handler)
-        sql_logger.propagate = False  # Don't propagate to root logger
-        
-        pool_logger = logging.getLogger('sqlalchemy.pool')
-        pool_logger.setLevel(logging.INFO)
-        pool_logger.addHandler(sql_console_handler)
-        pool_logger.propagate = False
-    else:
-        # When echo is disabled or log level is WARNING or higher, suppress SQLAlchemy logs
-        logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
-        logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
     
-    # Configure loguru for feature modules
-    try:
-        from loguru import logger as loguru_logger
-        # Remove default handler
-        loguru_logger.remove()
-        # Add file handler with format matching standard logging
-        loguru_logger.add(
-            log_file,
-            level=log_level.upper(),
-            format="{time:YYYY-MM-DD HH:mm:ss,SSS} - {name} - {level} - {message}",
-            rotation=config.logging.max_bytes,  # Size in bytes
-            retention=config.logging.backup_count
+    # Remove default loguru handler
+    logger.remove()
+    
+    # Determine format based on config
+    log_format = config.logging.format.lower()
+    if log_format == "json":
+        file_format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} | {message} | {extra}"
+        console_format = file_format
+        serialize = True
+    else:  # console format
+        file_format = "{time:YYYY-MM-DD HH:mm:ss,SSS} - {name} - {level} - {message}"
+        console_format = "{time:HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
+        serialize = False
+    
+    # Add file handler with rotation
+    logger.add(
+        log_file,
+        level=log_level.upper(),
+        format=file_format,
+        rotation=config.logging.max_bytes,
+        retention=config.logging.backup_count,
+        compression="gz" if config.logging.backup_count > 0 else None,
+        serialize=serialize,
+        enqueue=True  # Thread-safe
+    )
+    
+    # Add console handler (only warnings and errors for clean output)
+    logger.add(
+        sys.stderr,
+        level="WARNING",
+        format=console_format,
+        colorize=True,
+        filter=lambda record: "sqlalchemy" not in record["name"]  # Filter out SQLAlchemy by default
+    )
+    
+    # Configure SQLAlchemy logging
+    if sqlalchemy_echo and log_level.upper() in ['DEBUG', 'INFO']:
+        # Add special console handler for SQLAlchemy
+        logger.add(
+            sys.stderr,
+            level="INFO",
+            format="{time:HH:mm:ss.SSS} | SQL | {message}",
+            colorize=True,
+            filter=lambda record: "sqlalchemy.engine" in record["name"]
         )
-        # Add console handler (only warnings and errors)
-        loguru_logger.add(
-            lambda msg: print(msg, end=''),
-            level="WARNING",
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
-        )
-    except ImportError:
-        pass  # loguru not installed
+    
+    # Intercept standard logging and redirect to loguru
+    class InterceptHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            # Get corresponding Loguru level if it exists
+            try:
+                level = logger.level(record.levelname).name
+            except ValueError:
+                level = record.levelno
+
+            # Find caller from where originated the logged message
+            frame, depth = logging.currentframe(), 2
+            while frame and frame.f_code.co_filename == logging.__file__:
+                frame = frame.f_back
+                depth += 1
+
+            logger.opt(depth=depth, exception=record.exc_info).log(
+                level, record.getMessage()
+            )
+    
+    # Set up the interceptor
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+    
+    # Configure specific loggers
+    for logger_name in ["mdm", "sqlalchemy.engine", "sqlalchemy.pool"]:
+        logging.getLogger(logger_name).handlers = []
+        logging.getLogger(logger_name).propagate = True
+    
+    # Set SQLAlchemy log level if echo is enabled
+    if sqlalchemy_echo:
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
     
     # Log startup
-    logger = logging.getLogger(__name__)
     logger.info(f"MDM logging initialized - Level: {log_level}, File: {log_file}")
 
 

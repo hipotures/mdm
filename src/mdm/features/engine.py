@@ -1,7 +1,7 @@
 """Main feature engineering engine."""
 
 import importlib.util
-import logging
+from loguru import logger
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -20,7 +20,6 @@ from mdm.features.generic import (
 from mdm.features.signal import SignalDetector
 from mdm.storage.base import StorageBackend
 
-logger = logging.getLogger(__name__)
 console = Console()
 
 

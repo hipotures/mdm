@@ -1,6 +1,6 @@
 """Performance optimization utilities for MDM."""
 
-import logging
+from loguru import logger
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -10,7 +10,6 @@ import psutil
 
 from mdm.config import get_config
 
-logger = logging.getLogger(__name__)
 
 
 class PerformanceMonitor:

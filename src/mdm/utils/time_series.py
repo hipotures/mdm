@@ -1,12 +1,11 @@
 """Time series utilities for MDM."""
 
-import logging
+from loguru import logger
 from datetime import timedelta
 from typing import Optional, Union
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
 
 
 class TimeSeriesSplitter:

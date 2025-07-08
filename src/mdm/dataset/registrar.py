@@ -1,11 +1,11 @@
 """Dataset registrar implementing the 12-step registration process."""
 
-import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import yaml
+from loguru import logger
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from ydata_profiling import ProfileReport
 
@@ -26,8 +26,6 @@ from mdm.models.dataset import DatasetInfo
 from mdm.models.enums import ColumnType
 from mdm.storage.factory import BackendFactory
 from mdm.utils.serialization import serialize_for_yaml
-
-logger = logging.getLogger(__name__)
 
 
 class DatasetRegistrar:

@@ -1,10 +1,9 @@
 """Signal detection for feature engineering."""
 
-import logging
+from loguru import logger
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
 
 
 class SignalDetector:

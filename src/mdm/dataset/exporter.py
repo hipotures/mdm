@@ -2,7 +2,7 @@
 
 import gzip
 import json
-import logging
+from loguru import logger
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -14,7 +14,6 @@ from mdm.config import get_config_manager
 from mdm.core.exceptions import DatasetError, StorageError
 from mdm.storage.factory import BackendFactory
 
-logger = logging.getLogger(__name__)
 
 
 class DatasetExporter:

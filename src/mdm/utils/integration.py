@@ -1,12 +1,11 @@
 """Integration utilities for ML frameworks."""
 
-import logging
+from loguru import logger
 from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
 
-logger = logging.getLogger(__name__)
 
 
 class MLFrameworkAdapter:

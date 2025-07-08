@@ -1,20 +1,18 @@
 """Dataset manager for MDM."""
 
 import json
-import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
 
 import yaml
+from loguru import logger
 
 from mdm.config import get_config
 from mdm.core.exceptions import DatasetError, StorageError
 from mdm.models.dataset import DatasetInfo, DatasetStatistics
 from mdm.storage.factory import BackendFactory
 from mdm.utils.serialization import serialize_for_yaml
-
-logger = logging.getLogger(__name__)
 
 
 class DatasetManager:

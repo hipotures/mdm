@@ -2,7 +2,7 @@
 
 import fnmatch
 import json
-import logging
+from loguru import logger
 import shutil
 import time
 from abc import ABC, abstractmethod
@@ -19,7 +19,6 @@ from mdm.dataset.exporter import DatasetExporter
 from mdm.dataset.statistics import DatasetStatistics
 from mdm.storage.factory import BackendFactory
 
-logger = logging.getLogger(__name__)
 
 
 class DatasetOperation(ABC):
