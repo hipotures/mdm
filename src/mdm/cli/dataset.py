@@ -502,8 +502,9 @@ def show_statistics(
                         console.print(f"  - Columns: {table_stats.get('column_count', 0)}")
                         if 'missing_values' in table_stats:
                             missing = table_stats['missing_values']
-                            console.print(f"  - Missing cells: {missing.get('total_missing', 0):,}")
-                            console.print(f"  - Completeness: {missing.get('completeness', 0) * 100:.1f}%")
+                            console.print(f"  - Missing cells: {missing.get('total_missing_cells', 0):,}")
+                            completeness = 100 - missing.get('total_missing_percentage', 0)
+                            console.print(f"  - Completeness: {completeness:.1f}%")
 
             if full:
                 console.print("\n[bold]Detailed Statistics:[/bold]")
