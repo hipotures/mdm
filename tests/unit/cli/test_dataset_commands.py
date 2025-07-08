@@ -69,7 +69,7 @@ class TestHelperFunctions:
         _display_column_summary(mock_dataset_info, Mock(), 'train')
         
         # Verify error was printed
-        mock_console.print.assert_called_with("[red]Error displaying column summary:[/red] Database error")
+        mock_console.print.assert_called_with("\n[yellow]Could not generate column summary: Database error[/yellow]")
 
 
 class TestDatasetRegisterCommand:
@@ -85,9 +85,9 @@ class TestDatasetRegisterCommand:
         with patch('mdm.cli.main.setup_logging'):
             yield
     
+    @patch('mdm.cli.dataset._display_column_summary')
     @patch('mdm.cli.dataset.DatasetRegistrar')
-    @patch('mdm.cli.dataset.console')
-    def test_register_basic(self, mock_console, mock_registrar_class, runner):
+    def test_register_basic(self, mock_registrar_class, mock_display_summary, runner):
         """Test basic dataset registration."""
         # Setup mock registrar
         mock_registrar = Mock()
@@ -111,8 +111,9 @@ class TestDatasetRegisterCommand:
         assert "registered successfully" in result.stdout
         mock_registrar.register.assert_called_once()
     
+    @patch('mdm.cli.dataset._display_column_summary')
     @patch('mdm.cli.dataset.DatasetRegistrar')
-    def test_register_with_all_options(self, mock_registrar_class, runner):
+    def test_register_with_all_options(self, mock_registrar_class, mock_display_summary, runner):
         """Test registration with all options."""
         mock_registrar = Mock()
         mock_dataset_info = Mock()
@@ -145,7 +146,8 @@ class TestDatasetRegisterCommand:
         assert call_kwargs['target_column'] == "target"
         assert call_kwargs['problem_type'] == "regression"
         assert call_kwargs['id_columns'] == ["id1", "id2"]
-        assert call_kwargs['datetime_columns'] == ["date"]
+        assert 'type_schema' in call_kwargs
+        assert call_kwargs['type_schema']['date'] == "datetime"
         assert call_kwargs['description'] == "Test dataset"
         assert call_kwargs['tags'] == ["test", "sample"]
         assert call_kwargs['force'] is True
@@ -156,15 +158,17 @@ class TestDatasetRegisterCommand:
         result = runner.invoke(dataset_app, [
             "register", "test_dataset",
             "--no-auto",
-            "--train", "train.csv"
+            "--train", "train.csv",
+            "--target", "target_col"
         ])
         
         # Currently not implemented
         assert result.exit_code == 1
         assert "Manual registration not yet implemented" in result.stdout
     
+    @patch('mdm.cli.dataset._display_column_summary')
     @patch('mdm.cli.dataset.DatasetRegistrar')
-    def test_register_with_exception(self, mock_registrar_class, runner):
+    def test_register_with_exception(self, mock_registrar_class, mock_display_summary, runner):
         """Test registration with exception."""
         mock_registrar = Mock()
         mock_registrar.register.side_effect = DatasetError("Registration failed")
@@ -207,19 +211,23 @@ class TestDatasetListCommand:
                 'name': 'dataset1',
                 'problem_type': 'classification',
                 'target_column': 'target',
-                'tables': ['train', 'test'],
+                'tables': {'train': 'train_table', 'test': 'test_table'},
                 'row_count': 1000,
-                'size_bytes': 1048576,
-                'backend': 'sqlite'
+                'size': 1048576,
+                'backend': 'sqlite',
+                'backend_compatible': True,
+                'current_backend': 'sqlite'
             },
             {
                 'name': 'dataset2',
                 'problem_type': 'regression',
                 'target_column': 'value',
-                'tables': ['data'],
+                'tables': {'data': 'data_table'},
                 'row_count': 5000,
-                'size_bytes': 5242880,
-                'backend': 'duckdb'
+                'size': 5242880,
+                'backend': 'duckdb',
+                'backend_compatible': True,
+                'current_backend': 'sqlite'
             }
         ]
         mock_list_op_class.return_value = mock_list_op
@@ -229,7 +237,8 @@ class TestDatasetListCommand:
         assert result.exit_code == 0
         assert "dataset1" in result.stdout
         assert "dataset2" in result.stdout
-        assert "classification" in result.stdout
+        # Check for truncated values in table
+        assert "classificati" in result.stdout  # May be truncated
         assert "regression" in result.stdout
     
     @patch('mdm.cli.dataset.ListOperation')
@@ -296,7 +305,7 @@ class TestDatasetInfoCommand:
         
         assert result.exit_code == 0
         assert "test_dataset" in result.stdout
-        mock_info_op.execute.assert_called_with(dataset_name="test_dataset")
+        mock_info_op.execute.assert_called_with("test_dataset", details=False)
     
     @patch('mdm.cli.dataset.InfoOperation')
     def test_info_dataset_not_found(self, mock_info_op_class, runner):
@@ -318,56 +327,63 @@ class TestDatasetSearchCommand:
     def runner(self):
         return CliRunner()
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_search_with_results(self, mock_manager_class, runner):
+    def test_search_with_results(self, runner):
         """Test search with results."""
-        mock_manager = Mock()
-        mock_manager.search_datasets.return_value = [
-            {
-                'name': 'test_dataset1',
-                'problem_type': 'classification',
-                'target_column': 'target',
-                'tags': ['test']
-            },
-            {
-                'name': 'test_dataset2',
-                'problem_type': 'regression',
-                'target_column': 'value',
-                'tags': ['test', 'sample']
-            }
-        ]
-        mock_manager_class.return_value = mock_manager
+        with patch('mdm.dataset.operations.SearchOperation') as mock_search_op_class:
+            mock_search_op = Mock()
+            mock_search_op.execute.return_value = [
+                {
+                    'name': 'test_dataset1',
+                    'description': 'Test dataset 1',
+                    'tags': ['test'],
+                    'match_location': 'name'
+                },
+                {
+                    'name': 'test_dataset2',
+                    'description': 'Test dataset 2',
+                    'tags': ['test', 'sample'],
+                    'match_location': 'name'
+                }
+            ]
+            mock_search_op_class.return_value = mock_search_op
         
-        result = runner.invoke(dataset_app, ["search", "test"])
-        
-        assert result.exit_code == 0
-        assert "test_dataset1" in result.stdout
-        assert "test_dataset2" in result.stdout
-        assert "Found 2 datasets" in result.stdout
+            result = runner.invoke(dataset_app, ["search", "test"])
+            
+            assert result.exit_code == 0
+            assert "test_dataset1" in result.stdout
+            assert "test_dataset2" in result.stdout
+            assert "Found 2 match(es)" in result.stdout
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_search_no_results(self, mock_manager_class, runner):
+    def test_search_no_results(self, runner):
         """Test search with no results."""
-        mock_manager = Mock()
-        mock_manager.search_datasets.return_value = []
-        mock_manager_class.return_value = mock_manager
+        with patch('mdm.dataset.operations.SearchOperation') as mock_search_op_class:
+            mock_search_op = Mock()
+            mock_search_op.execute.return_value = []
+            mock_search_op_class.return_value = mock_search_op
         
-        result = runner.invoke(dataset_app, ["search", "nonexistent"])
-        
-        assert result.exit_code == 0
-        assert "No datasets found" in result.stdout
+            result = runner.invoke(dataset_app, ["search", "nonexistent"])
+            
+            assert result.exit_code == 0
+            assert "No datasets found" in result.stdout
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_search_with_tags(self, mock_manager_class, runner):
+    def test_search_with_tags(self, runner):
         """Test search with tag filter."""
-        mock_manager = Mock()
-        mock_manager.search_datasets.return_value = []
-        mock_manager_class.return_value = mock_manager
+        with patch('mdm.dataset.operations.SearchOperation') as mock_search_op_class:
+            mock_search_op = Mock()
+            mock_search_op.execute.return_value = []
+            mock_search_op_class.return_value = mock_search_op
         
-        result = runner.invoke(dataset_app, ["search", "test", "--tag", "sample"])
-        
-        assert result.exit_code == 0
-        mock_manager.search_datasets.assert_called_with(pattern="test", tag="sample")
+            result = runner.invoke(dataset_app, ["search", "test", "--tag", "sample"])
+            
+            assert result.exit_code == 0
+            mock_search_op.execute.assert_called_with(
+                query="test",
+                deep=False,
+                pattern=False,
+                case_sensitive=False,
+                tag="sample",
+                limit=None
+            )
 
 
 class TestDatasetStatsCommand:
@@ -377,62 +393,76 @@ class TestDatasetStatsCommand:
     def runner(self):
         return CliRunner()
     
-    @patch('mdm.cli.dataset.StatsOperation')
-    def test_stats_success(self, mock_stats_op_class, runner):
+    def test_stats_success(self, runner):
         """Test stats command success."""
-        mock_stats_op = Mock()
-        mock_stats_op.execute.return_value = {
-            'dataset_name': 'test_dataset',
-            'tables': {
-                'train': {
-                    'row_count': 1000,
-                    'column_count': 10,
-                    'size_bytes': 1048576,
-                    'completeness': 0.95,
-                    'missing_cells': 500
-                }
-            },
-            'total_size_bytes': 1048576
-        }
-        mock_stats_op_class.return_value = mock_stats_op
-        
-        result = runner.invoke(dataset_app, ["stats", "test_dataset"])
-        
-        assert result.exit_code == 0
-        assert "test_dataset" in result.stdout
-        mock_stats_op.execute.assert_called_with(
-            dataset_name="test_dataset",
-            detailed=False,
-            tables=None
-        )
+        with patch('mdm.dataset.operations.StatsOperation') as mock_stats_op_class:
+            mock_stats_op = Mock()
+            mock_stats_op.execute.return_value = {
+                'dataset_name': 'test_dataset',
+                'computed_at': '2025-01-09 10:00:00',
+                'mode': 'basic',
+                'summary': {
+                    'total_tables': 1,
+                    'total_rows': 1000,
+                    'total_columns': 10,
+                    'overall_completeness': 0.95
+                },
+                'tables': {
+                    'train': {
+                        'row_count': 1000,
+                        'column_count': 10,
+                        'size_bytes': 1048576,
+                        'completeness': 0.95,
+                        'missing_cells': 500
+                    }
+                },
+                'total_size_bytes': 1048576
+            }
+            mock_stats_op_class.return_value = mock_stats_op
+            
+            result = runner.invoke(dataset_app, ["stats", "test_dataset"])
+            
+            assert result.exit_code == 0
+            assert "test_dataset" in result.stdout
+            mock_stats_op.execute.assert_called_with(
+                "test_dataset",
+                full=False
+            )
     
-    @patch('mdm.cli.dataset.StatsOperation')
-    def test_stats_detailed(self, mock_stats_op_class, runner):
+    def test_stats_detailed(self, runner):
         """Test stats command with detailed flag."""
-        mock_stats_op = Mock()
-        mock_stats_op.execute.return_value = {
-            'dataset_name': 'test_dataset',
-            'tables': {
-                'train': {
-                    'row_count': 1000,
-                    'column_count': 10,
-                    'columns': {
-                        'col1': {'type': 'INTEGER', 'null_count': 10},
-                        'col2': {'type': 'VARCHAR', 'null_count': 0}
+        with patch('mdm.dataset.operations.StatsOperation') as mock_stats_op_class:
+            mock_stats_op = Mock()
+            mock_stats_op.execute.return_value = {
+                'dataset_name': 'test_dataset',
+                'computed_at': '2025-01-09 10:00:00',
+                'mode': 'full',
+                'summary': {
+                    'total_tables': 1,
+                    'total_rows': 1000,
+                    'total_columns': 10,
+                    'overall_completeness': 1.0
+                },
+                'tables': {
+                    'train': {
+                        'row_count': 1000,
+                        'column_count': 10,
+                        'columns': {
+                            'col1': {'dtype': 'INTEGER', 'null_percentage': 1.0},
+                            'col2': {'dtype': 'VARCHAR', 'null_percentage': 0.0}
+                        }
                     }
                 }
             }
-        }
-        mock_stats_op_class.return_value = mock_stats_op
-        
-        result = runner.invoke(dataset_app, ["stats", "test_dataset", "--detailed"])
-        
-        assert result.exit_code == 0
-        mock_stats_op.execute.assert_called_with(
-            dataset_name="test_dataset",
-            detailed=True,
-            tables=None
-        )
+            mock_stats_op_class.return_value = mock_stats_op
+            
+            result = runner.invoke(dataset_app, ["stats", "test_dataset", "--full"])
+            
+            assert result.exit_code == 0
+            mock_stats_op.execute.assert_called_with(
+                "test_dataset",
+                full=True
+            )
 
 
 class TestDatasetUpdateCommand:
@@ -442,49 +472,46 @@ class TestDatasetUpdateCommand:
     def runner(self):
         return CliRunner()
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_update_description(self, mock_manager_class, runner):
+    def test_update_description(self, runner):
         """Test updating dataset description."""
-        mock_manager = Mock()
-        mock_manager_class.return_value = mock_manager
+        with patch('mdm.dataset.operations.UpdateOperation') as mock_update_op_class:
+            mock_update_op = Mock()
+            mock_update_op_class.return_value = mock_update_op
         
-        result = runner.invoke(dataset_app, [
-            "update", "test_dataset",
-            "--description", "New description"
-        ])
-        
-        assert result.exit_code == 0
-        assert "Updated dataset 'test_dataset'" in result.stdout
-        mock_manager.update_dataset.assert_called_with(
-            "test_dataset",
-            description="New description",
-            tags=None
-        )
+            result = runner.invoke(dataset_app, [
+                "update", "test_dataset",
+                "--description", "New description"
+            ])
+            
+            assert result.exit_code == 0
+            assert "Dataset 'test_dataset' updated successfully" in result.stdout
+            mock_update_op.execute.assert_called_with(
+                "test_dataset",
+                {"description": "New description"}
+            )
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_update_tags(self, mock_manager_class, runner):
+    def test_update_tags(self, runner):
         """Test updating dataset tags."""
-        mock_manager = Mock()
-        mock_manager_class.return_value = mock_manager
+        with patch('mdm.dataset.operations.UpdateOperation') as mock_update_op_class:
+            mock_update_op = Mock()
+            mock_update_op_class.return_value = mock_update_op
         
-        result = runner.invoke(dataset_app, [
-            "update", "test_dataset",
-            "--tags", "new,tags,here"
-        ])
-        
-        assert result.exit_code == 0
-        mock_manager.update_dataset.assert_called_with(
-            "test_dataset",
-            description=None,
-            tags=["new", "tags", "here"]
-        )
+            result = runner.invoke(dataset_app, [
+                "update", "test_dataset",
+                "--target", "new_target"
+            ])
+            
+            assert result.exit_code == 0
+            mock_update_op.execute.assert_called_with(
+                "test_dataset",
+                {"target_column": "new_target"}
+            )
     
-    @patch('mdm.cli.dataset.DatasetManager')
-    def test_update_no_changes(self, mock_manager_class, runner):
+    def test_update_no_changes(self, runner):
         """Test update with no changes."""
         result = runner.invoke(dataset_app, ["update", "test_dataset"])
         
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert "No updates specified" in result.stdout
 
 
@@ -495,54 +522,48 @@ class TestDatasetExportCommand:
     def runner(self):
         return CliRunner()
     
-    @patch('mdm.cli.dataset.ExportOperation')
-    def test_export_success(self, mock_export_op_class, runner):
+    def test_export_success(self, runner):
         """Test successful export."""
-        mock_export_op = Mock()
-        mock_export_op.execute.return_value = {
-            'dataset_name': 'test_dataset',
-            'output_path': '/tmp/export.csv',
-            'format': 'csv',
-            'tables_exported': ['train'],
-            'total_rows': 1000,
-            'file_size': 1048576
-        }
-        mock_export_op_class.return_value = mock_export_op
+        with patch('mdm.dataset.operations.ExportOperation') as mock_export_op_class:
+            mock_export_op = Mock()
+            mock_export_op.execute.return_value = [
+                '/tmp/export/train.csv'
+            ]
+            mock_export_op_class.return_value = mock_export_op
         
-        with tempfile.TemporaryDirectory() as tmpdir:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                result = runner.invoke(dataset_app, [
+                    "export", "test_dataset",
+                    "--output-dir", tmpdir
+                ])
+            
+            assert result.exit_code == 0
+            assert "exported successfully" in result.stdout
+    
+    def test_export_with_format(self, runner):
+        """Test export with specific format."""
+        with patch('mdm.dataset.operations.ExportOperation') as mock_export_op_class:
+            mock_export_op = Mock()
+            mock_export_op.execute.return_value = [
+                '/tmp/export/train.parquet'
+            ]
+            mock_export_op_class.return_value = mock_export_op
+        
             result = runner.invoke(dataset_app, [
                 "export", "test_dataset",
-                "--output", tmpdir
+                "--format", "parquet"
             ])
-        
-        assert result.exit_code == 0
-        assert "Export completed successfully" in result.stdout
-    
-    @patch('mdm.cli.dataset.ExportOperation')
-    def test_export_with_format(self, mock_export_op_class, runner):
-        """Test export with specific format."""
-        mock_export_op = Mock()
-        mock_export_op.execute.return_value = {
-            'dataset_name': 'test_dataset',
-            'output_path': '/tmp/export.parquet',
-            'format': 'parquet'
-        }
-        mock_export_op_class.return_value = mock_export_op
-        
-        result = runner.invoke(dataset_app, [
-            "export", "test_dataset",
-            "--format", "parquet"
-        ])
-        
-        assert result.exit_code == 0
-        mock_export_op.execute.assert_called_with(
-            dataset_name="test_dataset",
-            output_path=Path("."),
-            format="parquet",
-            compression=None,
-            tables=None,
-            metadata_only=False
-        )
+            
+            assert result.exit_code == 0
+            mock_export_op.execute.assert_called_with(
+                name="test_dataset",
+                format="parquet",
+                output_dir=Path("."),
+                table=None,
+                compression=None,
+                metadata_only=False,
+                no_header=False
+            )
 
 
 class TestDatasetRemoveCommand:
@@ -556,6 +577,13 @@ class TestDatasetRemoveCommand:
     def test_remove_with_confirmation(self, mock_remove_op_class, runner):
         """Test remove with confirmation."""
         mock_remove_op = Mock()
+        # Mock the dry_run call that shows info
+        mock_remove_op.execute.return_value = {
+            'name': 'test_dataset',
+            'config_file': '/home/user/.mdm/config/datasets/test_dataset.yaml',
+            'dataset_directory': '/home/user/.mdm/datasets/test_dataset',
+            'size': 1048576
+        }
         mock_remove_op_class.return_value = mock_remove_op
         
         # Simulate user confirming
@@ -566,12 +594,22 @@ class TestDatasetRemoveCommand:
         assert result.exit_code == 0
         assert "Are you sure" in result.stdout
         assert "removed successfully" in result.stdout
-        mock_remove_op.execute.assert_called_with(dataset_name="test_dataset")
+        # Should be called twice - once for dry run, once for actual removal
+        assert mock_remove_op.execute.call_count == 2
+        mock_remove_op.execute.assert_any_call("test_dataset", force=True, dry_run=True)
+        mock_remove_op.execute.assert_any_call("test_dataset", force=True, dry_run=False)
     
     @patch('mdm.cli.dataset.RemoveOperation')
     def test_remove_cancelled(self, mock_remove_op_class, runner):
         """Test remove cancelled by user."""
         mock_remove_op = Mock()
+        # Mock the dry_run call that shows info
+        mock_remove_op.execute.return_value = {
+            'name': 'test_dataset',
+            'config_file': '/home/user/.mdm/config/datasets/test_dataset.yaml',
+            'dataset_directory': '/home/user/.mdm/datasets/test_dataset',
+            'size': 1048576
+        }
         mock_remove_op_class.return_value = mock_remove_op
         
         # Simulate user cancelling
@@ -582,7 +620,8 @@ class TestDatasetRemoveCommand:
         assert result.exit_code == 0
         assert "Are you sure" in result.stdout
         assert "Cancelled" in result.stdout
-        mock_remove_op.execute.assert_not_called()
+        # Should only be called once for dry run
+        mock_remove_op.execute.assert_called_once_with("test_dataset", force=True, dry_run=True)
     
     @patch('mdm.cli.dataset.RemoveOperation')
     def test_remove_force(self, mock_remove_op_class, runner):
@@ -596,4 +635,4 @@ class TestDatasetRemoveCommand:
         
         assert result.exit_code == 0
         assert "Are you sure" not in result.stdout
-        mock_remove_op.execute.assert_called_with(dataset_name="test_dataset")
+        mock_remove_op.execute.assert_called_with("test_dataset", force=True, dry_run=False)

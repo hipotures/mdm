@@ -635,54 +635,6 @@ def remove_dataset(
 
 
 
-@dataset_app.command("stats")
-def dataset_stats(
-    name: str = typer.Argument(..., help="Dataset name"),
-    full: bool = typer.Option(False, "--full", help="Compute full statistics including correlations"),
-    export: Optional[Path] = typer.Option(None, "--export", help="Export statistics to file"),
-):
-    """Display dataset statistics."""
-    try:
-        stats_op = StatsOperation()
-        stats = stats_op.execute(name, full=full, export=export)
-
-        # Display summary
-        console.print(f"\n[bold cyan]Statistics for dataset: {name}[/bold cyan]")
-        console.print(f"Computed at: {stats['computed_at']}")
-        console.print(f"Mode: {stats['mode']}")
-
-        summary = stats.get('summary', {})
-        console.print("\n[bold]Summary:[/bold]")
-        console.print(f"- Total tables: {summary.get('total_tables', 0)}")
-        console.print(f"- Total rows: {summary.get('total_rows', 0):,}")
-        console.print(f"- Total columns: {summary.get('total_columns', 0)}")
-        console.print(f"- Overall completeness: {summary.get('overall_completeness', 1.0):.1%}")
-
-        # Display table statistics
-        for table_name, table_stats in stats.get('tables', {}).items():
-            console.print(f"\n[bold]Table: {table_name}[/bold]")
-            console.print(f"- Rows: {table_stats.get('row_count', 0):,}")
-            console.print(f"- Columns: {table_stats.get('column_count', 0)}")
-
-            missing = table_stats.get('missing_values', {})
-            if missing.get('total_missing_cells', 0) > 0:
-                console.print(f"- Missing cells: {missing['total_missing_cells']:,} ({missing.get('total_missing_percentage', 0):.1f}%)")
-
-            # Show column statistics in full mode
-            if full and table_stats.get('columns'):
-                console.print("\n  Column Statistics:")
-                for col_name, col_stats in table_stats['columns'].items():
-                    dtype = col_stats.get('dtype', 'unknown')
-                    null_pct = col_stats.get('null_percentage', 0)
-                    console.print(f"  - {col_name} ({dtype}): {null_pct:.1f}% null")
-
-        if export:
-            console.print(f"\n[green]✓[/green] Statistics exported to {export}")
-
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
-
 
 
 
