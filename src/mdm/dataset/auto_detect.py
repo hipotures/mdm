@@ -72,7 +72,10 @@ def extract_target_from_sample_submission(path: Path) -> Optional[str]:
 
 
 def detect_id_columns(df_sample: dict[str, Any], column_names: list[str]) -> list[str]:
-    """Detect potential ID columns from dataframe sample.
+    """Detect potential ID columns based on column name patterns only.
+    
+    Note: We only check column names, not values, to avoid false positives
+    with datetime columns or other unique values.
     
     Args:
         df_sample: Sample of dataframe data (first few rows)
@@ -86,13 +89,6 @@ def detect_id_columns(df_sample: dict[str, Any], column_names: list[str]) -> lis
     for col in column_names:
         if is_id_column(col):
             id_columns.append(col)
-            continue
-
-        # Check data patterns if column name doesn't indicate ID
-        if col in df_sample:
-            values = df_sample[col]
-            if is_id_pattern(values):
-                id_columns.append(col)
 
     return id_columns
 
