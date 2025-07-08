@@ -136,7 +136,7 @@ def mdm_config_file(clean_mdm_env):
                 # If content is a dict, convert to YAML
                 config_file.write_text(yaml.dump(content))
         elif kwargs:
-            # Convert kwargs to YAML
+            # Convert kwargs to YAML directly
             config_file.write_text(yaml.dump(kwargs))
         return config_file
     

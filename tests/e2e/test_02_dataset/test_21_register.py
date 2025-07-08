@@ -268,7 +268,8 @@ class TestDatasetRegistration:
             "--target", "value"
         ], check=False)
         assert result.returncode != 0
-        assert "already exists" in result.stderr
+        # Error message is in stdout, not stderr
+        assert "already exists" in result.stdout
         
         # Register with force - should succeed
         result = run_mdm([
