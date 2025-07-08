@@ -1,1 +1,0 @@
-Test verified: test_export_with_format is working correctly

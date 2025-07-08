@@ -150,12 +150,21 @@ class MDMClient:
 
         backend = self.manager.get_backend(name)
 
-        # Load train table
+        # Load train table (or data table for single-file datasets)
         train_table = dataset_info.tables.get("train")
         if not train_table:
-            raise ValueError(f"Dataset '{name}' has no train table")
+            # Check if this is a single-file dataset with 'data' table
+            train_table = dataset_info.tables.get("data")
+            if not train_table:
+                raise ValueError(f"Dataset '{name}' has no train or data table")
 
-        train_df = backend.read_table(train_table)
+        # Get engine for the dataset
+        db_path = dataset_info.database.get('path')
+        if not db_path:
+            raise ValueError(f"No database path found for dataset '{name}'")
+        
+        engine = backend.get_engine(db_path)
+        train_df = backend.read_table_to_dataframe(train_table, engine)
 
         # Sample if requested
         if sample_size and len(train_df) > sample_size:
@@ -165,7 +174,7 @@ class MDMClient:
         test_df = None
         test_table = dataset_info.tables.get("test")
         if test_table:
-            test_df = backend.read_table(test_table)
+            test_df = backend.read_table_to_dataframe(test_table, engine)
             if sample_size and test_df is not None and len(test_df) > sample_size:
                 test_df = test_df.sample(n=sample_size, random_state=42)
 
@@ -197,7 +206,14 @@ class MDMClient:
             )
 
         backend = self.manager.get_backend(name)
-        return backend.read_table(table_full_name)
+        
+        # Get engine for the dataset
+        db_path = dataset_info.database.get('path')
+        if not db_path:
+            raise ValueError(f"No database path found for dataset '{name}'")
+        
+        engine = backend.get_engine(db_path)
+        return backend.read_table_to_dataframe(table_full_name, engine)
 
     def query_dataset(self, name: str, query: str) -> pd.DataFrame:
         """Execute SQL query on dataset.

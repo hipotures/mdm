@@ -1,1 +1,0 @@
-Test verified: test_stats_success is working correctly

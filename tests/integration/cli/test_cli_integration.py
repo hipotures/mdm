@@ -306,7 +306,7 @@ class TestCLIWorkflows:
         ])
         assert result.exit_code == 0
         assert "train:" in result.stdout
-        assert "val:" in result.stdout
+        assert "validation:" in result.stdout
         assert "test:" in result.stdout
         
         # Cross-validation
