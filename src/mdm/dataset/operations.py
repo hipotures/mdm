@@ -111,6 +111,11 @@ class ListOperation(DatasetOperation):
 
             # Extract essential fields
             stats = data.get('metadata', {}).get('statistics', {})
+            
+            # Get dataset backend and check compatibility
+            dataset_backend = data.get('database', {}).get('backend', 'unknown')
+            current_backend = self.config.database.default_backend
+            
             return {
                 'name': data.get('name', yaml_file.stem),
                 'display_name': data.get('display_name', data.get('name', yaml_file.stem)),
@@ -125,6 +130,9 @@ class ListOperation(DatasetOperation):
                 'source': data.get('source', 'Unknown'),
                 'row_count': stats.get('row_count'),  # From saved statistics
                 'size': stats.get('memory_size_bytes'),  # Memory size from statistics
+                'backend': dataset_backend,  # Add backend info
+                'backend_compatible': dataset_backend == current_backend,  # Check compatibility
+                'current_backend': current_backend,  # For display purposes
             }
         except Exception as e:
             logger.error(f"Failed to parse {yaml_file}: {e}")
@@ -191,6 +199,17 @@ class InfoOperation(DatasetOperation):
         try:
             with open(yaml_file) as f:
                 data = yaml.safe_load(f)
+            
+            # Check backend compatibility
+            dataset_backend = data.get('database', {}).get('backend', 'unknown')
+            current_backend = self.config.database.default_backend
+            
+            if dataset_backend != current_backend:
+                raise DatasetError(
+                    f"Dataset '{name}' uses '{dataset_backend}' backend, "
+                    f"but current backend is '{current_backend}'. "
+                    f"Change default_backend in ~/.mdm/mdm.yaml to '{dataset_backend}' to use this dataset."
+                )
 
             # Add dataset directory info
             dataset_dir = self.datasets_dir / name

@@ -676,6 +676,7 @@
 - Tested with both ERROR and DEBUG log levels
 - ~~Result: Log file never created~~ **FIXED 2025-07-08**
 - **Finding**: Log file now created with rotation support via loguru
+- Verified: File logging works correctly with environment variable override (MDM_LOGGING_FILE)
 
 ### Test 43: Date filter - exact date (line 250) ⚠️
 - Tested: mdm dataset list --filter "registered_at>2025-07-07"
@@ -1009,9 +1010,9 @@
 
 ### Overall Test Progress Updated
 - Total tests completed: 90 (from 10 sessions)
-- Total issues found: 47 → 36 (11 fixed - 4 CLI params + 2 logging + 3 SQLite + 2 export)
-- Total features working: 43 → 54 (11 fixed)
-- Success rate: 48% → 60%
+- Total issues found: 47 → 30 (17 fixed - 4 CLI params + 2 logging + 3 SQLite + 2 export + 4 file support + 2 type detection)
+- Total features working: 43 → 60 (17 fixed)
+- Success rate: 48% → 67%
 - Test coverage: 203/210 checkable items (96.7%)
 
 ### Major Fixes Applied (2025-07-08)
@@ -1044,3 +1045,69 @@
 - Export format now uses config.export.default_format when not specified
 - Export compression now uses config.export.compression when not specified
 - Solution: Read defaults from configuration in ExportOperation
+
+✅ **FIXED**: Feature engineering enabled setting (2025-07-08)
+- Issue: `feature_engineering.enabled: false` was being ignored
+- Fix: Modified CLI to only pass `generate_features` parameter when `--no-features` flag is used
+- Solution: Configuration setting is now properly respected, with CLI flag as override
+
+✅ **FIXED**: Custom features loading (2025-07-08)
+- Issue: Custom features weren't being loaded from config directory
+- Fix: Fixed path construction to use `base_path / config.paths.custom_features_path`
+- Solution: Custom features now load from `~/.mdm/config/custom_features/{dataset_name}.py`
+- Format: Must define `CustomFeatureOperations` class inheriting from `BaseDomainFeatures`
+
+✅ **FIXED**: Compressed file support (2025-07-08)
+- Issue: No support for compressed CSV files (.csv.gz, .tsv.gz)
+- Fix: Added support for gzip-compressed CSV/TSV files with chunked reading
+- Solution: Can now register datasets with .csv.gz and .tsv.gz files
+
+✅ **FIXED**: Excel file support (2025-07-08)
+- Issue: No support for Excel files (.xlsx, .xls)
+- Fix: Added Excel file support with openpyxl dependency
+- Solution: Can now register datasets with .xlsx and .xls files
+
+✅ **FIXED**: Automatic datetime detection (2025-07-08)
+- Issue: Datetime columns were not automatically detected during registration
+- Fix: Implemented sample-based datetime detection in registrar
+- Solution: Datetime columns are now detected with 80% success rate threshold
+
+✅ **FIXED**: Configurable categorical detection (2025-07-08)
+- Issue: No automatic detection of categorical columns based on cardinality
+- Fix: Added TypeDetectionConfig with categorical_threshold (default: 20)
+- Solution: Text columns with unique values <= threshold are treated as categorical
+
+## Final Test Summary (2025-07-08)
+
+### Overall Statistics
+- **Total Test Items**: 210 from MANUAL_TEST_CHECKLIST.md
+- **Tests Completed**: 90 (42.9%)
+- **Test Coverage**: 203/210 checkable items (96.7%)
+- **Success Rate**: 67% (60 working / 90 tested)
+
+### Major Improvements Since Session Start
+- **Initial Issues Found**: 47
+- **Issues Fixed**: 17
+- **Remaining Issues**: 30
+- **Success Rate Improvement**: 48% → 67%
+
+### Key Fixes Applied Today (2025-07-08)
+1. **Configuration System**: CLI parameters, SQLAlchemy echo, SQLite pragmas, export defaults
+2. **Logging System**: Unified loguru migration, file logging, format configuration
+3. **File Support**: Added compressed CSV (.csv.gz) and Excel (.xlsx) support
+4. **Type Detection**: Automatic datetime and configurable categorical detection
+5. **Feature Engineering**: Custom features loading, configuration respect
+
+### Remaining Major Issues
+1. **Feature Engineering**: Temporal, text, and categorical transformers not generating features
+2. **Validation System**: Duplicate detection and signal filtering not implemented
+3. **CLI Options**: Many documented options missing (--source, --skip-analysis, --dry-run)
+4. **Backend Switching**: Cannot properly switch between SQLite/DuckDB/PostgreSQL
+5. **Search/Filter**: Advanced filtering and not-equal operators not working
+
+### System Status
+- **Core Functionality**: ✅ Stable and working
+- **Data Import/Export**: ✅ Fully functional with multiple formats
+- **Configuration**: ✅ Complete hierarchy working (defaults < YAML < env vars < CLI)
+- **Feature Engineering**: ⚠️ Basic framework exists but transformers need implementation
+- **Production Ready**: ✅ For basic dataset management, ⚠️ For advanced ML features

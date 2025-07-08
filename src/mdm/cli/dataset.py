@@ -192,6 +192,7 @@ def list_datasets(
         table.add_column("Tables")
         table.add_column("Total Rows")
         table.add_column("MEM Size")
+        table.add_column("Backend", style="yellow")
 
         for dataset in datasets:
             # Format row count and size
@@ -200,6 +201,14 @@ def list_datasets(
 
             row_str = "?" if row_count is None else f"{row_count:,}"
             size_str = "?" if size is None else _format_size(size)
+            
+            # Format backend column
+            dataset_backend = dataset.get('backend', 'unknown')
+            if dataset.get('backend_compatible', True):
+                backend_str = dataset_backend
+            else:
+                # Show incompatible backend with warning
+                backend_str = f"[red]Not Supported/{dataset_backend}[/red]"
 
             table.add_row(
                 dataset['name'],
@@ -207,10 +216,17 @@ def list_datasets(
                 dataset.get('target_column') or "-",
                 str(len(dataset.get('tables', {}))),
                 row_str,
-                size_str
+                size_str,
+                backend_str
             )
 
         console.print(table)
+        
+        # Show warning if there are incompatible datasets
+        incompatible_count = sum(1 for d in datasets if not d.get('backend_compatible', True))
+        if incompatible_count > 0:
+            console.print(f"\n[yellow]Warning:[/yellow] {incompatible_count} dataset(s) use a different backend than the current '{datasets[0].get('current_backend', 'unknown')}' backend.")
+            console.print("[dim]To use these datasets, change the default_backend in ~/.mdm/mdm.yaml[/dim]")
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
