@@ -12,6 +12,18 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+try:
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich import print as rprint
+    RICH_AVAILABLE = True
+    console = Console()
+except ImportError:
+    RICH_AVAILABLE = False
+    console = None
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -453,6 +465,35 @@ def main():
     )
     
     args = parser.parse_args()
+    
+    # Display mode information
+    if args.create_issues:
+        if args.dry_run:
+            if RICH_AVAILABLE:
+                console.print(Panel.fit(
+                    "[bold yellow]DRY RUN MODE[/bold yellow]\n"
+                    "Showing what would be created without actually creating issues.\n"
+                    "Use --no-dry-run to actually create issues.",
+                    title="Mode: DRY RUN",
+                    border_style="yellow"
+                ))
+            else:
+                print("\n" + "="*80)
+                print("DRY RUN MODE - No issues will be created")
+                print("Use --no-dry-run to actually create issues")
+                print("="*80 + "\n")
+        else:
+            if RICH_AVAILABLE:
+                console.print(Panel.fit(
+                    "[bold red]LIVE MODE[/bold red]\n"
+                    "Issues will be created on GitHub!",
+                    title="Mode: LIVE",
+                    border_style="red"
+                ))
+            else:
+                print("\n" + "="*80)
+                print("LIVE MODE - Issues WILL be created on GitHub!")
+                print("="*80 + "\n")
     
     # Run tests and collect failures
     failures = run_tests_and_collect_failures()

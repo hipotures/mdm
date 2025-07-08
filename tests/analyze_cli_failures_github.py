@@ -12,6 +12,18 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+try:
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+    from rich import print as rprint
+    RICH_AVAILABLE = True
+    console = Console()
+except ImportError:
+    RICH_AVAILABLE = False
+    console = None
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -71,8 +83,12 @@ def run_tests_and_collect_failures():
         ("tests/integration/cli/test_cli_real_coverage.py", "CLI Real Coverage"),
     ]
     
-    print("Analyzing CLI test failures...")
-    print("=" * 80)
+    if RICH_AVAILABLE:
+        console.print("\n[bold]Analyzing CLI test failures...[/bold]")
+        console.rule()
+    else:
+        print("Analyzing CLI test failures...")
+        print("=" * 80)
     
     for test_file, category_name in test_categories:
         test_path = project_root / test_file
@@ -332,27 +348,80 @@ def main():
                        help='Actually create issues (use with caution)')
     args = parser.parse_args()
     
+    # Display mode information
+    if args.create_issues:
+        if args.dry_run:
+            if RICH_AVAILABLE:
+                console.print(Panel.fit(
+                    "[bold yellow]DRY RUN MODE[/bold yellow]\n"
+                    "Showing what would be created without actually creating issues.\n"
+                    "Use --no-dry-run to actually create issues.",
+                    title="Mode: DRY RUN",
+                    border_style="yellow"
+                ))
+            else:
+                print("\n" + "="*80)
+                print("DRY RUN MODE - No issues will be created")
+                print("Use --no-dry-run to actually create issues")
+                print("="*80 + "\n")
+        else:
+            if RICH_AVAILABLE:
+                console.print(Panel.fit(
+                    "[bold red]LIVE MODE[/bold red]\n"
+                    "Issues will be created on GitHub!",
+                    title="Mode: LIVE",
+                    border_style="red"
+                ))
+            else:
+                print("\n" + "="*80)
+                print("LIVE MODE - Issues WILL be created on GitHub!")
+                print("="*80 + "\n")
+    
     # Collect failures
     failures = run_tests_and_collect_failures()
     
     # Summary
-    print("\n" + "=" * 80)
-    print("SUMMARY")
-    print("=" * 80)
+    if RICH_AVAILABLE:
+        console.print("\n[bold]SUMMARY[/bold]")
+        console.rule()
+    else:
+        print("\n" + "=" * 80)
+        print("SUMMARY")
+        print("=" * 80)
     
     total_failures = sum(len(f) for f in failures.values())
-    print(f"Total failures: {total_failures}")
     
     if total_failures == 0:
-        print("No failures found! All CLI tests are passing.")
+        if RICH_AVAILABLE:
+            console.print("[bold green]✓ No failures found! All CLI tests are passing.[/bold green]")
+        else:
+            print("No failures found! All CLI tests are passing.")
         return
     
-    # Display failures by category
-    for category, category_failures in failures.items():
-        if category_failures:
-            print(f"\n{category}: {len(category_failures)} failures")
-            for failure in category_failures:
-                print(f"  - {failure.test_name}: {failure.error_type}")
+    if RICH_AVAILABLE:
+        console.print(f"[bold red]Total failures: {total_failures}[/bold red]\n")
+        
+        # Create a table for failures
+        table = Table(title="Test Failures by Category")
+        table.add_column("Category", style="cyan", no_wrap=True)
+        table.add_column("Test Name", style="magenta")
+        table.add_column("Error Type", style="red")
+        
+        for category, category_failures in failures.items():
+            if category_failures:
+                for failure in category_failures:
+                    table.add_row(category, failure.test_name, failure.error_type)
+        
+        console.print(table)
+    else:
+        print(f"Total failures: {total_failures}")
+        
+        # Display failures by category
+        for category, category_failures in failures.items():
+            if category_failures:
+                print(f"\n{category}: {len(category_failures)} failures")
+                for failure in category_failures:
+                    print(f"  - {failure.test_name}: {failure.error_type}")
     
     # Create GitHub issues if requested
     if args.create_issues and GITHUB_AVAILABLE:
