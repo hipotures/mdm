@@ -123,10 +123,21 @@ def clean_mdm_env():
 @pytest.fixture
 def mdm_config_file(clean_mdm_env):
     """Create mdm.yaml config file in test environment."""
+    import yaml
     config_file = clean_mdm_env / "mdm.yaml"
     
-    def _create_config(content: str):
-        config_file.write_text(content)
+    def _create_config(content=None, **kwargs):
+        """Create config from either string content or keyword arguments."""
+        if content is not None:
+            # If content is a string, write it directly
+            if isinstance(content, str):
+                config_file.write_text(content)
+            else:
+                # If content is a dict, convert to YAML
+                config_file.write_text(yaml.dump(content))
+        elif kwargs:
+            # Convert kwargs to YAML
+            config_file.write_text(yaml.dump(kwargs))
         return config_file
     
     return _create_config
