@@ -58,6 +58,30 @@ def setup_logging():
     # Set specific loggers if needed
     logging.getLogger('mdm').setLevel(getattr(logging, log_level.upper()))
     
+    # Configure SQLAlchemy logging based on echo setting
+    sqlalchemy_echo = config.database.sqlalchemy.echo
+    if sqlalchemy_echo and log_level.upper() in ['DEBUG', 'INFO']:
+        # When echo is enabled and log level is DEBUG or INFO, show SQL queries
+        # Create a special console handler for SQLAlchemy that shows INFO messages
+        sql_console_handler = logging.StreamHandler()
+        sql_console_handler.setLevel(logging.INFO)
+        sql_console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        
+        # Configure SQLAlchemy loggers
+        sql_logger = logging.getLogger('sqlalchemy.engine')
+        sql_logger.setLevel(logging.INFO)
+        sql_logger.addHandler(sql_console_handler)
+        sql_logger.propagate = False  # Don't propagate to root logger
+        
+        pool_logger = logging.getLogger('sqlalchemy.pool')
+        pool_logger.setLevel(logging.INFO)
+        pool_logger.addHandler(sql_console_handler)
+        pool_logger.propagate = False
+    else:
+        # When echo is disabled or log level is WARNING or higher, suppress SQLAlchemy logs
+        logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+        logging.getLogger('sqlalchemy.pool').setLevel(logging.WARNING)
+    
     # Configure loguru for feature modules
     try:
         from loguru import logger as loguru_logger
