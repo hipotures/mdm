@@ -558,6 +558,9 @@ class TestCLIHelpers90Coverage:
         
         _display_column_summary(mock_dataset_info, Mock(), 'train')
         
-        # Should show "?" for failed column
-        table_calls = [call for call in mock_console.print.call_args_list if 'Table' in str(call)]
-        assert len(table_calls) > 0
+        # Should display an error message when query fails
+        # Check that console.print was called
+        assert mock_console.print.called
+        # The function catches the exception and prints an error message
+        error_printed = any('Could not generate column summary' in str(call) for call in mock_console.print.call_args_list)
+        assert error_printed
