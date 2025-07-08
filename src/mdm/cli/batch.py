@@ -152,6 +152,10 @@ def batch_stats(
                 progress.advance(task)
 
     # Display summary
+    if not results:
+        console.print("\n[yellow]No valid datasets found[/yellow]")
+        return
+    
     console.print("\n[bold]Statistics Summary:[/bold]")
 
     for dataset_name, stats in results:
