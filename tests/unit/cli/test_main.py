@@ -28,6 +28,8 @@ class TestSetupLogging:
         mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = False
         mock_config.paths.logs_path = "logs"
+        # Add model_dump method to return empty dict
+        mock_config.model_dump.return_value = {}
         return mock_config
     
     @pytest.fixture

@@ -385,7 +385,7 @@ def main():
     parser.add_argument('--create-issues', action='store_true',
                        help='Create GitHub issues for failures')
     parser.add_argument('--limit', type=int, default=10,
-                       help='Maximum number of issues to create (default: 10)')
+                       help='Maximum number of issues to create (default: 10, 0 = no limit)')
     parser.add_argument('--dry-run', action='store_true', default=True,
                        help='Show what would be created without creating (default: True)')
     parser.add_argument('--no-dry-run', dest='dry_run', action='store_false',
