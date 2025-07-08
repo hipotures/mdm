@@ -30,7 +30,7 @@ class DatasetExporter:
     def export(
         self,
         dataset_name: str,
-        format: str = "csv",
+        format: str,
         output_dir: Optional[Path] = None,
         table: Optional[str] = None,
         compression: Optional[str] = None,

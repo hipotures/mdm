@@ -365,7 +365,7 @@ class ExportOperation(DatasetOperation):
     def execute(
         self,
         name: str,
-        format: str = "csv",
+        format: Optional[str] = None,
         output_dir: Optional[Path] = None,
         table: Optional[str] = None,
         compression: Optional[str] = None,
@@ -376,16 +376,22 @@ class ExportOperation(DatasetOperation):
 
         Args:
             name: Dataset name
-            format: Export format (csv, parquet, json)
+            format: Export format (csv, parquet, json). If None, uses config default
             output_dir: Output directory
             table: Specific table to export (default: all)
-            compression: Compression type
+            compression: Compression type. If None, uses config default
             metadata_only: Export only metadata
             no_header: Exclude header (CSV only)
 
         Returns:
             List of exported file paths
         """
+        # Use config defaults if not specified
+        if format is None:
+            format = self.config.export.default_format
+        if compression is None:
+            compression = self.config.export.compression
+            
         exporter = DatasetExporter()
         return exporter.export(
             dataset_name=name,

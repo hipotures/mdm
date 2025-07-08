@@ -439,7 +439,7 @@ def export_dataset(
     name: str = typer.Argument(..., help="Dataset name"),
     output_dir: Path = typer.Option(Path(), "--output-dir", "-o", help="Output directory"),
     table: Optional[str] = typer.Option(None, "--table", help="Export specific table only"),
-    format: str = typer.Option("csv", "--format", "-f", help="Output format: csv, parquet, json"),
+    format: Optional[str] = typer.Option(None, "--format", "-f", help="Output format: csv, parquet, json (default: from config)"),
     compression: Optional[str] = typer.Option(None, "--compression", help="Compression type"),
     metadata_only: bool = typer.Option(False, "--metadata-only", help="Export only metadata"),
     no_header: bool = typer.Option(False, "--no-header", help="Exclude header row (CSV only)"),
