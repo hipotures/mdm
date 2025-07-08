@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import yaml
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from ydata_profiling import ProfileReport
 
 from mdm.config import get_config_manager
@@ -283,9 +284,21 @@ class DatasetRegistrar:
         files: Dict[str, Path],
         db_info: Dict[str, Any]
     ) -> Dict[str, str]:
-        """Step 7: Load data files into database."""
+        """Step 7: Load data files into database with true batch processing.
+        
+        This implementation loads data in chunks to save memory. Each chunk is:
+        1. Loaded from file
+        2. Saved to database
+        3. Released from memory
+        
+        Column type detection happens on the first chunk only.
+        Feature generation happens later on the complete dataset in the database.
+        """
         backend = BackendFactory.create(db_info['backend'], db_info)
         table_mappings = {}
+        
+        # Store column types detected from first chunk for later use
+        self._detected_column_types = {}
 
         try:
             # Get database path/connection string
@@ -309,27 +322,156 @@ class DatasetRegistrar:
                 table_name = file_key
                 logger.info(f"Loading {file_path} as table '{table_name}'")
 
-                # Read and load based on file type
-                if file_path.suffix.lower() in ['.csv', '.tsv']:
-                    delimiter = detect_delimiter(file_path)
-                    df = pd.read_csv(file_path, delimiter=delimiter, parse_dates=True)
-                elif file_path.suffix.lower() == '.parquet':
-                    df = pd.read_parquet(file_path)
-                elif file_path.suffix.lower() == '.json':
-                    df = pd.read_json(file_path)
-                else:
-                    logger.warning(f"Unsupported file type: {file_path}")
-                    continue
-
-                # Log column information
-                logger.debug(f"Columns in {table_name}: {list(df.columns)}")
-                logger.debug(f"Data types: {df.dtypes.to_dict()}")
+                # Read and load based on file type with batch processing
+                batch_size = self.config.performance.batch_size
                 
-                # Load into database
-                backend.create_table_from_dataframe(df, table_name, engine, if_exists='replace')
+                # Create progress bar
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TaskProgressColumn(),
+                    TimeRemainingColumn(),
+                    console=None,  # Use default console
+                ) as progress:
+                    
+                    if file_path.suffix.lower() in ['.csv', '.tsv']:
+                        delimiter = detect_delimiter(file_path)
+                        
+                        # First, get total row count for progress bar
+                        total_rows = sum(1 for _ in open(file_path)) - 1  # Subtract header
+                        
+                        # Create progress task
+                        task = progress.add_task(
+                            f"Loading {file_path.name} into {table_name}",
+                            total=total_rows
+                        )
+                        
+                        # Read in chunks
+                        first_chunk = True
+                        chunk_count = 0
+                        for chunk_df in pd.read_csv(
+                            file_path, 
+                            delimiter=delimiter, 
+                            parse_dates=True,
+                            chunksize=batch_size
+                        ):
+                            chunk_count += 1
+                            logger.debug(f"Processing chunk {chunk_count} with {len(chunk_df)} rows")
+                            
+                            if first_chunk:
+                                # Log column information from first chunk
+                                logger.debug(f"Columns in {table_name}: {list(chunk_df.columns)}")
+                                logger.debug(f"Data types: {chunk_df.dtypes.to_dict()}")
+                                
+                                # Detect column types on first chunk (for later feature generation)
+                                if table_name == 'train':  # Focus on train table for type detection
+                                    self._detect_and_store_column_types(chunk_df, table_name)
+                                
+                                # Create table with first chunk
+                                backend.create_table_from_dataframe(
+                                    chunk_df, table_name, engine, if_exists='replace'
+                                )
+                                first_chunk = False
+                            else:
+                                # Append subsequent chunks
+                                backend.create_table_from_dataframe(
+                                    chunk_df, table_name, engine, if_exists='append'
+                                )
+                            
+                            # Update progress
+                            progress.update(task, advance=len(chunk_df))
+                            
+                            # Explicitly free memory
+                            del chunk_df
+                            
+                    elif file_path.suffix.lower() == '.parquet':
+                        # Parquet files can be read in batches too
+                        df = pd.read_parquet(file_path)
+                        total_rows = len(df)
+                        
+                        task = progress.add_task(
+                            f"Loading {file_path.name} into {table_name}",
+                            total=total_rows
+                        )
+                        
+                        # Detect column types on first batch
+                        if table_name == 'train' and len(df) > 0:
+                            first_batch = df.iloc[:min(batch_size, len(df))]
+                            self._detect_and_store_column_types(first_batch, table_name)
+                        
+                        # Process in batches
+                        for i in range(0, total_rows, batch_size):
+                            batch_df = df.iloc[i:i + batch_size]
+                            batch_num = (i // batch_size) + 1
+                            logger.debug(f"Processing batch {batch_num} (rows {i}:{i+len(batch_df)}) for Parquet file")
+                            
+                            if i == 0:
+                                logger.debug(f"Columns in {table_name}: {list(batch_df.columns)}")
+                                logger.debug(f"Data types: {batch_df.dtypes.to_dict()}")
+                                backend.create_table_from_dataframe(
+                                    batch_df, table_name, engine, if_exists='replace'
+                                )
+                            else:
+                                backend.create_table_from_dataframe(
+                                    batch_df, table_name, engine, if_exists='append'
+                                )
+                            
+                            progress.update(task, advance=len(batch_df))
+                            
+                    elif file_path.suffix.lower() == '.json':
+                        # JSON files typically need to be loaded fully
+                        df = pd.read_json(file_path)
+                        total_rows = len(df)
+                        
+                        task = progress.add_task(
+                            f"Loading {file_path.name} into {table_name}",
+                            total=total_rows
+                        )
+                        
+                        logger.debug(f"Columns in {table_name}: {list(df.columns)}")
+                        logger.debug(f"Data types: {df.dtypes.to_dict()}")
+                        
+                        # Detect column types on first batch
+                        if table_name == 'train' and len(df) > 0:
+                            first_batch = df.iloc[:min(batch_size, len(df))]
+                            self._detect_and_store_column_types(first_batch, table_name)
+                        
+                        # Process in batches
+                        for i in range(0, total_rows, batch_size):
+                            batch_df = df.iloc[i:i + batch_size]
+                            
+                            if i == 0:
+                                backend.create_table_from_dataframe(
+                                    batch_df, table_name, engine, if_exists='replace'
+                                )
+                            else:
+                                backend.create_table_from_dataframe(
+                                    batch_df, table_name, engine, if_exists='append'
+                                )
+                            
+                            progress.update(task, advance=len(batch_df))
+                            
+                    else:
+                        logger.warning(f"Unsupported file type: {file_path}")
+                        continue
+                
                 table_mappings[file_key] = table_name
-
-                logger.info(f"Loaded {len(df)} rows into '{table_name}'")
+                
+                # Get final row count from database
+                try:
+                    if hasattr(backend, 'query'):
+                        row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
+                        if row_count_result is not None and not row_count_result.empty:
+                            row_count = int(row_count_result.iloc[0]['count'])
+                            logger.info(f"Loaded {row_count} rows into '{table_name}'")
+                    else:
+                        # Alternative: use pandas to read and count
+                        count_df = pd.read_sql_query(f"SELECT COUNT(*) as count FROM {table_name}", engine)
+                        row_count = int(count_df.iloc[0]['count'])
+                        logger.info(f"Loaded {row_count} rows into '{table_name}'")
+                except Exception as e:
+                    logger.info(f"Loaded data into '{table_name}'")
 
         except Exception as e:
             raise DatasetError(f"Failed to load data files: {e}")
@@ -337,6 +479,95 @@ class DatasetRegistrar:
             backend.close_connections()
 
         return table_mappings
+    
+    def _detect_and_store_column_types(self, df: pd.DataFrame, table_name: str) -> None:
+        """Detect column types from first chunk using ydata-profiling.
+        
+        This runs on the first chunk only to save memory.
+        Results are stored for later use in feature generation.
+        """
+        logger.info(f"Detecting column types from first chunk of {table_name}")
+        
+        try:
+            # Suppress ydata-profiling output
+            import os
+            import warnings
+            old_tqdm = os.environ.get('TQDM_DISABLE')
+            os.environ['TQDM_DISABLE'] = '1'
+            
+            # Also suppress warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                
+                # Create minimal profile with completely suppressed output
+                # Disable all tqdm globally
+                import tqdm
+                import sys
+                from io import StringIO
+                
+                # Save original tqdm
+                original_tqdm = tqdm.tqdm
+                original_trange = tqdm.trange
+                
+                # Create dummy tqdm that does nothing
+                def dummy_tqdm(*args, **kwargs):
+                    # Return the first argument if it's an iterable, otherwise empty list
+                    if args:
+                        return args[0]
+                    return []
+                
+                # Replace tqdm temporarily
+                tqdm.tqdm = dummy_tqdm
+                tqdm.trange = dummy_tqdm
+                
+                # Also redirect stdout to suppress any remaining output
+                old_stdout = sys.stdout
+                sys.stdout = StringIO()
+                
+                try:
+                    profile = ProfileReport(
+                        df,
+                        minimal=True,
+                        progress_bar=False
+                    )
+                finally:
+                    # Restore tqdm and stdout
+                    tqdm.tqdm = original_tqdm
+                    tqdm.trange = original_trange
+                    sys.stdout = old_stdout
+                
+                # Extract column types
+                description = profile.get_description()
+                variables = description.variables
+                
+                for col_name, var_info in variables.items():
+                    if isinstance(var_info, dict):
+                        var_type = var_info.get('type', 'Unsupported')
+                    else:
+                        var_type = getattr(var_info, 'type', 'Unsupported')
+                    
+                    # Store the detected type
+                    self._detected_column_types[col_name] = var_type
+                    
+            # Restore TQDM setting
+            if old_tqdm is None:
+                os.environ.pop('TQDM_DISABLE', None)
+            else:
+                os.environ['TQDM_DISABLE'] = old_tqdm
+                
+            logger.info(f"Detected {len(self._detected_column_types)} column types")
+            
+        except Exception as e:
+            logger.warning(f"Failed to detect column types with ydata-profiling: {e}")
+            # Store basic types as fallback
+            for col in df.columns:
+                dtype = str(df[col].dtype)
+                if 'int' in dtype or 'float' in dtype:
+                    self._detected_column_types[col] = 'Numeric'
+                elif 'datetime' in dtype:
+                    self._detected_column_types[col] = 'DateTime'
+                else:
+                    self._detected_column_types[col] = 'Categorical'
 
     def _analyze_columns(
         self,
@@ -467,6 +698,9 @@ class DatasetRegistrar:
     ) -> Dict[str, str]:
         """Generate feature tables for the dataset.
         
+        NOTE: This is called AFTER all data is loaded, so feature generation
+        happens on the complete dataset in the database, not in memory.
+        
         Args:
             dataset_name: Name of the dataset
             db_info: Database connection info
@@ -557,41 +791,115 @@ class DatasetRegistrar:
             
             # Create minimal profile for type detection
             try:
-                profile = ProfileReport(
-                    df,
-                    minimal=True,
-                    type_schema=type_schema
-                )
-                
-                # Extract column types from profile
-                description = profile.get_description()
-                variables = description.variables
-                
-                for col_name, var_info in variables.items():
-                    if isinstance(var_info, dict):
-                        var_type = var_info.get('type', 'Unsupported')
-                    else:
-                        var_type = getattr(var_info, 'type', 'Unsupported')
+                # Show our own progress indicator
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=None,
+                    transient=True
+                ) as progress:
+                    task = progress.add_task("Analyzing column types with ydata-profiling...", total=None)
                     
-                    # Map ydata-profiling types to MDM ColumnType
-                    if col_name in id_columns:
-                        column_types[col_name] = ColumnType.ID
-                    elif col_name == target_column:
-                        column_types[col_name] = ColumnType.TARGET
-                    elif var_type == "Numeric":
-                        column_types[col_name] = ColumnType.NUMERIC
-                    elif var_type == "Categorical":
-                        column_types[col_name] = ColumnType.CATEGORICAL
-                    elif var_type == "DateTime":
-                        column_types[col_name] = ColumnType.DATETIME
-                    elif var_type in ["Text", "URL", "Path", "File"]:
-                        column_types[col_name] = ColumnType.TEXT
-                    elif var_type == "Boolean":
-                        # Treat boolean as categorical
-                        column_types[col_name] = ColumnType.CATEGORICAL
-                    else:
-                        # Default to categorical for unknown types
-                        column_types[col_name] = ColumnType.CATEGORICAL
+                    # Suppress tqdm progress bars from ydata-profiling
+                    import os
+                    old_tqdm = os.environ.get('TQDM_DISABLE')
+                    os.environ['TQDM_DISABLE'] = '1'
+                    
+                    try:
+                        # Use stored column types if available
+                        if hasattr(self, '_detected_column_types') and self._detected_column_types:
+                            # We already have column types from first chunk
+                            logger.info("Using column types detected during data loading")
+                            for col_name, var_type in self._detected_column_types.items():
+                                if col_name not in df.columns:
+                                    continue
+                                    
+                                # Map to MDM ColumnType
+                                if col_name in id_columns:
+                                    column_types[col_name] = ColumnType.ID
+                                elif col_name == target_column:
+                                    column_types[col_name] = ColumnType.TARGET
+                                elif var_type == "Numeric":
+                                    column_types[col_name] = ColumnType.NUMERIC
+                                elif var_type == "Categorical":
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                                elif var_type == "DateTime":
+                                    column_types[col_name] = ColumnType.DATETIME
+                                elif var_type in ["Text", "URL", "Path", "File"]:
+                                    column_types[col_name] = ColumnType.TEXT
+                                elif var_type == "Boolean":
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                                else:
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                        else:
+                            # Fallback: run profiling on sample
+                            # Suppress all output
+                            import tqdm
+                            import sys
+                            from io import StringIO
+                            
+                            original_tqdm = tqdm.tqdm
+                            original_trange = tqdm.trange
+                            
+                            def dummy_tqdm(*args, **kwargs):
+                                if args:
+                                    return args[0]
+                                return []
+                            
+                            tqdm.tqdm = dummy_tqdm
+                            tqdm.trange = dummy_tqdm
+                            old_stdout = sys.stdout
+                            sys.stdout = StringIO()
+                            
+                            try:
+                                profile = ProfileReport(
+                                    df,
+                                    minimal=True,
+                                    type_schema=type_schema,
+                                    progress_bar=False
+                                )
+                            finally:
+                                tqdm.tqdm = original_tqdm
+                                tqdm.trange = original_trange
+                                sys.stdout = old_stdout
+                            
+                            # Extract column types from profile
+                            description = profile.get_description()
+                            variables = description.variables
+                            
+                            for col_name, var_info in variables.items():
+                                if isinstance(var_info, dict):
+                                    var_type = var_info.get('type', 'Unsupported')
+                                else:
+                                    var_type = getattr(var_info, 'type', 'Unsupported')
+                                
+                                # Map ydata-profiling types to MDM ColumnType
+                                if col_name in id_columns:
+                                    column_types[col_name] = ColumnType.ID
+                                elif col_name == target_column:
+                                    column_types[col_name] = ColumnType.TARGET
+                                elif var_type == "Numeric":
+                                    column_types[col_name] = ColumnType.NUMERIC
+                                elif var_type == "Categorical":
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                                elif var_type == "DateTime":
+                                    column_types[col_name] = ColumnType.DATETIME
+                                elif var_type in ["Text", "URL", "Path", "File"]:
+                                    column_types[col_name] = ColumnType.TEXT
+                                elif var_type == "Boolean":
+                                    # Treat boolean as categorical
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                                else:
+                                    # Default to categorical for unknown types
+                                    column_types[col_name] = ColumnType.CATEGORICAL
+                    finally:
+                        # Restore original TQDM setting
+                        if old_tqdm is None:
+                            os.environ.pop('TQDM_DISABLE', None)
+                        else:
+                            os.environ['TQDM_DISABLE'] = old_tqdm
+                    
+                    progress.update(task, completed=True)
                         
                 logger.info(f"Detected column types using ydata-profiling: {column_types}")
                 
@@ -714,7 +1022,34 @@ class DatasetRegistrar:
                             
                             # Use ydata-profiling to get memory size
                             try:
-                                profile = ProfileReport(df, minimal=True)
+                                # Suppress all output
+                                import tqdm
+                                import sys
+                                from io import StringIO
+                                
+                                original_tqdm = tqdm.tqdm
+                                original_trange = tqdm.trange
+                                
+                                def dummy_tqdm(*args, **kwargs):
+                                    if args:
+                                        return args[0]
+                                    return []
+                                
+                                tqdm.tqdm = dummy_tqdm
+                                tqdm.trange = dummy_tqdm
+                                old_stdout = sys.stdout
+                                sys.stdout = StringIO()
+                                
+                                try:
+                                    profile = ProfileReport(
+                                        df, 
+                                        minimal=True,
+                                        progress_bar=False
+                                    )
+                                finally:
+                                    tqdm.tqdm = original_tqdm
+                                    tqdm.trange = original_trange
+                                    sys.stdout = old_stdout
                                 description = profile.get_description()
                                 
                                 # Get memory size from profile

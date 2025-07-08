@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import logging
 from pathlib import Path
 
 import typer
@@ -13,12 +14,91 @@ from mdm.cli.timeseries import app as timeseries_app
 from mdm.config import get_config_manager
 from mdm.dataset.manager import DatasetManager
 
+
+def setup_logging():
+    """Setup logging configuration for both standard logging and loguru."""
+    # Get configuration
+    config_manager = get_config_manager()
+    config = config_manager.config
+    base_path = config_manager.base_path
+    
+    # Create logs directory
+    logs_dir = base_path / config.paths.logs_path
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Get log file path from config or use default
+    # If the file path is absolute, use it as is, otherwise relative to logs_dir
+    if Path(config.logging.file).is_absolute():
+        log_file = Path(config.logging.file)
+    else:
+        log_file = logs_dir / config.logging.file
+    
+    # Get log level from environment or config
+    log_level = os.environ.get('MDM_LOGGING_LEVEL', config.logging.level)
+    
+    # Configure standard logging
+    # Remove existing handlers first
+    logging.root.handlers = []
+    
+    # File handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(getattr(logging, log_level.upper()))
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
+    # Console handler (only warnings and errors)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
+    # Configure root logger
+    logging.root.setLevel(getattr(logging, log_level.upper()))
+    logging.root.addHandler(file_handler)
+    logging.root.addHandler(console_handler)
+    
+    # Set specific loggers if needed
+    logging.getLogger('mdm').setLevel(getattr(logging, log_level.upper()))
+    
+    # Configure loguru for feature modules
+    try:
+        from loguru import logger as loguru_logger
+        # Remove default handler
+        loguru_logger.remove()
+        # Add file handler with format matching standard logging
+        loguru_logger.add(
+            log_file,
+            level=log_level.upper(),
+            format="{time:YYYY-MM-DD HH:mm:ss,SSS} - {name} - {level} - {message}",
+            rotation=config.logging.max_bytes,  # Size in bytes
+            retention=config.logging.backup_count
+        )
+        # Add console handler (only warnings and errors)
+        loguru_logger.add(
+            lambda msg: print(msg, end=''),
+            level="WARNING",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}"
+        )
+    except ImportError:
+        pass  # loguru not installed
+    
+    # Log startup
+    logger = logging.getLogger(__name__)
+    logger.info(f"MDM logging initialized - Level: {log_level}, File: {log_file}")
+
+
+# Don't setup logging on import - let it be called when needed
+
 # Create main app
 app = typer.Typer(
     name="mdm",
     help="ML Data Manager - Streamline your ML data pipeline",
     pretty_exceptions_enable=False,
 )
+
+
+@app.callback()
+def main_callback():
+    """Setup logging before running any command."""
+    setup_logging()
 
 # Add subcommands
 app.add_typer(dataset_app, name="dataset", help="Dataset management commands")
