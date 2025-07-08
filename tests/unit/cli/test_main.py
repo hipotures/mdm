@@ -262,12 +262,16 @@ class TestMainEntryPoint:
     @patch('mdm.cli.main.app')
     def test_main_module_execution(self, mock_app):
         """Test module execution."""
+        # Import the module first
+        import mdm.cli.main
+        
+        # Mock sys.argv and execute main()
         with patch.object(sys, 'argv', ['mdm', 'info']):
-            # Simulate module execution
-            with patch('mdm.cli.main.__name__', '__main__'):
-                import mdm.cli.main
-                # The main() should be called when module is executed
-                mock_app.assert_called()
+            # Call main() directly to simulate module execution
+            mdm.cli.main.main()
+            
+            # Verify app was called
+            mock_app.assert_called_once()
 
 
 class TestMainCallback:
