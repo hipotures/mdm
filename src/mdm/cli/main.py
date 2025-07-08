@@ -120,6 +120,32 @@ def setup_logging():
     
     # Log startup
     logger.info(f"MDM logging initialized - Level: {log_level}, File: {log_file}")
+    
+    # In debug mode, log full configuration
+    if log_level.upper() == "DEBUG":
+        logger.debug("MDM Configuration:")
+        logger.debug(f"  Base path: {base_path}")
+        logger.debug(f"  Config file: {base_path / 'mdm.yaml'}")
+        
+        # Dynamically log all configuration sections
+        config_dict = config.model_dump()
+        
+        def log_config_section(section_name: str, section_data: dict, indent: int = 2):
+            """Recursively log configuration sections."""
+            prefix = "  " * indent
+            for key, value in section_data.items():
+                if isinstance(value, dict):
+                    logger.debug(f"{prefix}{key}:")
+                    log_config_section(key, value, indent + 1)
+                else:
+                    logger.debug(f"{prefix}{key}: {value}")
+        
+        for section, data in config_dict.items():
+            if isinstance(data, dict):
+                logger.debug(f"  {section}:")
+                log_config_section(section, data)
+            else:
+                logger.debug(f"  {section}: {data}")
 
 
 # Don't setup logging on import - let it be called when needed
