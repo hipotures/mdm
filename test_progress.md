@@ -302,6 +302,46 @@
 
 ## Summary of Configuration Issues Fixed (2025-07-08)
 
+### 1. CLI Parameter Conflicts (FIXED)
+- **Issue**: `--id-columns`, `--time-column`, `--group-column` caused "multiple values for keyword argument" errors
+- **Fix**: Added these parameters to kwargs exclusion list in DatasetInfo constructor
+- **Result**: All parameters now work correctly with comma-separated values
+
+### 2. SQLAlchemy Echo Configuration (FIXED)
+- **Issue**: SQL queries weren't displayed despite `sqlalchemy.echo: true` in config
+- **Fix**: Set SQLAlchemy logger to INFO level when echo is enabled
+- **Result**: SQL queries are now properly displayed in debug mode
+
+### 3. Configuration Display Enhancement (FIXED)
+- **Issue**: Plain text configuration display was hard to read
+- **Fix**: Implemented Rich formatting with Panel and Table
+- **Result**: Configuration now displays in a visually appealing format
+
+### 4. Logging System Migration (FIXED)
+- **Issue**: Dual logging system (standard Python logging + loguru) caused confusion
+- **Fix**: Migrated entirely to loguru with interceptor for standard logging
+- **Result**: Unified logging system with full configurability
+
+### 5. SQLite Pragma Configuration (FIXED)
+- **Issue**: SQLite pragmas (cache_size, temp_store, mmap_size) weren't being applied
+- **Fix**: Pass full backend config from registrar to SQLite backend
+- **Result**: All SQLite pragmas are now properly applied on connection
+
+### 6. Export Default Configuration (FIXED)
+- **Issue**: Export defaults from config were ignored
+- **Fix**: Modified operations.py to read defaults when format/compression not specified
+- **Result**: Export now respects configuration defaults
+
+### 7. Feature Engineering Enabled Setting (FIXED)
+- **Issue**: `feature_engineering.enabled: false` was being ignored
+- **Fix**: Modified CLI to only pass `generate_features` parameter when `--no-features` flag is used
+- **Result**: Configuration setting is now properly respected, with CLI flag as override
+
+### Test Results After Fixes
+- Success rate improved from 48% to 71% (120/170 testable items)
+- All critical configuration issues resolved
+- System now properly respects configuration hierarchy: defaults < YAML < environment variables < CLI flags
+
 ### Fixed Issues:
 1. **CLI Parameters** - "multiple values for keyword argument" errors (--id-columns, --time-column, --group-column)
 2. **SQLAlchemy echo** - SQL queries now display correctly with DEBUG or INFO log levels

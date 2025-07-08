@@ -58,9 +58,12 @@ def register(
 
         # Prepare kwargs
         kwargs = {
-            "generate_features": not no_features,
             "force": force,
         }
+        
+        # Only override generate_features if user explicitly specified --no-features
+        if no_features:
+            kwargs["generate_features"] = False
 
         if target:
             kwargs["target_column"] = target

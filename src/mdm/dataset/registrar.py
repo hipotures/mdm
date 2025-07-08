@@ -133,7 +133,14 @@ class DatasetRegistrar:
 
             # Step 10.5: Generate feature tables
             feature_tables = {}
-            if kwargs.get('generate_features', True):
+            # Check configuration first, then kwargs override
+            generate_features = self.config.feature_engineering.enabled
+            if 'generate_features' in kwargs:
+                generate_features = kwargs['generate_features']
+            
+            logger.debug(f"Feature generation config: enabled={self.config.feature_engineering.enabled}, kwargs override={kwargs.get('generate_features')}, final={generate_features}")
+            
+            if generate_features:
                 feature_tables = self._generate_features(
                     normalized_name, db_info, table_mappings, column_info,
                     target_column, id_columns, kwargs.get('type_schema'),
