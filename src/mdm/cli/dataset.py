@@ -532,24 +532,24 @@ def update_dataset(
     id_columns: Optional[str] = typer.Option(None, "--id-columns", help="Comma-separated ID columns"),
 ) -> None:
     """Update dataset metadata."""
+    from mdm.dataset.operations import UpdateOperation
+
+    # Build updates dict
+    updates = {}
+    if description is not None:
+        updates['description'] = description
+    if target is not None:
+        updates['target_column'] = target
+    if problem_type is not None:
+        updates['problem_type'] = problem_type
+    if id_columns is not None:
+        updates['id_columns'] = [col.strip() for col in id_columns.split(',')]
+
+    if not updates:
+        console.print("No updates specified")
+        return
+
     try:
-        from mdm.dataset.operations import UpdateOperation
-
-        # Build updates dict
-        updates = {}
-        if description is not None:
-            updates['description'] = description
-        if target is not None:
-            updates['target_column'] = target
-        if problem_type is not None:
-            updates['problem_type'] = problem_type
-        if id_columns is not None:
-            updates['id_columns'] = [col.strip() for col in id_columns.split(',')]
-
-        if not updates:
-            console.print("No updates specified")
-            raise typer.Exit(1)
-
         operation = UpdateOperation()
         operation.execute(name, updates)
 
