@@ -208,7 +208,8 @@ class InfoOperation(DatasetOperation):
                 raise DatasetError(
                     f"Dataset '{name}' uses '{dataset_backend}' backend, "
                     f"but current backend is '{current_backend}'. "
-                    f"Change default_backend in ~/.mdm/mdm.yaml to '{dataset_backend}' to use this dataset."
+                    f"Change default_backend in ~/.mdm/mdm.yaml to '{dataset_backend}' "
+                    f"or re-register the dataset with --force option."
                 )
 
             # Add dataset directory info

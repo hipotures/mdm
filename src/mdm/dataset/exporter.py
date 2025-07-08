@@ -132,7 +132,23 @@ class DatasetExporter:
 
         try:
             with open(yaml_file) as f:
-                return yaml.safe_load(f)
+                data = yaml.safe_load(f)
+            
+            # Check backend compatibility
+            dataset_backend = data.get('database', {}).get('backend', 'unknown')
+            current_backend = self.config.database.default_backend
+            
+            if dataset_backend != current_backend:
+                raise DatasetError(
+                    f"Dataset '{dataset_name}' uses '{dataset_backend}' backend, "
+                    f"but current backend is '{current_backend}'. "
+                    f"Change default_backend in ~/.mdm/mdm.yaml to '{dataset_backend}' "
+                    f"or re-register the dataset with --force option."
+                )
+            
+            return data
+        except DatasetError:
+            raise
         except Exception as e:
             raise DatasetError(f"Failed to load dataset info: {e}") from e
 
