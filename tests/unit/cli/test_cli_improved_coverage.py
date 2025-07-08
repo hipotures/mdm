@@ -308,8 +308,8 @@ class TestDatasetCLI90Coverage:
         mock_manager = Mock()
         mock_manager_class.return_value = mock_manager
         
-        # Patch UpdateOperation instead of DatasetManager  
-        with patch('mdm.cli.dataset.UpdateOperation') as mock_update_class:
+        # Patch UpdateOperation at the correct location (imported inside function)
+        with patch('mdm.dataset.operations.UpdateOperation') as mock_update_class:
             mock_update = Mock()
             mock_update_class.return_value = mock_update
             
@@ -363,24 +363,23 @@ class TestDatasetCLI90Coverage:
             Path('/tmp/exports/test_dataset_val.parquet.gz')
         ]
         
-        # Patch the ExportOperation at the correct import location
-        with patch('mdm.cli.dataset.ExportOperation', mock_export_class):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                result = runner.invoke(dataset_app, [
-                    "export", "test_dataset",
-                    "--output-dir", tmpdir,
-                    "--format", "parquet",
-                    "--compression", "gzip",
-                    # Note: there's no --tables option, only --table for single table
-                ])
-                
-                if result.exit_code != 0:
-                    print(f"Command failed with exit code {result.exit_code}")
-                    print(f"Output: {result.stdout}")
-                    print(f"Exception: {result.exception}")
-                
-                assert result.exit_code == 0
-                assert "exported successfully" in result.stdout
+        # ExportOperation is already patched above at mdm.dataset.operations.ExportOperation
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = runner.invoke(dataset_app, [
+                "export", "test_dataset",
+                "--output-dir", tmpdir,
+                "--format", "parquet",
+                "--compression", "gzip",
+                # Note: there's no --tables option, only --table for single table
+            ])
+            
+            if result.exit_code != 0:
+                print(f"Command failed with exit code {result.exit_code}")
+                print(f"Output: {result.stdout}")
+                print(f"Exception: {result.exception}")
+            
+            assert result.exit_code == 0
+            assert "exported successfully" in result.stdout
 
 
 class TestBatchCLI90Coverage:
@@ -390,8 +389,8 @@ class TestBatchCLI90Coverage:
     def runner(self):
         return CliRunner()
     
-    @patch('mdm.dataset.manager.DatasetManager')
-    @patch('mdm.dataset.operations.ExportOperation')
+    @patch('mdm.cli.batch.DatasetManager')
+    @patch('mdm.cli.batch.ExportOperation')
     @patch('rich.progress.Progress')
     def test_batch_export_comprehensive(self, mock_progress_class, mock_export_class, mock_manager_class, runner):
         """Test batch export with multiple datasets and options."""
@@ -437,8 +436,8 @@ class TestBatchCLI90Coverage:
         assert "dataset2: Export failed" in result.stdout
         assert "dataset4: Dataset not found" in result.stdout
     
-    @patch('mdm.dataset.manager.DatasetManager')
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.cli.batch.DatasetManager')
+    @patch('mdm.cli.batch.StatsOperation')
     @patch('builtins.open', new_callable=mock_open)
     def test_batch_stats_with_export(self, mock_file, mock_stats_class, mock_manager_class, runner):
         """Test batch stats with CSV export."""
@@ -542,23 +541,28 @@ class TestTimeseriesCLI90Coverage:
                 'duration_days': 199
             },
             'frequency': 'daily',
-            'missing_periods': ['2023-02-15', '2023-04-01'],
+            'missing_timestamps': {
+                'count': 2,
+                'percentage': 1.0,
+                'dates': ['2023-02-15', '2023-04-01']
+            },
             'trend': {
                 'direction': 'increasing',
                 'strength': 0.85
             },
             'seasonality': {
-                'period': 7,
-                'strength': 0.6
+                'weekly': True,
+                'monthly': False
             },
             'stationarity': {
                 'is_stationary': False,
                 'adf_statistic': -1.8,
                 'p_value': 0.35
             },
-            'groups': {
-                'count': 2,
-                'names': ['A', 'B']
+            'target_stats': {
+                'mean': 49.5,
+                'std': 28.87,
+                'trend': 'increasing'
             }
         }
         mock_analyzer_class.return_value = mock_analyzer
@@ -580,7 +584,7 @@ class TestTimeseriesCLI90Coverage:
                 assert "Start:" in result.stdout
                 assert "Duration: 199 days" in result.stdout
                 assert "Frequency: daily" in result.stdout
-                assert "Missing data:" in result.stdout or "Missing periods:" in result.stdout
+                assert "Missing Timestamps:" in result.stdout
 
 
 class TestCLIHelpers90Coverage:
