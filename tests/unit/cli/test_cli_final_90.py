@@ -165,7 +165,8 @@ features:
         result = runner.invoke(dataset_app, [
             "register", "test",
             "--no-auto",
-            "--train", str(csv_file)
+            "--train", str(csv_file),
+            "--target", "value"
         ])
         assert "Manual registration not yet implemented" in result.stdout
         
