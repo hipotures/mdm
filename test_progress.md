@@ -307,10 +307,10 @@
 2. **SQLAlchemy echo** - SQL queries now display correctly with DEBUG or INFO log levels
 
 ### Still Outstanding:
-1. **SQLite pragmas** - cache_size, temp_store, mmap_size not applied
+1. ~~**SQLite pragmas** - cache_size, temp_store, mmap_size not applied~~ **FIXED 2025-01-08** - Pragmas are properly applied on each connection
 2. ~~**Log file creation** - File logging not implemented~~ **FIXED 2025-01-08** - Logs now written to /tmp/mdm.log or configured path
 3. ~~**Logging format** - JSON format option ignored~~ **FIXED 2025-01-08** - JSON logging works with MDM_LOGGING_FORMAT=json
-4. **Export defaults** - Default format and compression settings ignored
+4. ~~**Export defaults** - Default format and compression settings ignored~~ **FIXED 2025-01-08** - Export now uses config defaults
 5. **Custom features** - Not loaded from ~/.mdm/config/custom_features/
 
 ## Additional Testing - 5 New Tests (2025-07-07)
@@ -536,29 +536,29 @@
 
 ## Additional Testing - 10 More Tests (2025-07-08) - Session 5
 
-### Test 31: SQLite cache_size configuration (line 42) ❌
+### Test 31: SQLite cache_size configuration (line 42) ✅
 - Changed cache_size from -64000 to -128000 in mdm.yaml
 - Registered new dataset and checked PRAGMA cache_size
-- Result: Shows -2000 (default) instead of configured value
-- **Finding**: SQLite cache_size configuration not applied
+- ~~Result: Shows -2000 (default) instead of configured value~~ **FIXED 2025-01-08**
+- **Finding**: SQLite pragmas are connection-specific and properly applied through MDM connections
 
-### Test 32: SQLite temp_store setting (line 43) ❌
+### Test 32: SQLite temp_store setting (line 43) ✅
 - Set temp_store to "MEMORY" and "FILE" in mdm.yaml
 - Checked PRAGMA temp_store in new databases
-- Result: Always shows 0 (DEFAULT) instead of configured value
-- **Finding**: SQLite temp_store configuration not applied
+- ~~Result: Always shows 0 (DEFAULT) instead of configured value~~ **FIXED 2025-01-08**
+- **Finding**: SQLite temp_store properly set (1=FILE, 2=MEMORY) on MDM connections
 
-### Test 33: Export default format configuration (line 129) ❌
+### Test 33: Export default format configuration (line 129) ✅
 - Set export.default_format: "parquet" in mdm.yaml
 - Exported dataset without specifying format
-- Result: Still exports as CSV.zip (default hardcoded)
-- **Finding**: Export default format configuration ignored
+- ~~Result: Still exports as CSV.zip (default hardcoded)~~ **FIXED 2025-01-08**
+- **Finding**: Export now correctly uses parquet format from configuration
 
-### Test 34: Export compression configuration (line 131) ⚠️
+### Test 34: Export compression configuration (line 131) ✅
 - CLI compression options work: none, gzip, zip
 - Set export.compression: "gzip" in mdm.yaml
-- Result: Configuration ignored, but CLI options work correctly
-- **Finding**: Partial implementation - CLI works, config ignored
+- ~~Result: Configuration ignored, but CLI options work correctly~~ **FIXED 2025-01-08**
+- **Finding**: Export now uses gzip compression from configuration for CSV files
 
 ### Test 35: Simple filter - exact match (line 236) ✅
 - Tested: mdm dataset list --filter "name=cache_test"
@@ -606,17 +606,17 @@
 
 ## Additional Testing - 10 More Tests (2025-07-08) - Session 6
 
-### Test 41: SQLite mmap_size setting (line 44) ❌
+### Test 41: SQLite mmap_size setting (line 44) ✅
 - Set mmap_size: 268435456 in mdm.yaml
 - Checked PRAGMA mmap_size in new database
-- Result: Shows 0 instead of configured value
-- **Finding**: SQLite mmap_size configuration not applied
+- ~~Result: Shows 0 instead of configured value~~ **FIXED 2025-01-08**
+- **Finding**: SQLite mmap_size properly applied (268435456) on MDM connections
 
-### Test 42: Log file creation (line 74) ❌
+### Test 42: Log file creation (line 74) ✅
 - Configured logging.file: "/tmp/mdm.log" in mdm.yaml
 - Tested with both ERROR and DEBUG log levels
-- Result: Log file never created
-- **Finding**: File logging not implemented
+- ~~Result: Log file never created~~ **FIXED 2025-01-08**
+- **Finding**: Log file now created with rotation support via loguru
 
 ### Test 43: Date filter - exact date (line 250) ⚠️
 - Tested: mdm dataset list --filter "registered_at>2025-07-07"
@@ -820,7 +820,7 @@
 - Success rate: 47%
 - Test coverage: 183/190 checkable items (96%)
 
-## Additional Testing - Test Batch 9 (2025-07-08)
+## Additional Testing - Test Batch 9 (2025-01-08)
 
 ### Test 71: Log Level WARNING Configuration (line 122) ✅
 - Set logging.level to WARNING in mdm.yaml
@@ -889,7 +889,7 @@
 - Success rate: 45%
 - Test coverage: 193/200 checkable items (96.5%)
 
-## Additional Testing - Test Batch 10 (2025-07-08)
+## Additional Testing - Test Batch 10 (2025-01-08)
 
 ### Test 81: Log Level ERROR Configuration (line 72) ✅
 - Set logging.level to ERROR in mdm.yaml
@@ -950,9 +950,9 @@
 
 ### Overall Test Progress Updated
 - Total tests completed: 90 (from 10 sessions)
-- Total issues found: 47 → 41 (6 fixed - 4 CLI params + 2 logging)
-- Total features working: 43 → 49 (6 fixed)
-- Success rate: 48% → 54%
+- Total issues found: 47 → 36 (11 fixed - 4 CLI params + 2 logging + 3 SQLite + 2 export)
+- Total features working: 43 → 54 (11 fixed)
+- Success rate: 48% → 60%
 - Test coverage: 203/210 checkable items (96.7%)
 
 ### Major Fixes Applied (2025-01-08)
@@ -974,3 +974,14 @@
 - MDM_LOGGING_LEVEL properly controls log output (DEBUG/INFO/WARNING/ERROR)
 - Log files are created at /tmp/mdm.log or configured path with rotation
 - Solution: Complete migration of all 14 modules to loguru with proper interceptor
+
+✅ **FIXED**: SQLite pragma configuration
+- cache_size, temp_store, and mmap_size now properly applied
+- Fixed configuration passing from registrar to SQLite backend
+- Fixed temp_store string to numeric conversion (FILE=1, MEMORY=2)
+- Solution: Pass full backend config and apply pragmas on each connection
+
+✅ **FIXED**: Export configuration defaults
+- Export format now uses config.export.default_format when not specified
+- Export compression now uses config.export.compression when not specified
+- Solution: Read defaults from configuration in ExportOperation
