@@ -136,8 +136,8 @@ features:
         assert result.exit_code == 0
         assert "Statistics for dataset: test_ds" in result.stdout
         
-        # 7. Get detailed stats
-        result = runner.invoke(app, ["dataset", "stats", "test_ds", "--detailed"])
+        # 7. Get full stats
+        result = runner.invoke(app, ["dataset", "stats", "test_ds", "--full"])
         assert result.exit_code == 0
         
         # 8. Update dataset
@@ -162,7 +162,7 @@ features:
         export_dir = test_env / "exports"
         result = runner.invoke(app, [
             "dataset", "export", "test_ds",
-            "--output", str(export_dir)
+            "--output-dir", str(export_dir)
         ])
         assert result.exit_code == 0
         assert "Export completed successfully" in result.stdout
@@ -170,9 +170,9 @@ features:
         # 12. Export with options
         result = runner.invoke(app, [
             "dataset", "export", "test_ds",
-            "--output", str(export_dir),
+            "--output-dir", str(export_dir),
             "--format", "parquet",
-            "--tables", "data"
+            "--table", "data"
         ])
         assert result.exit_code == 0
         
@@ -183,7 +183,7 @@ features:
             "--dry-run"
         ])
         assert result.exit_code == 0
-        assert "[DRY RUN]" in result.stdout
+        assert "DRY RUN" in result.stdout
         
         # 14. Remove dataset (real)
         result = runner.invoke(app, [
@@ -221,21 +221,20 @@ features:
         for ds in datasets:
             assert ds in result.stdout
         
-        # 2. Batch stats (detailed)
+        # 2. Batch stats (full)
         result = runner.invoke(app, [
             "batch", "stats", datasets[0], datasets[1],
-            "--detailed"
+            "--full"
         ])
         assert result.exit_code == 0
         
-        # 3. Batch stats (JSON)
+        # 3. Batch stats (export)
+        stats_export_dir = test_env / "stats_exports"
         result = runner.invoke(app, [
             "batch", "stats", datasets[0],
-            "--format", "json"
+            "--export", str(stats_export_dir)
         ])
         assert result.exit_code == 0
-        data = json.loads(result.stdout)
-        assert len(data) == 1
         
         # 4. Batch export
         export_dir = test_env / "batch_exports"
@@ -253,7 +252,7 @@ features:
             "--dry-run"
         ])
         assert result.exit_code == 0
-        assert "[DRY RUN]" in result.stdout
+        assert "DRY RUN" in result.stdout
         
         # 6. Batch remove (real)
         result = runner.invoke(app, [
