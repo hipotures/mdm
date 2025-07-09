@@ -112,10 +112,12 @@ class TestDatasetRegistrarEnhanced:
             _auto_detect=Mock(return_value={'target_column': 'target'}),
             _discover_files=Mock(return_value={'data': data_path}),
             _create_database=Mock(return_value={'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}),
-            _load_data=Mock(return_value={}),
-            _infer_metadata=Mock(return_value={'problem_type': 'binary_classification'}),
-            _generate_features=Mock(),
-            _compute_statistics=Mock()
+            _load_data_files=Mock(return_value={'data': 'data'}),
+            _analyze_columns=Mock(return_value={}),
+            _detect_id_columns=Mock(return_value=[]),
+            _infer_problem_type=Mock(return_value='binary_classification'),
+            _generate_features=Mock(return_value={}),
+            _compute_initial_statistics=Mock(return_value={})
         ):
             result = registrar.register('test_dataset', data_path)
             
@@ -131,7 +133,7 @@ class TestDatasetRegistrarEnhanced:
         # Dataset already exists
         mock_manager.dataset_exists.return_value = True
         
-        with patch('mdm.dataset.registrar.RemoveOperation') as mock_remove:
+        with patch('mdm.dataset.operations.RemoveOperation') as mock_remove:
             mock_remove_instance = Mock()
             mock_remove.return_value = mock_remove_instance
             
@@ -276,9 +278,11 @@ class TestDatasetRegistrarEnhanced:
                 result = registrar._discover_files(dataset_dir, detected_info)
                 assert result == files
 
-    def test_create_database_sqlite(self, registrar, mock_config_manager):
+    def test_create_database_sqlite(self, registrar, mock_config_manager, tmp_path):
         """Test SQLite database creation."""
         mock_config_manager.config.database.default_backend = "sqlite"
+        mock_config_manager.base_path = tmp_path
+        registrar.base_path = tmp_path
         
         result = registrar._create_database("test_dataset")
         
@@ -288,11 +292,13 @@ class TestDatasetRegistrarEnhanced:
         assert result['journal_mode'] == 'WAL'
         assert result['synchronous'] == 'NORMAL'
 
-    def test_create_database_duckdb(self, registrar, mock_config_manager):
+    def test_create_database_duckdb(self, registrar, mock_config_manager, tmp_path):
         """Test DuckDB database creation."""
         mock_config_manager.config.database.default_backend = "duckdb"
         mock_config_manager.config.database.duckdb = Mock()
         mock_config_manager.config.database.duckdb.model_dump.return_value = {}
+        mock_config_manager.base_path = tmp_path
+        registrar.base_path = tmp_path
         
         result = registrar._create_database("test_dataset")
         
@@ -329,9 +335,11 @@ class TestDatasetRegistrarEnhanced:
         
         mock_conn = Mock()
         mock_cursor = Mock()
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=None)
         mock_conn.cursor.return_value = mock_cursor
         mock_conn.close = Mock()
-        mock_cursor.close = Mock()
+        mock_cursor.fetchone.return_value = None
         
         with patch('psycopg2.connect', return_value=mock_conn):
             registrar._create_postgresql_database(db_info)
@@ -352,10 +360,10 @@ class TestDatasetRegistrarEnhanced:
         
         mock_conn = Mock()
         mock_cursor = Mock()
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=None)
         mock_conn.cursor.return_value = mock_cursor
-        
-        # Simulate database already exists error
-        mock_cursor.execute.side_effect = Exception("database already exists")
+        mock_cursor.fetchone.return_value = True  # Database already exists
         
         with patch('psycopg2.connect', return_value=mock_conn):
             with patch('mdm.dataset.registrar.logger'):
@@ -367,7 +375,7 @@ class TestDatasetRegistrarEnhanced:
         db_info = {'database': 'test'}
         
         with patch.dict('sys.modules', {'psycopg2': None}):
-            with pytest.raises(DatasetError, match="psycopg2 is required"):
+            with pytest.raises(DatasetError, match="Failed to create PostgreSQL database"):
                 registrar._create_postgresql_database(db_info)
 
     def test_load_data_basic(self, registrar, tmp_path):
@@ -393,7 +401,7 @@ class TestDatasetRegistrarEnhanced:
             }
             mock_factory.create.return_value = mock_backend
             
-            result = registrar._load_data(files, db_info)
+            result = registrar._load_data_files(files, db_info)
             
             assert 'train' in result
             assert 'test' in result
