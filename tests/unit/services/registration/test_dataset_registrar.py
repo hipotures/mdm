@@ -28,9 +28,12 @@ class TestDatasetRegistrar:
         """Create mock configuration."""
         config = Mock()
         config.database.default_backend = "sqlite"
+        config.database.sqlite = Mock()
+        config.database.sqlite.model_dump.return_value = {}
         config.features.enable_at_registration = True
         config.performance.batch_size = 1000
         config.performance.max_concurrent_operations = 4
+        config.paths.datasets_path = "datasets"
         return config
 
     @pytest.fixture

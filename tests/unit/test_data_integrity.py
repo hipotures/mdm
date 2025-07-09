@@ -49,7 +49,7 @@ class TestExportImportRoundtrip:
                 dataset_path=str(train_path.parent),
             )
             
-            # Export dataset
+            # Export dataset - specifically export the 'data' table
             export_dir = Path(tmpdir) / "exported"
             export_dir.mkdir()
             
@@ -57,6 +57,7 @@ class TestExportImportRoundtrip:
                 "roundtrip_test",
                 output_dir=str(export_dir),
                 format="csv",
+                tables=["data"],  # Export only the data table, not features
             )
             
             # Verify export created files
@@ -64,14 +65,21 @@ class TestExportImportRoundtrip:
             
             # For this test, we'll read the exported CSV directly
             # to avoid metadata table issues
-            exported_files = list(export_dir.glob("*.csv*"))
+            exported_files = [f for f in export_dir.glob("*.csv*") if 'metadata' not in f.name]
             assert len(exported_files) > 0
             
             # Load original dataset
             original_loaded, _ = client.load_dataset_files("roundtrip_test")
             
-            # Read exported file directly
-            exported_csv = exported_files[0]
+            # Read exported file directly - find the data table export
+            exported_csv = None
+            for f in exported_files:
+                if 'data' in f.name or 'train' in f.name:
+                    exported_csv = f
+                    break
+            
+            assert exported_csv is not None, f"Could not find data export in {[f.name for f in exported_files]}"
+            
             if exported_csv.suffix == '.gz':
                 reimported = pd.read_csv(exported_csv, compression='gzip')
             else:

@@ -22,6 +22,7 @@ class TestDatasetExporter:
         config = Mock()
         config.paths.configs_path = "config/datasets"
         config.paths.datasets_path = "datasets"
+        config.database.default_backend = "sqlite"  # Add default backend
         return config
 
     @pytest.fixture

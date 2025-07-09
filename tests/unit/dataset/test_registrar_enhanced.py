@@ -401,58 +401,49 @@ class TestDatasetRegistrarEnhanced:
             assert mock_backend.load_file.call_count == 2
 
     def test_infer_metadata(self, registrar):
-        """Test metadata inference."""
-        files_info = {
-            'train': {'row_count': 1000, 'column_count': 10},
-            'test': {'row_count': 500, 'column_count': 9}
+        """Test metadata inference through methods that exist."""
+        # Test detect_id_columns functionality
+        column_info = {
+            'id': {'dtype': 'int64', 'unique_count': 100},
+            'user_id': {'dtype': 'int64', 'unique_count': 90},
+            'feature1': {'dtype': 'float64', 'unique_count': 50},
+            'target': {'dtype': 'int64', 'unique_count': 2}
         }
         
-        detected_info = {
-            'target_column': 'target',
-            'structure': 'kaggle'
-        }
+        id_columns = registrar._detect_id_columns(column_info)
+        assert 'id' in id_columns
+        assert 'user_id' in id_columns
         
-        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
-            mock_backend = Mock()
-            
-            # Mock column info
-            train_columns = ['id', 'feature1', 'feature2', 'target']
-            test_columns = ['id', 'feature1', 'feature2']
-            
-            mock_backend.get_columns.side_effect = lambda table: (
-                train_columns if table == 'train' else test_columns
-            )
-            
-            # Mock sample data for problem type inference
-            mock_backend.read_table.return_value = pd.DataFrame({
-                'target': np.random.randint(0, 2, 100)
-            })
-            
-            mock_factory.create.return_value = mock_backend
-            
-            with patch('mdm.dataset.registrar.infer_problem_type', return_value='binary_classification'):
-                with patch('mdm.dataset.registrar.detect_id_columns', return_value=['id']):
-                    result = registrar._infer_metadata(
-                        files_info, 
-                        detected_info,
-                        {'backend': 'sqlite'}
-                    )
-                    
-                    assert result['target_column'] == 'target'
-                    assert result['problem_type'] == 'binary_classification'
-                    assert 'id' in result['id_columns']
+        # Test problem type inference
+        problem_type = registrar._infer_problem_type(column_info, 'target')
+        assert problem_type == 'binary_classification'
 
     def test_generate_features_enabled(self, registrar, mock_feature_generator):
         """Test feature generation when enabled."""
         registrar.config.datasets.generate_features = True
         
         db_info = {'backend': 'sqlite', 'path': 'test.db'}
-        metadata = {
-            'target_column': 'target',
-            'problem_type': 'binary_classification'
+        table_mappings = {'train': 'test_dataset_train', 'test': 'test_dataset_test'}
+        column_info = {
+            'id': {'dtype': 'int64'},
+            'feature1': {'dtype': 'float64'},
+            'target': {'dtype': 'int64'}
         }
+        target_column = 'target'
+        id_columns = ['id']
         
-        registrar._generate_features('test_dataset', db_info, metadata)
+        # Mock the feature generator to avoid actual feature generation
+        registrar.feature_generator = mock_feature_generator
+        mock_feature_generator.generate.return_value = {'train_features': 'test_dataset_train_features'}
+        
+        result = registrar._generate_features(
+            'test_dataset', 
+            db_info, 
+            table_mappings,
+            column_info,
+            target_column,
+            id_columns
+        )
         
         mock_feature_generator.generate.assert_called_once_with(
             'test_dataset',
@@ -464,7 +455,23 @@ class TestDatasetRegistrarEnhanced:
         """Test feature generation when disabled."""
         registrar.config.datasets.generate_features = False
         
-        registrar._generate_features('test_dataset', {}, {})
+        db_info = {'backend': 'sqlite', 'path': 'test.db'}
+        table_mappings = {'train': 'test_dataset_train'}
+        column_info = {'id': {'dtype': 'int64'}}
+        target_column = None
+        id_columns = ['id']
+        
+        # Mock the feature generator
+        registrar.feature_generator = mock_feature_generator
+        
+        result = registrar._generate_features(
+            'test_dataset', 
+            db_info, 
+            table_mappings,
+            column_info,
+            target_column,
+            id_columns
+        )
         
         # Should not call generator
         mock_feature_generator.generate.assert_not_called()
@@ -494,7 +501,7 @@ class TestDatasetRegistrarEnhanced:
             
             mock_factory.create.return_value = mock_backend
             
-            result = registrar._compute_statistics(db_info)
+            result = registrar._compute_initial_statistics('test_dataset', db_info, {'train': 'train', 'test': 'test'})
             
             assert 'tables' in result
             assert 'train' in result['tables']
@@ -532,8 +539,8 @@ class TestDatasetRegistrarEnhanced:
             mock_backend.load_file.side_effect = load_file_side_effect
             mock_factory.create.return_value = mock_backend
             
-            with patch('mdm.dataset.registrar.Progress'):
-                result = registrar._load_data(files, db_info)
+            with patch('mdm.dataset.registrar.Progress') as mock_progress:
+                result = registrar._load_data_files(files, db_info, mock_progress)
                 
                 assert result['data']['row_count'] == 100000
 
@@ -544,7 +551,7 @@ class TestDatasetRegistrarEnhanced:
         
         mock_manager.dataset_exists.return_value = True
         
-        with patch('mdm.dataset.registrar.RemoveOperation') as mock_remove:
+        with patch('mdm.dataset.operations.RemoveOperation') as mock_remove:
             mock_remove_instance = Mock()
             mock_remove_instance.execute.side_effect = Exception("Remove failed")
             mock_remove.return_value = mock_remove_instance
@@ -555,10 +562,12 @@ class TestDatasetRegistrarEnhanced:
                 _auto_detect=Mock(return_value={}),
                 _discover_files=Mock(return_value={'data': data_path}),
                 _create_database=Mock(return_value={'backend': 'sqlite'}),
-                _load_data=Mock(return_value={}),
-                _infer_metadata=Mock(return_value={}),
-                _generate_features=Mock(),
-                _compute_statistics=Mock()
+                _load_data_files=Mock(return_value={'data': 'data'}),
+                _analyze_columns=Mock(return_value={}),
+                _detect_id_columns=Mock(return_value=[]),
+                _infer_problem_type=Mock(return_value=None),
+                _generate_features=Mock(return_value={}),
+                _compute_initial_statistics=Mock(return_value={})
             ):
                 with patch('mdm.dataset.registrar.logger'):
                     # Should continue despite remove failure
@@ -622,12 +631,19 @@ class TestDatasetRegistrarEnhanced:
                 # Mock inference functions
                 with patch('mdm.dataset.registrar.detect_id_columns', return_value=['id']):
                     with patch('mdm.dataset.registrar.infer_problem_type', return_value='binary_classification'):
-                        result = registrar.register(
-                            'test_dataset',
-                            dataset_dir,
-                            description='Test dataset',
-                            tags=['test', 'example']
-                        )
+                        # Mock _create_database to avoid directory creation issues
+                        with patch.object(registrar, '_create_database') as mock_create_db:
+                            mock_create_db.return_value = {
+                                'backend': 'sqlite',
+                                'path': str(tmp_path / 'test_dataset.sqlite')
+                            }
+                            
+                            result = registrar.register(
+                                'test_dataset',
+                                dataset_dir,
+                                description='Test dataset',
+                                tags=['test', 'example']
+                            )
                         
                         assert result.name == 'test_dataset'
                         assert result.description == 'Test dataset'
@@ -646,11 +662,13 @@ class TestDatasetRegistrarEnhanced:
                 _validate_path=Mock(return_value=data_path),
                 _auto_detect=Mock(return_value={}),
                 _discover_files=Mock(return_value={'data': data_path}),
-                _create_database=Mock(return_value={'backend': 'sqlite'}),
-                _load_data=Mock(return_value={'data': {'row_count': 1}}),
-                _infer_metadata=Mock(return_value={}),
-                _generate_features=Mock(),
-                _compute_statistics=Mock(return_value={})
+                _create_database=Mock(return_value={'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}),
+                _load_data_files=Mock(return_value={'data': 'data'}),
+                _analyze_columns=Mock(return_value={}),
+                _detect_id_columns=Mock(return_value=[]),
+                _infer_problem_type=Mock(return_value=None),
+                _generate_features=Mock(return_value={}),
+                _compute_initial_statistics=Mock(return_value={})
             ):
                 registrar.register('test_dataset', data_path)
                 
