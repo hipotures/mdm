@@ -177,6 +177,9 @@ class TestDatasetRegistrarCoverage:
         data_path = tmp_path / "data.csv"
         data_path.write_text("id,value\n1,100\n")
         
+        # Setup registrar properly
+        registrar.base_path = tmp_path
+        
         # Dataset already exists
         mock_manager.dataset_exists.return_value = True
         
@@ -185,16 +188,22 @@ class TestDatasetRegistrarCoverage:
             # Mock the rest of the registration to continue
             with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
                 with patch('mdm.dataset.registrar.BackendFactory'):
-                    with patch('mdm.dataset.registrar.compute_dataset_statistics', return_value={}):
-                        with patch('pathlib.Path.mkdir'):
-                            # The RemoveOperation import happens inside the method
-                            # Mock it to fail
-                            with patch('builtins.__import__', side_effect=ImportError("No module")):
-                                # Should continue despite import failure
-                                result = registrar.register('test_dataset', data_path, force=True)
-                                
-                                # Should log warning about failed removal
-                                assert any('Failed to remove' in str(call) for call in mock_logger.warning.call_args_list)
+                    # Mock _compute_initial_statistics directly on the registrar instance
+                    registrar._compute_initial_statistics = Mock(return_value={})
+                    with patch('pathlib.Path.mkdir'):
+                        # Since dataset exists and force=True, registrar will try to import RemoveOperation
+                        # Don't mock __import__ - the test is checking that registration continues after remove fails
+                        # Mock RemoveOperation to fail
+                        with patch('mdm.dataset.operations.RemoveOperation') as mock_remove_class:
+                            mock_remove = Mock()
+                            mock_remove.execute.side_effect = Exception("Remove failed")
+                            mock_remove_class.return_value = mock_remove
+                            
+                            # Should continue despite removal failure
+                            result = registrar.register('test_dataset', data_path, force=True)
+                            
+                            # Should log warning about failed removal
+                            assert any('Failed to remove' in str(call) for call in mock_logger.warning.call_args_list)
 
     def test_load_data_files_with_all_formats(self, registrar, tmp_path):
         """Test loading data files with all supported formats."""
