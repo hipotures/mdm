@@ -79,11 +79,30 @@ class TestEnvironmentVariables:
         pass
     
     @pytest.mark.mdm_id("1.2.6")
-    @pytest.mark.skip(reason="MDM_MDM_HOME not implemented, use MDM_HOME instead")
-    def test_mdm_home_custom_path(self):
-        """1.2.6: Set MDM_MDM_HOME=/custom/path and verify directory creation"""
-        # The correct variable is MDM_HOME, not MDM_MDM_HOME
-        pass
+    def test_mdm_home_custom_path(self, clean_mdm_env, run_mdm, tmp_path):
+        """1.2.6: Set MDM_HOME_DIR=/custom/path and verify directory creation"""
+        # Create custom path
+        custom_home = tmp_path / "custom_mdm_home"
+        
+        # Run MDM with custom home directory - use info command which should create dirs
+        result = run_mdm(
+            ["info"],
+            env={"MDM_HOME_DIR": str(custom_home)}
+        )
+        
+        assert result.returncode == 0
+        
+        # Verify MDM_HOME_DIR was used
+        assert str(custom_home) in result.stdout
+        
+        # Verify at least the base directory was created
+        assert custom_home.exists()
+        
+        # Check if MDM created its config file
+        config_file = custom_home / "mdm.yaml"
+        if config_file.exists():
+            # If config exists, datasets directory should too
+            assert (custom_home / "datasets").exists()
     
     @pytest.mark.mdm_id("1.2.7")
     @pytest.mark.skip(reason="MDM_DATASETS_PATH not implemented as standalone env var")

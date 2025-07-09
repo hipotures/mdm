@@ -28,7 +28,7 @@ This checklist is for manual verification of MDM functionality. Check off items 
 - [ ] Set `MDM_DATABASE_DEFAULT_BACKEND=duckdb` and register another dataset
 - [ ] Set `MDM_BATCH_SIZE=5000` and verify it's used in operations
 - [ ] Set `MDM_MAX_CONCURRENT_OPERATIONS=2` and verify parallelism limit
-- [ ] Set `MDM_MDM_HOME=/custom/path` and verify directory creation
+- [ ] Set `MDM_HOME_DIR=/custom/path` and verify directory creation
 - [ ] Set `MDM_DATASETS_PATH=/custom/datasets` and verify usage
 - [ ] Set `MDM_DEFAULT_BACKEND=postgresql` and test
 
