@@ -331,7 +331,7 @@ class MDMClient:
         Raises:
             DatasetError: If dataset not found or removal fails
         """
-        self.manager.remove_dataset(name)
+        self.manager.remove_dataset(name, force=force)
 
     def export_dataset(
         self,
