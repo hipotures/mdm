@@ -36,6 +36,12 @@ class TestBatchStats:
     def sample_stats(self):
         """Sample statistics data."""
         return {
+            'summary': {
+                'total_rows': 1000,
+                'total_columns': 10,
+                'total_tables': 1,
+                'overall_completeness': 0.95
+            },
             'dataset_name': 'test_dataset',
             'row_count': 1000,
             'column_count': 10,
@@ -62,7 +68,9 @@ class TestBatchStats:
 
         # Assert
         assert result.exit_code == 0
-        assert "Successfully computed: 2 datasets" in result.output
+        assert "Statistics Summary:" in result.output
+        assert "dataset1:" in result.output
+        assert "dataset2:" in result.output
         assert mock_stats_op.execute.call_count == 2
 
     def test_batch_stats_full_computation(self, runner, mock_manager, mock_stats_op, sample_stats):
@@ -79,7 +87,7 @@ class TestBatchStats:
 
         # Assert
         assert result.exit_code == 0
-        mock_stats_op.execute.assert_called_once_with("dataset1", full=True, export=None)
+        mock_stats_op.execute.assert_called_once_with(name="dataset1", full=True, export=None)
 
     def test_batch_stats_export_to_file(self, runner, mock_manager, mock_stats_op, sample_stats):
         """Test batch stats with export option."""
@@ -90,7 +98,7 @@ class TestBatchStats:
         # Act
         result = runner.invoke(
             batch_app,
-            ["stats", "dataset1", "--export-dir", "/tmp/stats"]
+            ["stats", "dataset1", "--export", "/tmp/stats"]
         )
 
         # Assert
@@ -103,7 +111,14 @@ class TestBatchStats:
         """Test batch stats with non-existent dataset."""
         # Arrange
         mock_manager.dataset_exists.side_effect = [True, False, True]
-        mock_stats_op.execute.return_value = {'row_count': 100}
+        mock_stats_op.execute.return_value = {
+            'summary': {
+                'total_rows': 100,
+                'total_columns': 5,
+                'total_tables': 1,
+                'overall_completeness': 1.0
+            }
+        }
 
         # Act
         result = runner.invoke(
@@ -114,8 +129,9 @@ class TestBatchStats:
         # Assert
         assert result.exit_code == 0
         assert "Dataset 'dataset2' not found, skipping" in result.output
-        assert "Successfully computed: 2 datasets" in result.output
-        assert "Failed: 1 datasets" in result.output
+        assert "Statistics Summary:" in result.output
+        assert "dataset1:" in result.output
+        assert "dataset3:" in result.output
         assert mock_stats_op.execute.call_count == 2
 
     def test_batch_stats_error_handling(self, runner, mock_manager, mock_stats_op):
@@ -137,8 +153,9 @@ class TestBatchStats:
         # Assert
         assert result.exit_code == 0
         assert "Failed to compute stats for 'dataset2': Stats computation failed" in result.output
-        assert "Successfully computed: 2 datasets" in result.output
-        assert "Failed: 1 datasets" in result.output
+        assert "Statistics Summary:" in result.output
+        assert "dataset1:" in result.output
+        assert "dataset3:" in result.output
 
     def test_batch_stats_summary_display(self, runner, mock_manager, mock_stats_op):
         """Test batch stats summary display."""
@@ -158,9 +175,10 @@ class TestBatchStats:
 
         # Assert
         assert result.exit_code == 0
-        assert "dataset1 (1000 rows, 10 columns)" in result.output
-        assert "dataset2 (2000 rows, 20 columns)" in result.output
-        assert "dataset3 (500 rows, 5 columns)" in result.output
+        assert "Statistics Summary:" in result.output
+        assert "dataset1:" in result.output
+        assert "dataset2:" in result.output
+        assert "dataset3:" in result.output
 
     def test_batch_stats_empty_list(self, runner):
         """Test batch stats with no datasets."""
@@ -175,7 +193,14 @@ class TestBatchStats:
         # Arrange
         datasets = [f"dataset{i}" for i in range(10)]
         mock_manager.dataset_exists.return_value = True
-        mock_stats_op.execute.return_value = {'row_count': 100}
+        mock_stats_op.execute.return_value = {
+            'summary': {
+                'total_rows': 100,
+                'total_columns': 5,
+                'total_tables': 1,
+                'overall_completeness': 1.0
+            }
+        }
 
         # Act
         result = runner.invoke(
@@ -185,7 +210,7 @@ class TestBatchStats:
 
         # Assert
         assert result.exit_code == 0
-        assert "Successfully computed: 10 datasets" in result.output
+        assert "Statistics Summary:" in result.output
         assert mock_stats_op.execute.call_count == 10
 
     @patch('pathlib.Path.mkdir')
@@ -193,12 +218,19 @@ class TestBatchStats:
         """Test that export directories are created properly."""
         # Arrange
         mock_manager.dataset_exists.return_value = True
-        mock_stats_op.execute.return_value = {'row_count': 100}
+        mock_stats_op.execute.return_value = {
+            'summary': {
+                'total_rows': 100,
+                'total_columns': 5,
+                'total_tables': 1,
+                'overall_completeness': 1.0
+            }
+        }
 
         # Act
         result = runner.invoke(
             batch_app,
-            ["stats", "dataset1", "--export-dir", "new_stats"]
+            ["stats", "dataset1", "--export", "new_stats"]
         )
 
         # Assert

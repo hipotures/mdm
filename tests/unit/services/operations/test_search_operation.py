@@ -34,13 +34,16 @@ class TestSearchOperation:
         config_path = temp_config_dir / "config" / "datasets"
         config_path.mkdir(parents=True)
         
-        with patch('mdm.config.get_config_manager') as mock_get_config:
+        with patch('mdm.dataset.operations.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = temp_config_dir
             mock_get_config.return_value = mock_manager
             
             operation = SearchOperation()
+            # Ensure paths are properly set
+            assert operation.base_path == temp_config_dir
+            assert operation.dataset_registry_dir == config_path
             return operation
 
     def create_dataset_yaml(self, path: Path, name: str, **kwargs):

@@ -23,13 +23,16 @@ class TestExportOperation:
     @pytest.fixture
     def export_operation(self, mock_config):
         """Create ExportOperation instance."""
-        with patch('mdm.config.get_config_manager') as mock_get_config:
+        with patch('mdm.dataset.operations.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = Path("/test")
             mock_get_config.return_value = mock_manager
             
             operation = ExportOperation()
+            # Verify the config was properly set
+            assert operation.config.export.default_format == "csv"
+            assert operation.config.export.compression is None
             return operation
 
     @pytest.fixture

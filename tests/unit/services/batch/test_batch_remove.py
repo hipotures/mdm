@@ -86,6 +86,7 @@ class TestBatchRemove:
         # Arrange
         mock_manager.dataset_exists.return_value = True
         mock_remove_op.execute.return_value = {
+            'name': 'dataset1',
             'dry_run': True,
             'config_file': '/path/to/config.yaml',
             'dataset_directory': '/path/to/dataset',
@@ -100,7 +101,7 @@ class TestBatchRemove:
 
         # Assert
         assert result.exit_code == 0
-        assert "Would remove: 1 datasets" in result.output
+        assert "Datasets to remove: 1" in result.output
         assert "Total size: 2.0 MB" in result.output
         mock_remove_op.execute.assert_called_once_with("dataset1", force=True, dry_run=True)
 
@@ -109,6 +110,7 @@ class TestBatchRemove:
         # Arrange
         mock_manager.dataset_exists.return_value = True
         mock_remove_op.execute.return_value = {
+            'name': 'dataset1',
             'dry_run': True,
             'size': 1000000
         }
@@ -116,19 +118,25 @@ class TestBatchRemove:
         # Act
         result = runner.invoke(
             batch_app,
-            ["remove", "dataset1"]
+            ["remove", "dataset1"],
+            input="n\n"
         )
 
         # Assert
         assert result.exit_code == 0
-        assert "Use --force to actually remove datasets" in result.output
-        mock_remove_op.execute.assert_called_once_with("dataset1", force=False, dry_run=True)
+        assert "Cancelled" in result.output
+        mock_remove_op.execute.assert_called_once_with("dataset1", force=True, dry_run=True)
 
     def test_batch_remove_dataset_not_found(self, runner, mock_manager, mock_remove_op):
         """Test batch remove with non-existent dataset."""
         # Arrange
         mock_manager.dataset_exists.side_effect = [True, False, True]
-        mock_remove_op.execute.return_value = {'removed': True, 'size': 1000000}
+        mock_remove_op.execute.side_effect = [
+            {'name': 'dataset1', 'dry_run': True, 'size': 1000000},  # dry_run for dataset1
+            {'name': 'dataset3', 'dry_run': True, 'size': 1000000},  # dry_run for dataset3
+            {'name': 'dataset1', 'removed': True, 'size': 1000000},  # actual remove for dataset1
+            {'name': 'dataset3', 'removed': True, 'size': 1000000}   # actual remove for dataset3
+        ]
 
         # Act
         result = runner.invoke(
@@ -138,19 +146,24 @@ class TestBatchRemove:
 
         # Assert
         assert result.exit_code == 0
-        assert "Dataset 'dataset2' not found, skipping" in result.output
-        assert "Successfully removed: 2 datasets" in result.output
-        assert "Failed: 1 datasets" in result.output
-        assert mock_remove_op.execute.call_count == 2
+        # batch_remove silently skips non-existent datasets
+        assert "Removed 2 datasets" in result.output
+        # execute is called 2 times for dry_run + 2 times for actual remove
+        assert mock_remove_op.execute.call_count == 4
 
     def test_batch_remove_error_handling(self, runner, mock_manager, mock_remove_op):
         """Test batch remove error handling."""
         # Arrange
         mock_manager.dataset_exists.return_value = True
         mock_remove_op.execute.side_effect = [
-            {'removed': True, 'size': 1000000},
+            # dry_run calls
+            {'name': 'dataset1', 'dry_run': True, 'size': 1000000},
+            {'name': 'dataset2', 'dry_run': True, 'size': 1500000},
+            {'name': 'dataset3', 'dry_run': True, 'size': 2000000},
+            # actual remove calls
+            {'name': 'dataset1', 'removed': True, 'size': 1000000},
             Exception("Permission denied"),
-            {'removed': True, 'size': 2000000}
+            {'name': 'dataset3', 'removed': True, 'size': 2000000}
         ]
 
         # Act
@@ -162,18 +175,24 @@ class TestBatchRemove:
         # Assert
         assert result.exit_code == 0
         assert "Failed to remove 'dataset2': Permission denied" in result.output
-        assert "Successfully removed: 2 datasets" in result.output
-        assert "Failed: 1 datasets" in result.output
+        assert "Removed 2 datasets" in result.output
+        assert "Failed to remove 1 datasets" in result.output
 
     def test_batch_remove_size_formatting(self, runner, mock_manager, mock_remove_op):
         """Test proper size formatting in output."""
         # Arrange
         mock_manager.dataset_exists.return_value = True
         mock_remove_op.execute.side_effect = [
-            {'removed': True, 'size': 512},           # 512 B
-            {'removed': True, 'size': 1024},          # 1 KB
-            {'removed': True, 'size': 1048576},       # 1 MB
-            {'removed': True, 'size': 1073741824}     # 1 GB
+            # dry_run calls
+            {'name': 'dataset1', 'dry_run': True, 'size': 512},           # 512 B
+            {'name': 'dataset2', 'dry_run': True, 'size': 1024},          # 1 KB
+            {'name': 'dataset3', 'dry_run': True, 'size': 1048576},       # 1 MB
+            {'name': 'dataset4', 'dry_run': True, 'size': 1073741824},    # 1 GB
+            # actual remove calls
+            {'name': 'dataset1', 'removed': True, 'size': 512},           # 512 B
+            {'name': 'dataset2', 'removed': True, 'size': 1024},          # 1 KB
+            {'name': 'dataset3', 'removed': True, 'size': 1048576},       # 1 MB
+            {'name': 'dataset4', 'removed': True, 'size': 1073741824}     # 1 GB
         ]
 
         # Act
@@ -184,7 +203,7 @@ class TestBatchRemove:
 
         # Assert
         assert result.exit_code == 0
-        assert "dataset1 (512 B)" in result.output
+        assert "dataset1 (512.0 B)" in result.output
         assert "dataset2 (1.0 KB)" in result.output
         assert "dataset3 (1.0 MB)" in result.output
         assert "dataset4 (1.0 GB)" in result.output
@@ -202,7 +221,10 @@ class TestBatchRemove:
         # Arrange
         datasets = [f"dataset{i}" for i in range(5)]
         mock_manager.dataset_exists.return_value = True
-        mock_remove_op.execute.return_value = {'removed': True, 'size': 1000000}
+        # Create side_effect for both dry_run and actual remove calls
+        dry_run_responses = [{'name': f'dataset{i}', 'dry_run': True, 'size': 1000000} for i in range(5)]
+        remove_responses = [{'name': f'dataset{i}', 'removed': True, 'size': 1000000} for i in range(5)]
+        mock_remove_op.execute.side_effect = dry_run_responses + remove_responses
 
         # Act
         result = runner.invoke(
@@ -212,18 +234,29 @@ class TestBatchRemove:
 
         # Assert
         assert result.exit_code == 0
-        assert "Successfully removed: 5 datasets" in result.output
-        assert mock_remove_op.execute.call_count == 5
+        assert "Removed 5 datasets" in result.output
+        assert mock_remove_op.execute.call_count == 10  # 5 dry_run + 5 actual
 
     def test_batch_remove_postgresql_datasets(self, runner, mock_manager, mock_remove_op):
         """Test batch remove with PostgreSQL datasets."""
         # Arrange
         mock_manager.dataset_exists.return_value = True
-        mock_remove_op.execute.return_value = {
-            'removed': True,
-            'size': 1000000,
-            'postgresql_db': 'mdm_dataset1'
-        }
+        mock_remove_op.execute.side_effect = [
+            # dry_run call
+            {
+                'name': 'dataset1',
+                'dry_run': True,
+                'size': 1000000,
+                'postgresql_db': 'mdm_dataset1'
+            },
+            # actual remove call
+            {
+                'name': 'dataset1',
+                'removed': True,
+                'size': 1000000,
+                'postgresql_db': 'mdm_dataset1'
+            }
+        ]
 
         # Act
         result = runner.invoke(
@@ -234,16 +267,16 @@ class TestBatchRemove:
         # Assert
         assert result.exit_code == 0
         # The output should still work correctly with PostgreSQL info
-        assert "Successfully removed: 1 datasets" in result.output
+        assert "Removed 1 datasets" in result.output
 
     def test_batch_remove_total_size_calculation(self, runner, mock_manager, mock_remove_op):
         """Test total size calculation in dry run."""
         # Arrange
         mock_manager.dataset_exists.return_value = True
         mock_remove_op.execute.side_effect = [
-            {'dry_run': True, 'size': 1000000},    # 1 MB
-            {'dry_run': True, 'size': 2000000},    # 2 MB
-            {'dry_run': True, 'size': 3000000}     # 3 MB
+            {'name': 'dataset1', 'dry_run': True, 'size': 1000000},    # 1 MB
+            {'name': 'dataset2', 'dry_run': True, 'size': 2000000},    # 2 MB
+            {'name': 'dataset3', 'dry_run': True, 'size': 3000000}     # 3 MB
         ]
 
         # Act

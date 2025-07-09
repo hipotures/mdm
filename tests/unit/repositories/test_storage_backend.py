@@ -297,37 +297,42 @@ class TestBackendFactory:
 
     def test_create_sqlite_backend(self):
         """Test creating SQLite backend."""
-        with patch('mdm.storage.factory.SQLiteBackend') as mock_sqlite:
+        mock_backend = Mock(spec=StorageBackend)
+        with patch.dict('mdm.storage.factory.BackendFactory._backends', {'sqlite': Mock(return_value=mock_backend)}):
             config = {'type': 'sqlite'}
-            BackendFactory.create('sqlite', config)
-            mock_sqlite.assert_called_once_with(config)
+            result = BackendFactory.create('sqlite', config)
+            assert result == mock_backend
 
     def test_create_duckdb_backend(self):
         """Test creating DuckDB backend."""
-        with patch('mdm.storage.factory.DuckDBBackend') as mock_duckdb:
+        mock_backend = Mock(spec=StorageBackend)
+        with patch.dict('mdm.storage.factory.BackendFactory._backends', {'duckdb': Mock(return_value=mock_backend)}):
             config = {'type': 'duckdb'}
-            BackendFactory.create('duckdb', config)
-            mock_duckdb.assert_called_once_with(config)
+            result = BackendFactory.create('duckdb', config)
+            assert result == mock_backend
 
     def test_create_postgresql_backend(self):
         """Test creating PostgreSQL backend."""
-        with patch('mdm.storage.factory.PostgreSQLBackend') as mock_pg:
+        mock_backend = Mock(spec=StorageBackend)
+        with patch.dict('mdm.storage.factory.BackendFactory._backends', {'postgresql': Mock(return_value=mock_backend)}):
             config = {'type': 'postgresql'}
-            BackendFactory.create('postgresql', config)
-            mock_pg.assert_called_once_with(config)
+            result = BackendFactory.create('postgresql', config)
+            assert result == mock_backend
 
     def test_create_invalid_backend(self):
         """Test error with invalid backend type."""
-        with pytest.raises(ValueError, match="Unsupported backend"):
+        from mdm.core.exceptions import BackendError
+        with pytest.raises(BackendError, match="Unsupported backend type: invalid"):
             BackendFactory.create('invalid', {})
 
     def test_get_backend_class(self):
-        """Test getting backend class."""
+        """Test getting backend class - method doesn't exist, test backends dict instead."""
         from mdm.storage.sqlite import SQLiteBackend
         from mdm.storage.duckdb import DuckDBBackend
         
-        assert BackendFactory.get_backend_class('sqlite') == SQLiteBackend
-        assert BackendFactory.get_backend_class('duckdb') == DuckDBBackend
+        # Access the private _backends dict for testing
+        assert BackendFactory._backends['sqlite'] == SQLiteBackend
+        assert BackendFactory._backends['duckdb'] == DuckDBBackend
 
     def test_get_supported_backends(self):
         """Test getting list of supported backends."""

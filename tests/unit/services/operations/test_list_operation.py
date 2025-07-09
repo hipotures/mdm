@@ -32,13 +32,18 @@ class TestListOperation:
     @pytest.fixture
     def list_operation(self, mock_config, temp_config_dir):
         """Create ListOperation instance."""
-        with patch('mdm.config.get_config_manager') as mock_get_config:
+        with patch('mdm.dataset.operations.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = temp_config_dir
             mock_get_config.return_value = mock_manager
             
             operation = ListOperation()
+            # Ensure paths are properly set
+            assert operation.base_path == temp_config_dir
+            assert operation.dataset_registry_dir == temp_config_dir / "config/datasets"
+            # Create the directory
+            operation.dataset_registry_dir.mkdir(parents=True, exist_ok=True)
             return operation
 
     def create_dataset_yaml(self, path: Path, name: str, **kwargs):

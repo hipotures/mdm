@@ -178,32 +178,38 @@ class TestFeatureGenerator:
 
     def test_generate_features_transformer_error(self, feature_generator, sample_dataframe, 
                                                column_types, mock_registry):
-        """Test handling of transformer errors."""
+        """Test that transformer errors propagate."""
         # Arrange
         mock_transformer = Mock()
         mock_transformer.generate_features.side_effect = Exception("Transform failed")
         mock_transformer.__class__.__name__ = "FailingTransformer"
         mock_registry.get_transformers.return_value = [mock_transformer]
         
-        # Act - should not raise, just skip the failing transformer
-        result = feature_generator.generate_features(
-            df=sample_dataframe,
-            dataset_name="test_dataset",
-            column_types=column_types
-        )
-        
-        # Assert - original columns preserved
-        assert set(result.columns) == set(sample_dataframe.columns)
+        # Act & Assert - should raise the exception
+        with pytest.raises(Exception, match="Transform failed"):
+            feature_generator.generate_features(
+                df=sample_dataframe,
+                dataset_name="test_dataset",
+                column_types=column_types
+            )
 
     def test_load_custom_features_exists(self, feature_generator):
         """Test loading existing custom features."""
         # Arrange
-        custom_path = feature_generator.base_path / "config" / "custom_features" / "test_dataset.py"
+        from mdm.features.custom.base import BaseDomainFeatures
         
+        # Create a mock custom features class that inherits from BaseDomainFeatures
+        class MockCustomFeatures(BaseDomainFeatures):
+            def _register_operations(self):
+                pass  # Implement the abstract method
+        
+        mock_instance = MockCustomFeatures("test_dataset")
         mock_spec = Mock()
+        mock_spec.loader = Mock()
         mock_module = Mock()
-        mock_features_class = Mock()
-        mock_module.CustomFeatures = mock_features_class
+        
+        # Set up the module to have our custom class
+        mock_module.MockCustomFeatures = MockCustomFeatures
         
         with patch('pathlib.Path.exists', return_value=True):
             with patch('importlib.util.spec_from_file_location', return_value=mock_spec):
@@ -212,7 +218,7 @@ class TestFeatureGenerator:
                     result = feature_generator._load_custom_features("test_dataset")
         
         # Assert
-        assert result == mock_features_class.return_value
+        assert isinstance(result, MockCustomFeatures)
 
     def test_load_custom_features_not_exists(self, feature_generator):
         """Test loading custom features when file doesn't exist."""

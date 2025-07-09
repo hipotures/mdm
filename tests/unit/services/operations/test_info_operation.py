@@ -34,13 +34,17 @@ class TestInfoOperation:
     @pytest.fixture
     def info_operation(self, mock_config, temp_dirs):
         """Create InfoOperation instance."""
-        with patch('mdm.config.get_config_manager') as mock_get_config:
+        with patch('mdm.dataset.operations.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = temp_dirs
             mock_get_config.return_value = mock_manager
             
             operation = InfoOperation()
+            # Ensure paths are properly set
+            assert operation.base_path == temp_dirs
+            assert operation.dataset_registry_dir == temp_dirs / "config/datasets"
+            assert operation.datasets_dir == temp_dirs / "datasets"
             return operation
 
     def create_dataset_yaml(self, registry_dir: Path, name: str, **kwargs):
