@@ -98,11 +98,31 @@ class TestEnvironmentVariables:
             assert (custom_home / "datasets").exists()
     
     @pytest.mark.mdm_id("1.2.6")
-    @pytest.mark.skip(reason="MDM_DATASETS_PATH not implemented as standalone env var")
-    def test_mdm_datasets_path(self):
+    def test_mdm_datasets_path(self, run_mdm, tmp_path, sample_csv_data):
         """1.2.6: Set MDM_DATASETS_PATH=/custom/datasets and verify usage"""
         # Path configuration is under MDM_PATHS_DATASETS_PATH
-        pass
+        custom_datasets = tmp_path / "custom_datasets"
+        custom_datasets.mkdir()
+        
+        # Register a dataset with custom datasets path
+        result = run_mdm(
+            ["dataset", "register", "test_custom_path", str(sample_csv_data), "--target", "value"],
+            env={"MDM_PATHS_DATASETS_PATH": str(custom_datasets)}
+        )
+        
+        assert result.returncode == 0
+        assert "registered successfully" in result.stdout
+        
+        # Verify dataset was created in custom path
+        dataset_dir = custom_datasets / "test_custom_path"
+        assert dataset_dir.exists()
+        
+        # Verify info shows custom path
+        result = run_mdm(
+            ["info"],
+            env={"MDM_PATHS_DATASETS_PATH": str(custom_datasets)}
+        )
+        assert str(custom_datasets) in result.stdout
     
     @pytest.mark.mdm_id("1.2.7")
     @pytest.mark.skip(reason="PostgreSQL requires database server")

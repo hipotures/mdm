@@ -149,6 +149,18 @@ class ConfigManager:
             elif len(parts) >= 3 and parts[1] == "show" and parts[2] == "progress":
                 # Combine show_progress
                 parts = [parts[0], "show_progress"] + parts[3:]
+            elif len(parts) >= 3 and parts[1] == "datasets" and parts[2] == "path":
+                # Combine datasets_path
+                parts = [parts[0], "datasets_path"] + parts[3:]
+            elif len(parts) >= 3 and parts[1] == "configs" and parts[2] == "path":
+                # Combine configs_path
+                parts = [parts[0], "configs_path"] + parts[3:]
+            elif len(parts) >= 3 and parts[1] == "logs" and parts[2] == "path":
+                # Combine logs_path
+                parts = [parts[0], "logs_path"] + parts[3:]
+            elif len(parts) >= 4 and parts[1] == "custom" and parts[2] == "features" and parts[3] == "path":
+                # Combine custom_features_path
+                parts = [parts[0], "custom_features_path"] + parts[4:]
             elif len(parts) >= 3 and parts[-2] == "n" and parts[-1] == "bins":
                 # Combine n_bins at the end
                 parts = parts[:-2] + ["n_bins"]
