@@ -26,6 +26,10 @@ class TestCLIRealCoverage:
             old_home = os.environ.get('MDM_HOME_DIR')
             os.environ['MDM_HOME_DIR'] = tmpdir
             
+            # Clear any cached configuration
+            from mdm.config import reset_config_manager
+            reset_config_manager()
+            
             # Create required directories
             mdm_path = Path(tmpdir)
             (mdm_path / "datasets").mkdir(parents=True)
@@ -60,6 +64,9 @@ features:
                 os.environ['MDM_HOME_DIR'] = old_home
             else:
                 del os.environ['MDM_HOME_DIR']
+            
+            # Clear cached configuration again
+            reset_config_manager()
     
     def test_cli_version(self, runner):
         """Test version command."""
@@ -106,6 +113,13 @@ features:
             "--description", "Test dataset",
             "--tags", "test,demo"
         ])
+        if result.exit_code != 0:
+            print(f"Dataset register failed with exit code {result.exit_code}")
+            print(f"Output: {result.stdout}")
+            print(f"Error: {result.stderr}")
+            if result.exception:
+                import traceback
+                traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
         assert result.exit_code == 0
         assert "registered successfully" in result.stdout
         
@@ -213,6 +227,13 @@ features:
                 "dataset", "register", f"batch_ds_{i}", str(csv_file),
                 "--target", "value"
             ])
+            if result.exit_code != 0:
+                print(f"Batch dataset register failed for batch_ds_{i} with exit code {result.exit_code}")
+                print(f"Output: {result.stdout}")
+                print(f"Error: {result.stderr}")
+                if result.exception:
+                    import traceback
+                    traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
             assert result.exit_code == 0
             datasets.append(f"batch_ds_{i}")
         
