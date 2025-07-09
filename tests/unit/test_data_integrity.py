@@ -57,7 +57,7 @@ class TestExportImportRoundtrip:
                 "roundtrip_test",
                 output_dir=str(export_dir),
                 format="csv",
-                tables=["data"],  # Export only the data table, not features
+                tables=["train"],  # Export only the train table, not features
             )
             
             # Verify export created files
@@ -78,7 +78,7 @@ class TestExportImportRoundtrip:
                     exported_csv = f
                     break
             
-            assert exported_csv is not None, f"Could not find data export in {[f.name for f in exported_files]}"
+            assert exported_csv is not None, f"Could not find train export in {[f.name for f in exported_files]}"
             
             if exported_csv.suffix == '.gz':
                 reimported = pd.read_csv(exported_csv, compression='gzip')
