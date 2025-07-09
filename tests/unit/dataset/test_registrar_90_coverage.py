@@ -317,20 +317,27 @@ class TestDatasetRegistrar90Coverage:
         # Mock psycopg2
         mock_conn = Mock()
         mock_cursor = Mock()
+        mock_cursor.__enter__ = Mock(return_value=mock_cursor)
+        mock_cursor.__exit__ = Mock(return_value=None)
         mock_conn.cursor.return_value = mock_cursor
         mock_cursor.close = Mock()
         mock_conn.close = Mock()
+        mock_cursor.fetchone.return_value = None  # Database doesn't exist
         
         with patch('psycopg2.connect', return_value=mock_conn):
             registrar._create_postgresql_database(db_info)
             
             # Verify operations
             mock_conn.set_isolation_level.assert_called_once_with(0)
-            mock_cursor.execute.assert_called_once()
-            sql = mock_cursor.execute.call_args[0][0]
-            assert 'CREATE DATABASE' in sql
-            assert 'mdm_test' in sql
-            mock_cursor.close.assert_called_once()
+            # Execute is called twice: once to check if DB exists, once to create it
+            assert mock_cursor.execute.call_count == 2
+            # First call checks if database exists
+            first_call = mock_cursor.execute.call_args_list[0]
+            assert 'SELECT 1 FROM pg_database' in first_call[0][0]
+            # Second call creates database
+            second_call = mock_cursor.execute.call_args_list[1]
+            assert 'CREATE DATABASE' in second_call[0][0]
+            assert 'mdm_test' in second_call[0][0]
             mock_conn.close.assert_called_once()
 
     def test_create_postgresql_database_already_exists(self, registrar):
@@ -573,7 +580,7 @@ class TestDatasetRegistrar90Coverage:
             assert types['binary'] == ColumnType.BINARY
             assert types['datetime'] == ColumnType.DATETIME
 
-    def test_detect_column_types_with_profiling_minimal_mode(self, registrar):
+    def test__detect_column_types_with_profiling_minimal_mode(self, registrar):
         """Test profiling with minimal mode for large datasets."""
         # Create large dataframe
         large_df = pd.DataFrame({
@@ -599,7 +606,7 @@ class TestDatasetRegistrar90Coverage:
             call_kwargs = mock_profile_class.call_args[1]
             assert call_kwargs['minimal'] == True
 
-    def test_detect_column_types_with_profiling_backend_read(self, registrar):
+    def test__detect_column_types_with_profiling_backend_read(self, registrar):
         """Test column type detection reading from backend."""
         table_name = 'test_table'
         task = Mock()

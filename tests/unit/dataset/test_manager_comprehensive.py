@@ -412,9 +412,11 @@ class TestDatasetManagerComprehensive:
         assert len(results) == 1
         
         # Case-sensitive search
+        # Dataset name is normalized to lowercase, so "testdataset" should find it
         results = manager.search_datasets("testdataset", case_sensitive=True)
-        assert len(results) == 0
+        assert len(results) == 1
         
+        # But "TestDataset" should not find it with case-sensitive search
         results = manager.search_datasets("TestDataset", case_sensitive=True)
         assert len(results) == 0  # Name is stored as lowercase
 

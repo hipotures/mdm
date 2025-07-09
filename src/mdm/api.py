@@ -3,13 +3,17 @@
 This module provides the main public API for MDM.
 """
 
-from typing import Any, Callable, Optional, Union
+from pathlib import Path
+from typing import Any, Callable, Optional, Union, List, Dict
 
 import pandas as pd
 
 from mdm.config import get_config
+from mdm.core.exceptions import DatasetError
 from mdm.dataset.manager import DatasetManager
+from mdm.dataset.registrar import DatasetRegistrar
 from mdm.models.dataset import DatasetInfo
+from mdm.storage.factory import BackendFactory
 from mdm.utils.integration import MLFrameworkAdapter, SubmissionCreator
 from mdm.utils.performance import ChunkProcessor, PerformanceMonitor
 from mdm.utils.time_series import TimeSeriesSplitter
@@ -61,18 +65,12 @@ class MDMClient:
         Raises:
             DatasetError: If registration fails
         """
-        from pathlib import Path
-
-        from mdm.dataset.registrar import DatasetRegistrar
-
         registrar = DatasetRegistrar(self.manager)
 
         # Convert path to Path object
         path = Path(dataset_path)
-        if not path.exists():
-            raise ValueError(f"Path does not exist: {dataset_path}")
-
-        # Register dataset
+        
+        # Register dataset (registrar will check if path exists)
         return registrar.register(
             name=name,
             path=path,
@@ -95,24 +93,54 @@ class MDMClient:
         Returns:
             DatasetInfo object or None if not found
         """
-        return self.manager.get_dataset(name)
+        try:
+            return self.manager.get_dataset(name)
+        except DatasetError:
+            return None
 
     def list_datasets(
         self,
-        filter_func: Optional[Callable[[DatasetInfo], bool]] = None
+        filter_func: Optional[Callable[[DatasetInfo], bool]] = None,
+        limit: Optional[int] = None,
+        sort_by: Optional[str] = None,
+        filter_backend: Optional[str] = None
     ) -> list[DatasetInfo]:
         """List all datasets.
 
         Args:
             filter_func: Optional filter function
+            limit: Maximum number of datasets to return
+            sort_by: Field to sort by (e.g., 'name', 'registered_at')
+            filter_backend: Filter by backend type
 
         Returns:
             List of DatasetInfo objects
         """
+        # Get all datasets from manager
         datasets = self.manager.list_datasets()
 
+        # Filter by backend if requested
+        if filter_backend:
+            datasets = [d for d in datasets if d.database.get('backend') == filter_backend]
+
+        # Apply additional filter if provided
         if filter_func:
             datasets = [d for d in datasets if filter_func(d)]
+
+        # Sort if requested
+        if sort_by:
+            reverse = False
+            if sort_by.startswith('-'):
+                reverse = True
+                sort_by = sort_by[1:]
+            try:
+                datasets = sorted(datasets, key=lambda d: getattr(d, sort_by, ''), reverse=reverse)
+            except AttributeError:
+                pass  # Ignore if attribute doesn't exist
+
+        # Limit if requested
+        if limit is not None:
+            datasets = datasets[:limit]
 
         return datasets
 
@@ -303,7 +331,7 @@ class MDMClient:
         Raises:
             DatasetError: If dataset not found or removal fails
         """
-        self.manager.delete_dataset(name, force=force)
+        self.manager.remove_dataset(name, force=force)
 
     def export_dataset(
         self,

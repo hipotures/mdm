@@ -554,84 +554,113 @@ class TestDatasetRegistrarFinal:
         """Test binary classification problem type inference."""
         column_info = {
             'train': {
-                'target': {
-                    'type': ColumnType.NUMERIC,
-                    'unique_count': 2,
-                    'min': 0,
-                    'max': 1
+                'columns': ['target', 'feature1'],
+                'sample_data': {
+                    'target': [0, 1, 0, 1, 1, 0, 1, 0],
+                    'feature1': [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
                 }
             }
         }
         
         result = registrar._infer_problem_type(column_info, 'target')
-        assert result == 'binary_classification'
+        assert result == ProblemType.BINARY_CLASSIFICATION
 
     def test_infer_problem_type_multiclass(self, registrar):
         """Test multiclass classification problem type inference."""
         column_info = {
             'train': {
-                'target': {
-                    'type': ColumnType.CATEGORICAL,
-                    'unique_count': 5
+                'columns': ['target', 'feature1'],
+                'sample_data': {
+                    'target': ['A', 'B', 'C', 'D', 'E', 'A', 'B', 'C'],
+                    'feature1': [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]
                 }
             }
         }
         
         result = registrar._infer_problem_type(column_info, 'target')
-        assert result == 'multiclass_classification'
+        assert result == ProblemType.MULTICLASS_CLASSIFICATION
 
     def test_infer_problem_type_regression(self, registrar):
         """Test regression problem type inference."""
         column_info = {
             'train': {
-                'target': {
-                    'type': ColumnType.NUMERIC,
-                    'unique_count': 100,
-                    'is_float': True
+                'columns': ['target', 'feature1'],
+                'sample_data': {
+                    'target': [1.5, 2.7, 3.9, 4.2, 5.6, 6.1, 7.3, 8.8, 9.9, 10.2],
+                    'feature1': [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
                 }
             }
         }
         
         result = registrar._infer_problem_type(column_info, 'target')
-        assert result == 'regression'
+        assert result == ProblemType.REGRESSION
 
     def test_generate_features_enabled(self, registrar, mock_feature_generator):
         """Test feature generation when enabled."""
         normalized_name = "test_dataset"
-        db_info = {'backend': 'sqlite'}
-        table_mappings = {'train': {}}
-        column_info = {'train': {}}
+        db_info = {'backend': 'sqlite', 'path': '/tmp/test.db'}
+        table_mappings = {'train': 'train_table'}
+        column_info = {
+            'train': {
+                'columns': ['id', 'feature1', 'target'],
+                'sample_data': {
+                    'id': [1, 2, 3],
+                    'feature1': [1.0, 2.0, 3.0],
+                    'target': [0, 1, 0]
+                }
+            }
+        }
         target_column = 'target'
         id_columns = ['id']
         
-        registrar._generate_features(
-            normalized_name, db_info, table_mappings, column_info,
-            target_column, id_columns, None, Mock()
-        )
+        # Mock the backend and engine
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+            mock_backend = Mock()
+            mock_engine = Mock()
+            mock_backend.get_engine.return_value = mock_engine
+            mock_backend.close_connections = Mock()
+            mock_factory.create.return_value = mock_backend
+            
+            # Mock _detect_column_types_with_profiling
+            with patch.object(registrar, '_detect_column_types_with_profiling') as mock_detect:
+                mock_detect.return_value = {
+                    'id': ColumnType.NUMERIC,
+                    'feature1': ColumnType.NUMERIC,
+                    'target': ColumnType.NUMERIC
+                }
+                
+                # Call the method
+                registrar._generate_features(
+                    normalized_name, db_info, table_mappings, column_info,
+                    target_column, id_columns, None, Mock()
+                )
         
         # Feature generator should be called
-        mock_feature_generator.generate.assert_called_once()
+        mock_feature_generator.generate_feature_tables.assert_called_once()
 
     def test_compute_initial_statistics(self, registrar):
         """Test initial statistics computation."""
         normalized_name = "test_dataset"
-        db_info = {'backend': 'sqlite'}
-        table_mappings = {
-            'train': {'row_count': 1000},
-            'test': {'row_count': 500}
-        }
+        db_info = {'backend': 'sqlite', 'path': '/tmp/test.db'}
+        table_mappings = {'train': 'train_table', 'test': 'test_table'}
         
-        with patch('mdm.dataset.registrar.compute_dataset_statistics') as mock_compute:
-            mock_compute.return_value = {
-                'total_rows': 1500,
-                'memory_size_mb': 50.5
-            }
+        # Mock BackendFactory and backend
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+            mock_backend = Mock()
+            mock_factory.create.return_value = mock_backend
             
-            result = registrar._compute_initial_statistics(normalized_name, db_info, table_mappings)
-            
-            assert result['total_rows'] == 1500
-            assert result['memory_size_mb'] == 50.5
-            mock_compute.assert_called_once_with(normalized_name)
+            # Mock compute_dataset_statistics (imported in the method)
+            with patch('mdm.dataset.registrar.compute_dataset_statistics') as mock_compute:
+                mock_compute.return_value = {
+                    'total_rows': 1500,
+                    'memory_size_mb': 50.5
+                }
+                
+                result = registrar._compute_initial_statistics(normalized_name, db_info, table_mappings)
+                
+                assert result is not None
+                assert result['total_rows'] == 1500
+                assert result['memory_size_mb'] == 50.5
 
     def test_register_success(self, registrar, mock_manager, tmp_path):
         """Test successful dataset registration."""
@@ -791,7 +820,7 @@ class TestDatasetRegistrarFinal:
                             # Should log warning
                             mock_logger.warning.assert_called()
 
-    def test_detect_column_types_with_profiling_edge_cases(self, registrar):
+    def test__detect_column_types_with_profiling_edge_cases(self, registrar):
         """Test column type detection with edge cases."""
         df = pd.DataFrame({
             'mixed_numeric': [1, 2, '3', 4, 5],  # Mixed types

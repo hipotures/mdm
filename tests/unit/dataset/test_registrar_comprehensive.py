@@ -420,7 +420,7 @@ class TestDatasetRegistrarComprehensive:
         assert 'train_generated' in result
         mock_feature_generator.generate_feature_tables.assert_called_once()
 
-    def test_detect_column_types_with_profiling(self, registrar):
+    def test__detect_column_types_with_profiling(self, registrar):
         """Test column type detection using profiling."""
         column_info = {
             'train': {

@@ -103,17 +103,20 @@ class TestMDMClientBasic:
 class TestMDMClientRegistration:
     """Test dataset registration."""
     
+    @patch('mdm.api.DatasetRegistrar')
     @patch('mdm.api.DatasetManager')
-    @patch('mdm.api.Path')
-    def test_register_dataset_path_not_exists(self, mock_path_class, mock_manager_class):
+    def test_register_dataset_path_not_exists(self, mock_manager_class, mock_registrar_class):
         """Test registering dataset with non-existent path."""
-        mock_path = Mock()
-        mock_path.exists.return_value = False
-        mock_path_class.return_value = mock_path
+        mock_manager = mock_manager_class.return_value
+        mock_manager.dataset_exists.return_value = False
+        mock_manager.validate_dataset_name.side_effect = lambda x: x.lower()
+        
+        mock_registrar = mock_registrar_class.return_value
+        mock_registrar.register.side_effect = DatasetError("Path does not exist")
         
         client = MDMClient()
         
-        with pytest.raises(ValueError, match="Path does not exist"):
+        with pytest.raises(DatasetError, match="Path does not exist"):
             client.register_dataset('test', '/nonexistent/path')
     
     @patch('mdm.api.DatasetRegistrar')
@@ -166,32 +169,43 @@ class TestMDMClientDataOperations:
         mock_factory_class.create.return_value = mock_backend
         
         client = MDMClient()
-        result = client.load_dataset('test_dataset')
+        client.get_dataset = Mock(return_value=mock_info)
+        client.manager.get_backend.return_value = mock_backend
+        mock_backend.read_table_to_dataframe.return_value = expected_df
         
-        pd.testing.assert_frame_equal(result, expected_df)
-        mock_backend.read_table.assert_called_once_with('train_table')
+        train_df, test_df = client.load_dataset_files('test_dataset')
+        
+        pd.testing.assert_frame_equal(train_df, expected_df)
+        assert test_df is None
     
-    @patch('mdm.api.BackendFactory')
     @patch('mdm.api.DatasetManager')
-    def test_load_dataset_specific_table(self, mock_manager_class, mock_factory_class):
+    def test_load_dataset_specific_table(self, mock_manager_class):
         """Test loading specific table."""
-        mock_manager = mock_manager_class.return_value
+        client = MDMClient()
+        
+        # Setup mocks
         mock_info = Mock()
         mock_info.database = {'backend': 'sqlite', 'path': '/tmp/test.db'}
         mock_info.tables = {'train': 'train_table', 'test': 'test_table'}
-        mock_manager.get_dataset.return_value = mock_info
+        client.get_dataset = Mock(return_value=mock_info)
         
         mock_backend = Mock()
-        mock_backend.get_engine.return_value = Mock()
+        mock_engine = Mock()
+        mock_backend.get_engine.return_value = mock_engine
         expected_df = pd.DataFrame({'col1': [4, 5, 6]})
-        mock_backend.read_table.return_value = expected_df
-        mock_factory_class.create.return_value = mock_backend
+        mock_backend.read_table_to_dataframe.return_value = expected_df
+        client.manager.get_backend.return_value = mock_backend
         
-        client = MDMClient()
-        result = client.load_dataset('test_dataset', table='test')
+        # load_dataset_files doesn't take table parameter, use load_table instead
+        result = client.load_table('test_dataset', 'test')
         
         pd.testing.assert_frame_equal(result, expected_df)
-        mock_backend.read_table.assert_called_once_with('test_table')
+        
+        # Verify
+        client.get_dataset.assert_called_once_with('test_dataset')
+        client.manager.get_backend.assert_called_once_with('test_dataset')
+        mock_backend.get_engine.assert_called_once_with('/tmp/test.db')
+        mock_backend.read_table_to_dataframe.assert_called_once_with('test_table', mock_engine)
     
     @patch('mdm.api.DatasetManager')
     def test_load_dataset_not_found(self, mock_manager_class):
@@ -201,8 +215,10 @@ class TestMDMClientDataOperations:
         
         client = MDMClient()
         
-        with pytest.raises(DatasetError, match="Dataset 'nonexistent' not found"):
-            client.load_dataset('nonexistent')
+        client.get_dataset = Mock(return_value=None)
+        
+        with pytest.raises(ValueError, match="Dataset 'nonexistent' not found"):
+            client.load_dataset_files('nonexistent')
     
     @patch('mdm.api.BackendFactory')
     @patch('mdm.api.DatasetManager')
@@ -220,10 +236,13 @@ class TestMDMClientDataOperations:
         mock_factory_class.create.return_value = mock_backend
         
         client = MDMClient()
-        result = client.query('test_dataset', "SELECT COUNT(*) FROM train")
+        mock_backend.execute_query.return_value = expected_df
+        client.manager.get_backend.return_value = mock_backend
+        
+        result = client.query_dataset('test_dataset', "SELECT COUNT(*) FROM train")
         
         pd.testing.assert_frame_equal(result, expected_df)
-        mock_backend.query.assert_called_once_with("SELECT COUNT(*) FROM train")
+        mock_backend.execute_query.assert_called_once_with("SELECT COUNT(*) FROM train")
 
 
 class TestMDMClientUtils:
@@ -237,10 +256,15 @@ class TestMDMClientUtils:
         mock_manager.get_dataset_stats.return_value = expected_stats
         
         client = MDMClient()
-        result = client.get_stats('test_dataset')
-        
-        assert result == expected_stats
-        mock_manager.get_dataset_stats.assert_called_once_with('test_dataset')
+        # get_stats doesn't exist, use get_statistics
+        with patch('mdm.dataset.operations.StatsOperation') as mock_stats_op:
+            mock_stats = mock_stats_op.return_value
+            mock_stats.execute.return_value = expected_stats
+            
+            result = client.get_statistics('test_dataset')
+            
+            assert result == expected_stats
+            mock_stats.execute.assert_called_once_with('test_dataset', full=False)
     
     @patch('mdm.api.DatasetManager')
     def test_export_dataset(self, mock_manager_class):
@@ -248,13 +272,14 @@ class TestMDMClientUtils:
         mock_manager = mock_manager_class.return_value
         
         client = MDMClient()
-        client.export_dataset('test_dataset', '/tmp/export', format='parquet')
-        
-        mock_manager.export_dataset.assert_called_once_with(
-            'test_dataset',
-            Path('/tmp/export'),
-            format='parquet'
-        )
+        with patch('mdm.dataset.operations.ExportOperation') as mock_export_op:
+            mock_export = mock_export_op.return_value
+            mock_export.execute.return_value = [Path('/tmp/export/train.parquet')]
+            
+            result = client.export_dataset('test_dataset', '/tmp/export', format='parquet')
+            
+            mock_export.execute.assert_called_once()
+            assert result == ['/tmp/export/train.parquet']
     
     @patch('mdm.api.DatasetManager')
     def test_update_metadata(self, mock_manager_class):
@@ -262,16 +287,21 @@ class TestMDMClientUtils:
         mock_manager = mock_manager_class.return_value
         
         client = MDMClient()
-        client.update_metadata(
+        # update_metadata doesn't exist, use update_dataset
+        mock_manager.update_dataset.return_value = Mock()
+        
+        client.update_dataset(
             'test_dataset',
             description='Updated description',
             tags=['new', 'tags']
         )
         
-        mock_manager.update_dataset_metadata.assert_called_once_with(
+        mock_manager.update_dataset.assert_called_once_with(
             'test_dataset',
-            description='Updated description',
-            tags=['new', 'tags']
+            {
+                'description': 'Updated description',
+                'tags': ['new', 'tags']
+            }
         )
 
 
@@ -283,61 +313,78 @@ class TestMDMClientIntegration:
     def test_to_sklearn(self, mock_manager_class, mock_adapter_class):
         """Test converting to sklearn format."""
         mock_adapter = mock_adapter_class.return_value
-        expected_result = (Mock(), Mock())  # X, y
-        mock_adapter.prepare_for_sklearn.return_value = expected_result
+        expected_result = {'X_train': Mock(), 'y_train': Mock()}
+        mock_adapter.prepare_data.return_value = expected_result
         
         client = MDMClient()
-        with patch.object(client, 'load_dataset') as mock_load:
-            mock_df = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
-            mock_load.return_value = mock_df
-            
-            with patch.object(client, 'get_dataset') as mock_get:
-                mock_info = Mock()
-                mock_info.target_column = 'target'
-                mock_get.return_value = mock_info
-                
-                result = client.to_sklearn('test_dataset')
+        
+        # Setup dataset info
+        mock_info = Mock()
+        mock_info.target_column = 'target'
+        mock_info.id_columns = ['id']
+        client.get_dataset = Mock(return_value=mock_info)
+        
+        # Setup load_dataset_files
+        train_df = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
+        test_df = pd.DataFrame({'feature': [3, 4], 'target': [1, 0]})
+        client.load_dataset_files = Mock(return_value=(train_df, test_df))
+        
+        # Call prepare_for_ml
+        result = client.prepare_for_ml('test_dataset', framework='sklearn', sample_size=100)
         
         assert result == expected_result
-        mock_adapter.prepare_for_sklearn.assert_called_once()
+        client.get_dataset.assert_called_once_with('test_dataset')
+        client.load_dataset_files.assert_called_once_with('test_dataset', 100)
+        mock_adapter_class.assert_called_once_with('sklearn')
+        mock_adapter.prepare_data.assert_called_once_with(
+            train_df, test_df, 'target', ['id']
+        )
     
     @patch('mdm.api.MLFrameworkAdapter')
     @patch('mdm.api.DatasetManager')
     def test_to_tensorflow(self, mock_manager_class, mock_adapter_class):
         """Test converting to TensorFlow format."""
         mock_adapter = mock_adapter_class.return_value
-        expected_ds = Mock()  # tf.data.Dataset
-        mock_adapter.prepare_for_tensorflow.return_value = expected_ds
+        expected_result = {'train_ds': Mock(), 'test_ds': Mock()}
+        mock_adapter.prepare_data.return_value = expected_result
         
         client = MDMClient()
-        with patch.object(client, 'load_dataset') as mock_load:
-            mock_df = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
-            mock_load.return_value = mock_df
-            
-            with patch.object(client, 'get_dataset') as mock_get:
-                mock_info = Mock()
-                mock_info.target_column = 'target'
-                mock_get.return_value = mock_info
-                
-                result = client.to_tensorflow('test_dataset', batch_size=32)
         
-        assert result == expected_ds
-        mock_adapter.prepare_for_tensorflow.assert_called_once()
+        # Setup dataset info
+        mock_info = Mock()
+        mock_info.target_column = 'target'
+        mock_info.id_columns = None
+        client.get_dataset = Mock(return_value=mock_info)
+        
+        # Setup load_dataset_files
+        train_df = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
+        test_df = pd.DataFrame({'feature': [3, 4], 'target': [1, 0]})
+        client.load_dataset_files = Mock(return_value=(train_df, test_df))
+        
+        # Call prepare_for_ml
+        result = client.prepare_for_ml('test_dataset', framework='tensorflow')
+        
+        assert result == expected_result
+        mock_adapter_class.assert_called_once_with('tensorflow')
+        mock_adapter.prepare_data.assert_called_once_with(
+            train_df, test_df, 'target', None
+        )
     
     @patch('mdm.api.SubmissionCreator')
     @patch('mdm.api.DatasetManager')
     def test_create_submission(self, mock_manager_class, mock_creator_class):
         """Test creating submission file."""
-        mock_creator = mock_creator_class.return_value
-        
         client = MDMClient()
         predictions = pd.Series([0, 1, 0, 1])
         
-        with patch.object(client, 'get_dataset') as mock_get:
-            mock_info = Mock()
-            mock_info.problem_type = 'binary_classification'
-            mock_get.return_value = mock_info
-            
-            client.create_submission('test_dataset', predictions, '/tmp/submission.csv')
+        # Setup mock SubmissionCreator
+        mock_creator = mock_creator_class.return_value
+        mock_creator.create_submission.return_value = '/tmp/submission.csv'
         
-        mock_creator.create_submission.assert_called_once()
+        result = client.create_submission('test_dataset', predictions, '/tmp/submission.csv')
+        
+        assert result == '/tmp/submission.csv'
+        mock_creator_class.assert_called_once_with(client.manager)
+        mock_creator.create_submission.assert_called_once_with(
+            'test_dataset', predictions, '/tmp/submission.csv'
+        )

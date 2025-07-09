@@ -462,7 +462,7 @@ class TestDatasetService:
         # Dataset with no test table
         dataset_info = DatasetInfo(
             name="test_dataset",
-            problem_type="classification",
+            problem_type="binary_classification",
             tables={"train": "train_table"},  # No test table
             shape=(100, 10),
             database={"backend": "sqlite"}
@@ -476,11 +476,11 @@ class TestDatasetService:
         """Test submission creation without ID columns."""
         dataset_info = DatasetInfo(
             name="test_dataset",
-            problem_type="classification",
+            problem_type="binary_classification",
             tables={"test": "test_table"},
             shape=(100, 10),
             database={"backend": "sqlite"},
-            id_columns=None,  # No ID columns
+            id_columns=[],  # No ID columns
             target_column="target"
         )
         mock_manager.get_dataset.return_value = dataset_info
@@ -507,7 +507,7 @@ class TestDatasetService:
         """Test splitting dataset without train table."""
         dataset_info = DatasetInfo(
             name="test_dataset",
-            problem_type="classification",
+            problem_type="binary_classification",
             tables={"test": "test_table"},  # No train table
             shape=(100, 10),
             database={"backend": "sqlite"}
@@ -521,7 +521,7 @@ class TestDatasetService:
         """Test dataset split without stratification."""
         dataset_info = DatasetInfo(
             name="test_dataset",
-            problem_type="classification",
+            problem_type="binary_classification",
             tables={"train": "train_table"},
             shape=(100, 10),
             database={"backend": "sqlite"},
@@ -554,7 +554,7 @@ class TestDatasetService:
         """Test feature generation when no features exist yet."""
         dataset_info = DatasetInfo(
             name="test_dataset",
-            problem_type="classification",
+            problem_type="binary_classification",
             tables={"train": "train_table", "test": "test_table"},
             shape=(100, 10),
             database={"backend": "sqlite"},
@@ -624,7 +624,7 @@ class TestDatasetService:
                 
                 expected_info = DatasetInfo(
                     name="test_dataset",
-                    problem_type="multiclass",
+                    problem_type="multiclass_classification",
                     tables={"train": "train_table"},
                     shape=(100, 10),
                     database={"backend": "sqlite"}

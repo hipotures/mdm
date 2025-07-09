@@ -367,7 +367,7 @@ class TestDatasetRegistrarCoverage:
             # Mixed format might be converted or not depending on pandas
             # But should not raise error
 
-    def test_detect_column_types_with_profiling_memory_handling(self, registrar):
+    def test__detect_column_types_with_profiling_memory_handling(self, registrar):
         """Test column type detection with memory-efficient profiling."""
         # Create large dataframe
         large_df = pd.DataFrame({
@@ -710,7 +710,7 @@ class TestDatasetRegistrarCoverage:
             mock_cursor.close.assert_called_once()
             mock_conn.close.assert_called_once()
 
-    def test_detect_column_types_with_profiling_error_cases(self, registrar):
+    def test__detect_column_types_with_profiling_error_cases(self, registrar):
         """Test column type detection when profiling has various errors."""
         df = pd.DataFrame({
             'col1': [1, 2, 3],
