@@ -106,10 +106,25 @@ class TestSetupLogging:
     
     @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
-    def test_setup_logging_json_format(self, mock_logger, mock_get_config, mock_config_manager):
+    @patch('pathlib.Path.mkdir')
+    @patch.dict(os.environ, {'MDM_LOGGING_FORMAT': 'json'})  # Use env var to override
+    def test_setup_logging_json_format(self, mock_mkdir, mock_logger, mock_get_config):
         """Test logging setup with JSON format."""
-        mock_config_manager.config.logging.format = "json"
-        mock_get_config.return_value = mock_config_manager
+        # Create custom mock configuration for JSON format
+        mock_config = Mock()
+        mock_config.logging.file = "mdm.log"
+        mock_config.logging.level = "INFO"
+        mock_config.logging.format = "json"  # Set JSON format
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
+        mock_config.database.sqlalchemy.echo = False
+        mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {}
+        
+        mock_manager = Mock()
+        mock_manager.config = mock_config
+        mock_manager.base_path = Path("/tmp/test_mdm")
+        mock_get_config.return_value = mock_manager
         
         setup_logging()
         
