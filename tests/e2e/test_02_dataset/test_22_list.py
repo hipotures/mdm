@@ -178,15 +178,9 @@ class TestDatasetListingFiltering:
         assert "test_class" not in result.stdout and "test_classification" not in result.stdout
     
     @pytest.mark.mdm_id("2.2.2.4")
-    @pytest.mark.skip(reason="--date-range not implemented")
-    def test_filter_by_date_range(self):
-        """2.2.2.4: Filter by registration date range (--date-range)"""
-        pass
-    
-    @pytest.mark.mdm_id("2.2.2.5")
     @pytest.mark.skip(reason="--has-target filter not implemented")
     def test_filter_has_target(self):
-        """2.2.2.5: Filter datasets with target column (--has-target)"""
+        """2.2.2.4: Filter datasets with target column (--has-target)"""
         pass
     
     @pytest.mark.mdm_id("2.2.3.1")
