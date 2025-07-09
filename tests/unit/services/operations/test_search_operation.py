@@ -34,7 +34,7 @@ class TestSearchOperation:
         config_path = temp_config_dir / "config" / "datasets"
         config_path.mkdir(parents=True)
         
-        with patch('mdm.dataset.operations.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = temp_config_dir

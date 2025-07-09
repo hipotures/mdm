@@ -7,7 +7,6 @@ import yaml
 
 from mdm.config import get_config, get_config_manager
 from mdm.models.config import MDMConfig
-from mdm.models.enums import LogLevel
 
 
 class TestConfig:

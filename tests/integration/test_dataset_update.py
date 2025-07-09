@@ -11,7 +11,7 @@ import yaml
 from mdm.api import MDMClient
 from mdm.dataset.manager import DatasetManager
 from mdm.core.exceptions import DatasetError
-from mdm.config import MDMConfig
+from mdm.models.config import MDMConfig
 
 
 class TestDatasetUpdateIntegration:

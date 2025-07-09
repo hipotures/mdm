@@ -391,7 +391,7 @@ class DatasetRegistrar:
                         chunk_count = 0
                         
                         # Prepare parse_dates parameter
-                        parse_dates_param = self._detected_datetime_columns if self._detected_datetime_columns else None
+                        parse_dates_param = None  # Don't parse dates on initial load to avoid missing column errors
                         
                         for chunk_df in pd.read_csv(
                             file_path, 
@@ -523,7 +523,7 @@ class DatasetRegistrar:
                         chunk_count = 0
                         
                         # Prepare parse_dates parameter
-                        parse_dates_param = self._detected_datetime_columns if self._detected_datetime_columns else None
+                        parse_dates_param = None  # Don't parse dates on initial load to avoid missing column errors
                         
                         for chunk_df in pd.read_csv(
                             file_path, 

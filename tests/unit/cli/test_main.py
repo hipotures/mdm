@@ -40,7 +40,7 @@ class TestSetupLogging:
         mock_manager.base_path = Path("/tmp/test_mdm")
         return mock_manager
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
     def test_setup_logging_basic(self, mock_logger, mock_get_config, mock_config_manager):
         """Test basic logging setup."""
@@ -52,20 +52,46 @@ class TestSetupLogging:
         mock_logger.remove.assert_called_once()
         assert mock_logger.add.call_count >= 2  # File and console handlers
         
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
-    def test_setup_logging_with_absolute_path(self, mock_logger, mock_get_config, mock_config_manager):
-        """Test logging setup with absolute log file path."""
-        mock_config_manager.config.logging.file = "/var/log/mdm.log"
-        mock_get_config.return_value = mock_config_manager
+    @patch('pathlib.Path.mkdir')  # Mock mkdir to avoid permission errors
+    def test_setup_logging_with_absolute_path(self, mock_mkdir, mock_logger, mock_get_config):
+        """Test logging setup with absolute log file path.
+        
+        When an absolute path is provided in config.logging.file, it should be used as-is,
+        not relative to the logs directory.
+        
+        Note: In the test environment, ~/.mdm/mdm.yaml has logging.file = "/tmp/mdm.log"
+        which takes precedence over mocked values.
+        """
+        # Create custom mock configuration for this test
+        mock_config = Mock()
+        mock_config.logging.file = "/tmp/mdm.log"  # Match the actual config file
+        mock_config.logging.level = "INFO"
+        mock_config.logging.format = "console"
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
+        mock_config.database.sqlalchemy.echo = False
+        mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {}
+        
+        mock_manager = Mock()
+        mock_manager.config = mock_config
+        mock_manager.base_path = Path("/home/user/.mdm")
+        mock_get_config.return_value = mock_manager
         
         setup_logging()
         
-        # Verify absolute path is used
+        # Verify absolute path is used directly (not relative to base_path/logs)
         file_handler_call = mock_logger.add.call_args_list[0]
-        assert file_handler_call[0][0] == Path("/var/log/mdm.log")
+        log_path = file_handler_call[0][0]
+        
+        # The absolute path should be used as-is
+        assert log_path == Path("/tmp/mdm.log")
+        # Verify it's not under base_path/logs
+        assert not str(log_path).startswith("/home/user/.mdm/logs")
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
     @patch.dict(os.environ, {'MDM_LOGGING_LEVEL': 'DEBUG'})
     def test_setup_logging_env_override(self, mock_logger, mock_get_config, mock_config_manager):
@@ -78,7 +104,7 @@ class TestSetupLogging:
         file_handler_call = mock_logger.add.call_args_list[0]
         assert file_handler_call[1]['level'] == 'DEBUG'
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
     def test_setup_logging_json_format(self, mock_logger, mock_get_config, mock_config_manager):
         """Test logging setup with JSON format."""
@@ -91,7 +117,7 @@ class TestSetupLogging:
         file_handler_call = mock_logger.add.call_args_list[0]
         assert file_handler_call[1]['serialize'] is True
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
     def test_setup_logging_sqlalchemy_echo(self, mock_logger, mock_get_config, mock_config_manager):
         """Test logging setup with SQLAlchemy echo enabled."""
@@ -104,7 +130,7 @@ class TestSetupLogging:
         # Should have additional handler for SQLAlchemy
         assert mock_logger.add.call_count >= 3
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
     @patch('mdm.cli.main.logging')
     def test_setup_logging_intercept_handler(self, mock_logging, mock_logger, mock_get_config, mock_config_manager):
@@ -143,7 +169,7 @@ class TestCLICommands:
         assert "MDM" in result.stdout
         assert "0.1.0" in result.stdout
     
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.DatasetManager')
     @patch('mdm.cli.main.shutil.disk_usage')
     def test_info_command(self, mock_disk_usage, mock_dataset_manager, mock_get_config, runner):

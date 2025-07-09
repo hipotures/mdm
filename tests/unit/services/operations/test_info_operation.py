@@ -34,7 +34,7 @@ class TestInfoOperation:
     @pytest.fixture
     def info_operation(self, mock_config, temp_dirs):
         """Create InfoOperation instance."""
-        with patch('mdm.dataset.operations.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = temp_dirs

@@ -43,7 +43,7 @@ class TestDatasetRegistrar:
     @pytest.fixture
     def registrar(self, mock_manager, mock_config, mock_feature_generator):
         """Create DatasetRegistrar instance."""
-        with patch('mdm.dataset.registrar.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_config_manager = Mock()
             mock_config_manager.config = mock_config
             mock_config_manager.base_path = Path("/test")

@@ -95,7 +95,7 @@ class TestSQLiteBackend:
     def sqlite_backend(self, sqlite_config, tmp_path):
         """Create SQLite backend instance."""
         # Use temporary directory for database
-        with patch('mdm.storage.sqlite.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.base_path = tmp_path
             mock_get_config.return_value = mock_manager
@@ -233,7 +233,7 @@ class TestDuckDBBackend:
     @pytest.fixture
     def duckdb_backend(self, duckdb_config, tmp_path):
         """Create DuckDB backend instance."""
-        with patch('mdm.storage.duckdb.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.base_path = tmp_path
             mock_get_config.return_value = mock_manager

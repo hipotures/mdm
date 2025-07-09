@@ -27,7 +27,7 @@ class TestDatasetExporter:
     @pytest.fixture
     def exporter(self, mock_config):
         """Create DatasetExporter instance."""
-        with patch('mdm.dataset.exporter.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = Path("/test")

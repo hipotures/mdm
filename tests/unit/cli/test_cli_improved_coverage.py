@@ -93,7 +93,7 @@ class TestMainCLI90Coverage:
     
     @patch('mdm.cli.main.shutil.disk_usage')
     @patch('mdm.cli.main.DatasetManager')
-    @patch('mdm.cli.main.get_config_manager')
+    @patch('mdm.config.get_config_manager')
     def test_info_command_comprehensive(self, mock_get_config, mock_dataset_manager, mock_disk_usage, runner):
         """Test info command with all output."""
         # Setup comprehensive config

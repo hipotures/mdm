@@ -44,7 +44,7 @@ class TestDatasetManager:
     @pytest.fixture
     def manager(self, mock_config, temp_paths):
         """Create DatasetManager instance."""
-        with patch('mdm.dataset.manager.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = temp_paths['base']
@@ -73,7 +73,7 @@ class TestDatasetManager:
 
     def test_init_creates_directories(self, mock_config):
         """Test that initialization creates necessary directories."""
-        with patch('mdm.dataset.manager.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = Path("/test")
@@ -89,7 +89,7 @@ class TestDatasetManager:
         """Test initialization with custom datasets path."""
         custom_path = Path("/custom/datasets")
         
-        with patch('mdm.dataset.manager.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = Path("/test")

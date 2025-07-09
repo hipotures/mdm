@@ -29,7 +29,7 @@ class TestFeatureGenerator:
     @pytest.fixture
     def feature_generator(self, mock_config, mock_registry):
         """Create FeatureGenerator instance."""
-        with patch('mdm.features.generator.get_config_manager') as mock_get_config:
+        with patch('mdm.config.get_config_manager') as mock_get_config:
             mock_manager = Mock()
             mock_manager.config = mock_config
             mock_manager.base_path = Path("/test")
