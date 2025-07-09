@@ -91,16 +91,17 @@ class TestMainCLI90Coverage:
         # Should only have console handler
         assert mock_logger.add.call_count >= 1
     
-    @patch('mdm.config.get_config_manager')
-    @patch('mdm.dataset.manager.DatasetManager')
-    @patch('shutil.disk_usage')
-    def test_info_command_comprehensive(self, mock_disk_usage, mock_dataset_manager, mock_get_config, runner):
+    @patch('mdm.cli.main.shutil.disk_usage')
+    @patch('mdm.cli.main.DatasetManager')
+    @patch('mdm.cli.main.get_config_manager')
+    def test_info_command_comprehensive(self, mock_get_config, mock_dataset_manager, mock_disk_usage, runner):
         """Test info command with all output."""
         # Setup comprehensive config
         mock_config = Mock()
         mock_config.database.default_backend = "postgresql"
         mock_config.database.postgresql.host = "localhost"
         mock_config.database.postgresql.port = 5432
+        mock_config.database.sqlalchemy.echo = False
         mock_config.performance.batch_size = 5000
         mock_config.performance.max_concurrent_operations = 8
         mock_config.paths.datasets_path = "datasets"
@@ -109,6 +110,11 @@ class TestMainCLI90Coverage:
         mock_config.features.enabled = True
         mock_config.features.generic_enabled = True
         mock_config.features.custom_enabled = True
+        mock_config.logging.file = "mdm.log"
+        mock_config.logging.level = "INFO"
+        mock_config.logging.format = "console"
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -120,57 +126,20 @@ class TestMainCLI90Coverage:
         mock_dm_instance.list_datasets.return_value = ["dataset1", "dataset2", "dataset3"]
         mock_dataset_manager.return_value = mock_dm_instance
         
-        # Mock disk usage
-        mock_disk_usage.return_value = Mock(free=5000000000)
+        # Mock disk usage - return a proper object with free attribute
+        from collections import namedtuple
+        DiskUsage = namedtuple('DiskUsage', ['total', 'used', 'free'])
+        mock_disk_usage.return_value = DiskUsage(total=10000000000, used=5000000000, free=5000000000)
         
-        # Create temp directory structure
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create directories
-            (Path(tmpdir) / "datasets").mkdir()
-            datasets_config_dir = Path(tmpdir) / "config" / "datasets"
-            datasets_config_dir.mkdir(parents=True)
-            (Path(tmpdir) / "logs").mkdir()
-            
-            # Create fake dataset config files
-            for i in range(1, 4):
-                dataset_config = datasets_config_dir / f"dataset{i}.yaml"
-                dataset_config.write_text(f"""
-name: dataset{i}
-display_name: Dataset {i}
-database:
-  backend: postgresql
-tables:
-  train: train_table
-""")
-            
-            # Create config file with postgresql backend
-            config_file = Path(tmpdir) / "mdm.yaml"
-            config_file.write_text("""
-database:
-  default_backend: postgresql
-  postgresql:
-    host: localhost
-    port: 5432
-performance:
-  batch_size: 5000
-  max_concurrent_operations: 8
-features:
-  enabled: true
-  generic_enabled: true
-  custom_enabled: true
-""")
-            
-            # Set env var to use temp directory
-            old_mdm_home = os.environ.get('MDM_HOME_DIR')
-            os.environ['MDM_HOME_DIR'] = tmpdir
-            
-            try:
-                result = runner.invoke(app, ["info"])
-            finally:
-                if old_mdm_home:
-                    os.environ['MDM_HOME_DIR'] = old_mdm_home
-                else:
-                    del os.environ['MDM_HOME_DIR']
+        # Call the command with mocked dependencies
+        result = runner.invoke(app, ["info"])
+        
+        if result.exit_code != 0:
+            print(f"Error: {result.stdout}")
+            print(f"Exception: {result.exception}")
+            if result.exception:
+                import traceback
+                traceback.print_tb(result.exception.__traceback__)
         
         assert result.exit_code == 0
         assert "ML Data Manager" in result.stdout
