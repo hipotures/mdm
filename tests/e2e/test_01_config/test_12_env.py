@@ -71,16 +71,9 @@ class TestEnvironmentVariables:
         # With only 100 rows, it should process in one batch
         # But the setting should be acknowledged
     
-    @pytest.mark.mdm_id("1.2.5") 
-    @pytest.mark.skip(reason="MDM_MAX_CONCURRENT_OPERATIONS not implemented")
-    def test_mdm_max_concurrent_operations(self):
-        """1.2.5: Set MDM_MAX_CONCURRENT_OPERATIONS=2 and verify parallelism limit"""
-        # This feature is not implemented according to the code review
-        pass
-    
-    @pytest.mark.mdm_id("1.2.6")
+    @pytest.mark.mdm_id("1.2.5")
     def test_mdm_home_custom_path(self, clean_mdm_env, run_mdm, tmp_path):
-        """1.2.6: Set MDM_HOME_DIR=/custom/path and verify directory creation"""
+        """1.2.5: Set MDM_HOME_DIR=/custom/path and verify directory creation"""
         # Create custom path
         custom_home = tmp_path / "custom_mdm_home"
         
@@ -104,21 +97,21 @@ class TestEnvironmentVariables:
             # If config exists, datasets directory should too
             assert (custom_home / "datasets").exists()
     
-    @pytest.mark.mdm_id("1.2.7")
+    @pytest.mark.mdm_id("1.2.6")
     @pytest.mark.skip(reason="MDM_DATASETS_PATH not implemented as standalone env var")
     def test_mdm_datasets_path(self):
-        """1.2.7: Set MDM_DATASETS_PATH=/custom/datasets and verify usage"""
+        """1.2.6: Set MDM_DATASETS_PATH=/custom/datasets and verify usage"""
         # Path configuration is under MDM_PATHS_DATASETS_PATH
         pass
     
-    @pytest.mark.mdm_id("1.2.8")
+    @pytest.mark.mdm_id("1.2.7")
     @pytest.mark.skip(reason="PostgreSQL requires database server")
     def test_mdm_default_backend_postgresql(self):
-        """1.2.8: Set MDM_DEFAULT_BACKEND=postgresql and test"""
+        """1.2.7: Set MDM_DEFAULT_BACKEND=postgresql and test"""
         # PostgreSQL requires a running database server
         pass
     
-    @pytest.mark.mdm_id("1.2.9")
+    @pytest.mark.mdm_id("1.2.8")
     def test_env_overrides_yaml(self, clean_mdm_env, mdm_config_file, run_mdm, sample_csv_data):
         """Test that environment variables override YAML config"""
         # Create YAML config with SQLite
@@ -142,7 +135,7 @@ database:
         assert duckdb_file.exists()
         assert not sqlite_file.exists()
     
-    @pytest.mark.mdm_id("1.2.10")
+    @pytest.mark.mdm_id("1.2.9")
     def test_mdm_logging_format(self, clean_mdm_env, run_mdm):
         """Test MDM_LOGGING_FORMAT environment variable"""
         # Test JSON format

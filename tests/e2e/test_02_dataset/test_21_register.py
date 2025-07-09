@@ -275,19 +275,8 @@ class TestDatasetRegistration:
         assert "registered successfully" in result.stdout
     
     @pytest.mark.mdm_id("2.1.5.2")
-    @pytest.mark.skip(reason="--no-auto flag functionality unclear")
-    def test_no_auto_flag(self):
-        """2.1.5.2: Test --no-auto flag with manual settings"""
-        pass
-    
-    @pytest.mark.mdm_id("2.1.5.3")
     @pytest.mark.skip(reason="--skip-analysis option not implemented")
     def test_skip_analysis_flag(self):
-        """2.1.5.3: Test --skip-analysis for faster registration"""
+        """2.1.5.2: Test --skip-analysis for faster registration"""
         pass
     
-    @pytest.mark.mdm_id("2.1.5.4")
-    @pytest.mark.skip(reason="--dry-run option not needed per requirements")
-    def test_dry_run_flag(self):
-        """2.1.5.4: Test --dry-run for preview without saving"""
-        pass
