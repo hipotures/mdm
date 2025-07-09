@@ -229,14 +229,8 @@ class TestDatasetRegistration:
         assert description in config_text
     
     @pytest.mark.mdm_id("2.1.4.2")
-    @pytest.mark.skip(reason="--source option not implemented")
-    def test_register_with_source(self):
-        """2.1.4.2: Register with --source specification"""
-        pass
-    
-    @pytest.mark.mdm_id("2.1.4.3")
     def test_register_with_tags(self, clean_mdm_env, run_mdm, sample_csv_data):
-        """2.1.4.3: Register with --tags (comma-separated)"""
+        """2.1.4.2: Register with --tags (comma-separated)"""
         result = run_mdm([
             "dataset", "register", "test_tags", str(sample_csv_data),
             "--target", "value",
