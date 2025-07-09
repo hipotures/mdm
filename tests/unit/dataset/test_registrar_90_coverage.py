@@ -771,7 +771,7 @@ class TestDatasetRegistrar90Coverage:
         assert types['category'] == ColumnType.CATEGORICAL
         assert types['constant'] == ColumnType.CATEGORICAL
         assert types['text'] == ColumnType.TEXT  # High unique ratio
-        assert types['date_str'] == ColumnType.CATEGORICAL  # Date strings don't meet text criteria
+        assert types['date_str'] == ColumnType.TEXT  # 100 unique dates = unique ratio 1.0 > 0.8
         assert types['mixed'] == ColumnType.TEXT
 
     def test_analyze_columns_comprehensive(self, registrar):
