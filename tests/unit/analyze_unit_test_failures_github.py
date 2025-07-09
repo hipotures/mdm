@@ -68,12 +68,13 @@ def run_tests_and_collect_failures():
         
         # Export tests
         ("services/export/test_dataset_exporter.py", "DatasetExporter"),
-        ("services/export/test_export_formats.py", "ExportFormats"),
+        # test_export_formats.py doesn't exist - removed
         
         # Feature tests
         ("services/features/test_feature_generator.py", "FeatureGenerator"),
         ("services/features/test_feature_engine.py", "FeatureEngine"),
-        ("services/features/test_feature_registry.py", "FeatureRegistry"),
+        # test_feature_registry.py is in repositories/, not services/features/
+        ("repositories/test_feature_registry.py", "FeatureRegistry"),
         
         # Batch operation tests
         ("services/batch/test_batch_export.py", "BatchExport"),
@@ -83,7 +84,7 @@ def run_tests_and_collect_failures():
         # Repository tests
         ("repositories/test_dataset_manager.py", "DatasetManager"),
         ("repositories/test_storage_backend.py", "StorageBackend"),
-        ("repositories/test_metadata_repository.py", "MetadataRepository"),
+        # test_metadata_repository.py doesn't exist - removed
     ]
     
     if RICH_AVAILABLE:
@@ -672,7 +673,7 @@ def main():
         ("DatasetRegistrar", 13),
         ("AutoDetect", 23),
         ("DatasetExporter", 8),
-        ("ExportFormats", 8),
+        # ExportFormats removed - file doesn't exist
         ("FeatureGenerator", 10),
         ("FeatureEngine", 15),
         ("FeatureRegistry", 8),
@@ -681,7 +682,7 @@ def main():
         ("BatchRemove", 10),
         ("DatasetManager", 23),
         ("StorageBackend", 15),
-        ("MetadataRepository", 12),
+        # MetadataRepository removed - file doesn't exist
     ]:
         total_tests += tests
     

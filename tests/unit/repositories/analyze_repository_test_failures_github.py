@@ -54,7 +54,7 @@ def run_tests_and_collect_failures():
         ("test_backend_factory.py", "BackendFactory"),
         ("test_dataset_manager.py", "DatasetManager"),
         ("test_storage_backend.py", "StorageBackend"),
-        ("test_metadata_repository.py", "MetadataRepository"),
+        # test_metadata_repository.py doesn't exist - removed
     ]
     
     if RICH_AVAILABLE:
@@ -644,7 +644,7 @@ def main():
         "BackendFactory": 16,
         "DatasetManager": 23,  # Estimated from existing tests
         "StorageBackend": 15,  # Estimated from existing tests
-        "MetadataRepository": 12,  # Estimated
+        # MetadataRepository removed - file doesn't exist
     }
     
     for category, count in expected_test_counts.items():

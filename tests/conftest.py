@@ -54,8 +54,13 @@ def sample_data(temp_dir):
     }
     df = pd.DataFrame(data)
     
-    # Save to CSV
-    data_path = temp_dir / "sample_data.csv"
-    df.to_csv(data_path, index=False)
+    # Save to CSV files with standard names
+    train_path = temp_dir / "train.csv"
+    df.to_csv(train_path, index=False)
     
-    return data_path
+    # Also create a test file (optional)
+    test_df = df.sample(frac=0.2, random_state=42)
+    test_path = temp_dir / "test.csv"
+    test_df.to_csv(test_path, index=False)
+    
+    return train_path
