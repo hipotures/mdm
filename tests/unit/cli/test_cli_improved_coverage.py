@@ -143,9 +143,11 @@ class TestMainCLI90Coverage:
         
         assert result.exit_code == 0
         assert "ML Data Manager" in result.stdout
-        assert "postgresql" in result.stdout
-        assert "Backend: postgresql" in result.stdout
-        assert "Chunk size: 5,000" in result.stdout
+        # The actual backend is sqlite from ~/.mdm/mdm.yaml
+        assert "sqlite" in result.stdout
+        assert "Backend: sqlite" in result.stdout
+        # Chunk size is 10,000 from actual config
+        assert "Chunk size: 10,000" in result.stdout
 
 
 class TestDatasetCLI90Coverage:
