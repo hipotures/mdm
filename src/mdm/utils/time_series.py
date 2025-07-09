@@ -279,24 +279,29 @@ class TimeSeriesAnalyzer:
 
     def _find_missing_timestamps(self, df: pd.DataFrame) -> dict:
         """Find missing timestamps in time series."""
-        # Create expected range
-        freq = pd.infer_freq(df[self.time_column])
-        if freq:
-            expected_range = pd.date_range(
-                start=df[self.time_column].min(),
-                end=df[self.time_column].max(),
-                freq=freq
-            )
+        # Try to infer frequency from the data
+        time_diffs = df[self.time_column].diff().dropna()
+        
+        if len(time_diffs) == 0:
+            return {'count': 0, 'percentage': 0.0, 'dates': []}
+            
+        # Get mode of time differences
+        mode_diff = time_diffs.mode()[0]
+        
+        # Create expected range based on mode
+        expected_range = pd.date_range(
+            start=df[self.time_column].min(),
+            end=df[self.time_column].max(),
+            freq=mode_diff
+        )
 
-            missing = expected_range.difference(df[self.time_column])
+        missing = expected_range.difference(df[self.time_column])
 
-            return {
-                'count': len(missing),
-                'percentage': len(missing) / len(expected_range) * 100,
-                'dates': [d.isoformat() for d in missing[:10]]  # First 10
-            }
-
-        return {'count': 0, 'percentage': 0.0, 'dates': []}
+        return {
+            'count': len(missing),
+            'percentage': len(missing) / len(expected_range) * 100,
+            'dates': [d.isoformat() for d in missing[:10]]  # First 10
+        }
 
     def _detect_seasonality(self, df: pd.DataFrame) -> dict:
         """Detect seasonality patterns."""

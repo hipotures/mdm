@@ -64,7 +64,7 @@ class TestDatasetLifecycle:
         # Export dataset
         export_paths = client.export_dataset(
             "test_lifecycle",
-            output_dir=str(test_config.storage.datasets_path / "exports"),
+            output_dir=str(test_config.paths.datasets_path / "exports"),
             format="csv",
         )
         assert len(export_paths) > 0

@@ -7,6 +7,8 @@ class ProblemType(str, Enum):
     """Machine learning problem type."""
 
     CLASSIFICATION = "classification"
+    BINARY_CLASSIFICATION = "binary_classification"
+    MULTICLASS_CLASSIFICATION = "multiclass_classification"
     REGRESSION = "regression"
     MULTICLASS = "multiclass"
     CLUSTERING = "clustering"
@@ -21,6 +23,10 @@ class FileType(str, Enum):
     VALIDATION = "validation"
     SUBMISSION = "submission"
     DATA = "data"
+    CSV = "csv"
+    PARQUET = "parquet"
+    JSON = "json"
+    EXCEL = "excel"
 
 
 class ColumnType(str, Enum):
@@ -32,3 +38,4 @@ class ColumnType(str, Enum):
     TEXT = "text"
     ID = "id"
     TARGET = "target"
+    BINARY = "binary"

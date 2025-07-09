@@ -380,9 +380,9 @@ class TestDatasetService:
         mock_manager.get_backend.return_value = mock_backend
         
         sample_df = pd.DataFrame({
-            "id": [1, 2, 3, 3],  # Duplicate
-            "feature1": [10, None, 30, 40],  # Missing value
-            "target": [0, 1, 0, 1]
+            "id": [1, 2, 3, 3],
+            "feature1": [10, None, 30, 30],  # Last row is duplicate
+            "target": [0, 1, 0, 0]
         })
         mock_backend.read_table.return_value = sample_df
         
@@ -400,7 +400,7 @@ class TestDatasetService:
 
         # Assert
         assert result["basic_info"]["name"] == "test_dataset"
-        assert result["basic_info"]["problem_type"] == ProblemType.CLASSIFICATION
+        assert result["basic_info"]["problem_type"] == "binary_classification"
         assert result["basic_info"]["target_column"] == "target"
         assert result["statistics"] == mock_stats
         assert "data_quality" in result
@@ -415,3 +415,234 @@ class TestDatasetService:
         # Act & Assert
         with pytest.raises(ValueError, match="Dataset 'nonexistent' not found"):
             service.analyze_dataset("nonexistent")
+
+    def test_init_with_default_manager(self):
+        """Test initialization without providing manager."""
+        with patch('mdm.services.dataset_service.get_config') as mock_get_config:
+            with patch('mdm.services.dataset_service.DatasetManager') as mock_manager_class:
+                with patch('mdm.services.dataset_service.DatasetRegistrar') as mock_registrar_class:
+                    with patch('mdm.services.dataset_service.FeatureEngine') as mock_engine_class:
+                        mock_config = Mock()
+                        mock_get_config.return_value = mock_config
+                        
+                        service = DatasetService()
+                        
+                        assert service.config == mock_config
+                        mock_manager_class.assert_called_once()
+                        mock_registrar_class.assert_called_once()
+                        mock_engine_class.assert_called_once()
+
+    def test_register_dataset_minimal(self, service, mock_registrar):
+        """Test registration with only train path."""
+        with patch('tempfile.TemporaryDirectory') as mock_tempdir:
+            with patch('shutil.copy2') as mock_copy:
+                temp_path = "/tmp/test_temp"
+                mock_tempdir.return_value.__enter__.return_value = temp_path
+                
+                expected_info = DatasetInfo(
+                    name="minimal_dataset",
+                    problem_type="regression",
+                    tables={"train": "train_table"},
+                    shape=(50, 5),
+                    database={"backend": "sqlite"}
+                )
+                mock_registrar.register.return_value = expected_info
+                
+                result = service.register_dataset(
+                    name="minimal_dataset",
+                    train_path="/path/to/train.csv"
+                )
+                
+                assert result["success"] is True
+                assert mock_copy.call_count == 1
+                mock_copy.assert_called_with("/path/to/train.csv", Path(temp_path) / "train.csv")
+
+    def test_create_submission_no_test_table(self, service, mock_manager):
+        """Test submission creation when test table doesn't exist."""
+        # Dataset with no test table
+        dataset_info = DatasetInfo(
+            name="test_dataset",
+            problem_type="classification",
+            tables={"train": "train_table"},  # No test table
+            shape=(100, 10),
+            database={"backend": "sqlite"}
+        )
+        mock_manager.get_dataset.return_value = dataset_info
+        
+        with pytest.raises(ValueError, match="has no test table"):
+            service.create_submission("test_dataset", [1, 2, 3])
+
+    def test_create_submission_no_id_columns(self, service, mock_manager):
+        """Test submission creation without ID columns."""
+        dataset_info = DatasetInfo(
+            name="test_dataset",
+            problem_type="classification",
+            tables={"test": "test_table"},
+            shape=(100, 10),
+            database={"backend": "sqlite"},
+            id_columns=None,  # No ID columns
+            target_column="target"
+        )
+        mock_manager.get_dataset.return_value = dataset_info
+        
+        mock_backend = Mock()
+        mock_manager.get_backend.return_value = mock_backend
+        
+        test_df = pd.DataFrame({
+            "feature1": [10, 20, 30],
+            "feature2": ["A", "B", "C"]
+        })
+        mock_backend.read_table.return_value = test_df
+        
+        predictions = [0, 1, 0]
+        
+        with patch('pandas.DataFrame.to_csv') as mock_to_csv:
+            result = service.create_submission("test_dataset", predictions)
+            
+        # Should create ID from index
+        assert result == "test_dataset_submission.csv"
+        mock_to_csv.assert_called_once()
+
+    def test_split_dataset_no_train_table(self, service, mock_manager):
+        """Test splitting dataset without train table."""
+        dataset_info = DatasetInfo(
+            name="test_dataset",
+            problem_type="classification",
+            tables={"test": "test_table"},  # No train table
+            shape=(100, 10),
+            database={"backend": "sqlite"}
+        )
+        mock_manager.get_dataset.return_value = dataset_info
+        
+        with pytest.raises(ValueError, match="has no train table"):
+            service.split_dataset("test_dataset")
+
+    def test_split_dataset_no_stratify(self, service, mock_manager):
+        """Test dataset split without stratification."""
+        dataset_info = DatasetInfo(
+            name="test_dataset",
+            problem_type="classification",
+            tables={"train": "train_table"},
+            shape=(100, 10),
+            database={"backend": "sqlite"},
+            target_column=None  # No target column
+        )
+        mock_manager.get_dataset.return_value = dataset_info
+        
+        mock_backend = Mock()
+        mock_manager.get_backend.return_value = mock_backend
+        
+        train_df = pd.DataFrame({
+            "feature1": range(100),
+            "feature2": range(100, 200)
+        })
+        mock_backend.read_table.return_value = train_df
+        
+        with patch('sklearn.model_selection.train_test_split') as mock_split:
+            mock_split.return_value = (train_df[:80], train_df[80:])
+            result = service.split_dataset(
+                "test_dataset",
+                test_size=0.2,
+                stratify=False
+            )
+            
+        # Should be called with stratify=None
+        call_args = mock_split.call_args
+        assert call_args[1]["stratify"] is None
+
+    def test_generate_features_no_existing_features(self, service, mock_manager, mock_feature_engine):
+        """Test feature generation when no features exist yet."""
+        dataset_info = DatasetInfo(
+            name="test_dataset",
+            problem_type="classification",
+            tables={"train": "train_table", "test": "test_table"},
+            shape=(100, 10),
+            database={"backend": "sqlite"},
+            target_column="target",
+            id_columns=["id"]
+        )
+        # No feature_tables attribute
+        mock_manager.get_dataset.return_value = dataset_info
+        
+        mock_backend = Mock()
+        mock_manager.get_backend.return_value = mock_backend
+        
+        feature_info = {
+            "train": {"feature_table": "train_features", "features": 15},
+            "test": {"feature_table": "test_features", "features": 15}
+        }
+        mock_feature_engine.generate_features.return_value = feature_info
+        
+        result = service.generate_features("test_dataset")
+        
+        assert result["success"] is True
+        assert result["feature_tables"] == {
+            "train": "train_features",
+            "test": "test_features"
+        }
+
+    def test_analyze_dataset_no_target_column(self, service, mock_manager):
+        """Test analyzing dataset without target column."""
+        dataset_info = DatasetInfo(
+            name="test_dataset",
+            problem_type="clustering",
+            tables={"train": "train_table"},
+            shape=(100, 10),
+            database={"backend": "sqlite"},
+            target_column=None,  # No target
+            id_columns=["id"]
+        )
+        mock_manager.get_dataset.return_value = dataset_info
+        
+        mock_backend = Mock()
+        mock_manager.get_backend.return_value = mock_backend
+        
+        sample_df = pd.DataFrame({
+            "id": range(100),
+            "feature1": range(100),
+            "feature2": ["A", "B"] * 50
+        })
+        mock_backend.read_table.return_value = sample_df
+        
+        mock_stats_op = Mock()
+        mock_stats = {"row_count": 100, "column_count": 3}
+        mock_stats_op.execute.return_value = mock_stats
+        
+        with patch('mdm.dataset.operations.StatsOperation', return_value=mock_stats_op):
+            result = service.analyze_dataset("test_dataset")
+            
+        # Should not have target distribution
+        assert "target_distribution" not in result
+        assert result["basic_info"]["target_column"] is None
+
+    def test_register_dataset_with_kwargs(self, service, mock_registrar):
+        """Test register_dataset with additional kwargs."""
+        with patch('tempfile.TemporaryDirectory') as mock_tempdir:
+            with patch('shutil.copy2') as mock_copy:
+                temp_path = "/tmp/test_temp"
+                mock_tempdir.return_value.__enter__.return_value = temp_path
+                
+                expected_info = DatasetInfo(
+                    name="test_dataset",
+                    problem_type="multiclass",
+                    tables={"train": "train_table"},
+                    shape=(100, 10),
+                    database={"backend": "sqlite"}
+                )
+                mock_registrar.register.return_value = expected_info
+                
+                result = service.register_dataset(
+                    name="test_dataset",
+                    train_path="/path/to/train.csv",
+                    target_column="label",
+                    id_columns=["id"],
+                    problem_type=ProblemType.MULTICLASS,
+                    description="Test dataset",
+                    tags=["test", "sample"]
+                )
+                
+                # Check that kwargs were passed
+                call_args = mock_registrar.register.call_args
+                assert call_args[1]["problem_type"] == ProblemType.MULTICLASS
+                assert call_args[1]["description"] == "Test dataset"
+                assert call_args[1]["tags"] == ["test", "sample"]

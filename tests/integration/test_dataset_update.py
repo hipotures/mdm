@@ -50,13 +50,16 @@ class TestDatasetUpdateIntegration:
         csv_file.write_text("id,feature1,target\n1,10,0\n2,20,1\n3,30,0\n")
         
         # Register dataset
-        config = MDMConfig(mdm_home=str(temp_mdm_home))
+        import os
+        os.environ["MDM_HOME_DIR"] = str(temp_mdm_home)
+        from mdm.config import get_config
+        config = get_config()
         client = MDMClient(config=config)
         
         dataset_name = "test_update_dataset"
         client.register_dataset(
             name=dataset_name,
-            path=str(data_dir),
+            dataset_path=str(data_dir),
             target_column="target",
             problem_type="binary_classification",
             id_columns=["id"],

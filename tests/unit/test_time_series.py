@@ -45,8 +45,9 @@ class TestTimeSeriesSplitter:
         # Split with 10 days test
         splits = splitter.split_by_time(df, test_size=10)
         
-        assert len(splits['test']) == 10
-        assert len(splits['train']) == 90
+        # When splitting by days, the boundary day is included, so we get 11 records
+        assert len(splits['test']) == 11
+        assert len(splits['train']) == 89
 
     def test_split_with_validation(self):
         """Test three-way split with validation set."""

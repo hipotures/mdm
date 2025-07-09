@@ -22,14 +22,14 @@ def temp_dir():
 def test_config(temp_dir):
     """Create a test configuration."""
     config = get_config()
-    config.storage.datasets_path = temp_dir / "datasets"
-    config.storage.configs_path = temp_dir / "configs"
-    config.logs.file_path = temp_dir / "logs" / "mdm.log"
+    config.paths.datasets_path = str(temp_dir / "datasets")
+    config.paths.configs_path = str(temp_dir / "configs")
+    config.logging.file = str(temp_dir / "logs" / "mdm.log")
     
     # Create directories
-    config.storage.datasets_path.mkdir(parents=True, exist_ok=True)
-    config.storage.configs_path.mkdir(parents=True, exist_ok=True)
-    config.logs.file_path.parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.datasets_path).mkdir(parents=True, exist_ok=True)
+    Path(config.paths.configs_path).mkdir(parents=True, exist_ok=True)
+    Path(config.logging.file).parent.mkdir(parents=True, exist_ok=True)
     
     return config
 
