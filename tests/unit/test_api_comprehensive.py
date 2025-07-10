@@ -268,17 +268,17 @@ class TestMDMClientStatisticsAndExport:
         )
         assert result == ['/tmp/export/train.csv']
     
-    @patch('mdm.dataset.operations.StatsOperation')
+    @patch('mdm.dataset.statistics.DatasetStatistics')
     def test_get_statistics(self, mock_stats_class, client):
         """Test getting dataset statistics."""
         mock_stats = Mock()
         mock_stats_class.return_value = mock_stats
         expected_stats = {'rows': 1000, 'columns': 10}
-        mock_stats.execute.return_value = expected_stats
+        mock_stats.compute_statistics.return_value = expected_stats
         
         result = client.get_statistics('test_dataset', full=True)
         
-        mock_stats.execute.assert_called_once_with('test_dataset', full=True)
+        mock_stats.compute_statistics.assert_called_once_with('test_dataset', full=True, save=False)
         assert result == expected_stats
 
 

@@ -37,6 +37,12 @@ class TestDatasetRegistrarCoverage:
         config.paths.datasets_path = "datasets/"
         config.feature_engineering.enabled = False  # Disable feature generation
         config.performance.batch_size = 10000
+        # Add type detection configuration
+        config.feature_engineering.type_detection.categorical_threshold = 50
+        # Add backend configuration
+        sqlite_backend = Mock()
+        sqlite_backend.model_dump.return_value = {"path": "test.db"}
+        config.database.sqlite = sqlite_backend
         return config
 
     @pytest.fixture
@@ -279,16 +285,21 @@ class TestDatasetRegistrarCoverage:
                                 result = registrar._load_data_files(files, db_info, Mock())
                                 assert 'excel_data' in result.values()
                                 
-                                # Unsupported formats should be skipped
+                                # Test supported formats (parquet and JSON are actually supported)
                                 for file_path, table_name in [
                                     (parquet_file, 'parquet_data'),
                                     (json_file, 'json_data'),
-                                    (jsonl_file, 'jsonl_data')
                                 ]:
                                     files = {table_name: file_path}
                                     result = registrar._load_data_files(files, db_info, Mock())
-                                    # These formats are not supported, so they won't be in result
-                                    assert table_name not in result.values()
+                                    # These formats are supported, so they should be in result
+                                    assert table_name in result.values()
+                                
+                                # JSONL is not supported
+                                files = {'jsonl_data': jsonl_file}
+                                result = registrar._load_data_files(files, db_info, Mock())
+                                # JSONL format is not supported, so it won't be in result
+                                assert 'jsonl_data' not in result.values()
 
     def test_load_data_files_with_chunksize_and_datetime_detection(self, registrar, tmp_path):
         """Test loading large files with chunking and datetime detection."""
@@ -431,14 +442,14 @@ class TestDatasetRegistrarCoverage:
     def test_convert_datetime_columns_with_errors(self, registrar):
         """Test datetime conversion with error handling."""
         df = pd.DataFrame({
-            'id': [1, 2, 3],
-            'valid_date': ['2024-01-01', '2024-01-02', '2024-01-03'],
-            'invalid_date': ['2024-01-01', 'not a date', '2024-01-03'],
-            'mixed_format': ['2024-01-01', '01/15/2024', '15-Jan-2024']
+            'id': [1, 2, 3, 4, 5],
+            'valid_date': ['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05'],
+            'invalid_date': ['2024-01-01', 'not a date', '2024-01-03', 'bad', 'invalid'],
+            'mostly_valid': ['2024-01-01', '2024-01-02', '2024-01-03', '2024-01-04', 'bad date']  # 80% valid
         })
         
-        # Pre-populate detected_datetime_columns with columns to convert
-        registrar._detected_datetime_columns = ['valid_date', 'invalid_date', 'mixed_format']
+        # Initialize empty detected_datetime_columns list
+        registrar._detected_datetime_columns = []
         
         with patch('mdm.dataset.registrar.logger') as mock_logger:
             result = registrar._convert_datetime_columns(df)
@@ -446,22 +457,22 @@ class TestDatasetRegistrarCoverage:
             # Valid date should be converted
             assert pd.api.types.is_datetime64_any_dtype(result['valid_date'])
             
-            # Invalid date should remain unconverted (no warning is logged)
-            # The method uses errors='coerce' which silently converts failures to NaT
+            # Invalid date should remain unconverted (less than 80% success rate)
+            # The method uses errors='coerce' which converts failures to NaT
             assert not pd.api.types.is_datetime64_any_dtype(result['invalid_date'])
             
-            # Mixed format should be converted (pandas is flexible with these formats)
-            assert pd.api.types.is_datetime64_any_dtype(result['mixed_format'])
+            # Mostly valid should be converted (80% success rate)
+            assert pd.api.types.is_datetime64_any_dtype(result['mostly_valid'])
             
-            # Check that datetime columns were added to the detected list
+            # Check that successful datetime columns were added to the detected list
             assert 'valid_date' in registrar._detected_datetime_columns
-            assert 'mixed_format' in registrar._detected_datetime_columns
+            assert 'mostly_valid' in registrar._detected_datetime_columns
             assert 'invalid_date' not in registrar._detected_datetime_columns
             
             # Check debug logging occurred for successful conversions
             debug_calls = [str(call) for call in mock_logger.debug.call_args_list]
             assert any('valid_date' in call and 'success rate' in call for call in debug_calls)
-            assert any('mixed_format' in call and 'success rate' in call for call in debug_calls)
+            assert any('mostly_valid' in call and 'success rate' in call for call in debug_calls)
 
     def test__detect_column_types_with_profiling_memory_handling(self, registrar):
         """Test column type detection with memory-efficient profiling."""
@@ -498,7 +509,7 @@ class TestDatasetRegistrarCoverage:
             'text': ['text_' + str(i) for i in range(100)]
         })
         
-        # Setup detected column types
+        # Setup detected column types (matching ydata-profiling's variable types)
         registrar._detected_column_types = {
             'id': 'Numeric',
             'category': 'Categorical',

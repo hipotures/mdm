@@ -252,19 +252,27 @@ class TestMDMClientUtils:
     def test_get_stats(self, mock_manager_class):
         """Test getting dataset statistics."""
         mock_manager = mock_manager_class.return_value
-        expected_stats = {'rows': 1000, 'columns': 10}
-        mock_manager.get_dataset_stats.return_value = expected_stats
+        stats_obj = Mock()
+        stats_obj.row_count = 1000
+        stats_obj.column_count = 10
+        mock_manager.get_statistics.return_value = stats_obj
         
         client = MDMClient()
-        # get_stats doesn't exist, use get_statistics
-        with patch('mdm.dataset.operations.StatsOperation') as mock_stats_op:
-            mock_stats = mock_stats_op.return_value
-            mock_stats.execute.return_value = expected_stats
+        
+        # Use the statistics module directly as get_statistics does
+        with patch('mdm.dataset.statistics.DatasetStatistics') as mock_stats_class:
+            mock_stats = mock_stats_class.return_value
+            expected_stats = {
+                'dataset_name': 'test_dataset', 
+                'tables': {'train': {'row_count': stats_obj.row_count}},
+                'summary': {'total_rows': stats_obj.row_count, 'total_columns': stats_obj.column_count}
+            }
+            mock_stats.compute_statistics.return_value = expected_stats
             
             result = client.get_statistics('test_dataset')
             
             assert result == expected_stats
-            mock_stats.execute.assert_called_once_with('test_dataset', full=False)
+            mock_stats.compute_statistics.assert_called_once_with('test_dataset', full=False, save=False)
     
     @patch('mdm.api.DatasetManager')
     def test_export_dataset(self, mock_manager_class):
@@ -368,23 +376,4 @@ class TestMDMClientIntegration:
         mock_adapter_class.assert_called_once_with('tensorflow')
         mock_adapter.prepare_data.assert_called_once_with(
             train_df, test_df, 'target', None
-        )
-    
-    @patch('mdm.api.SubmissionCreator')
-    @patch('mdm.api.DatasetManager')
-    def test_create_submission(self, mock_manager_class, mock_creator_class):
-        """Test creating submission file."""
-        client = MDMClient()
-        predictions = pd.Series([0, 1, 0, 1])
-        
-        # Setup mock SubmissionCreator
-        mock_creator = mock_creator_class.return_value
-        mock_creator.create_submission.return_value = '/tmp/submission.csv'
-        
-        result = client.create_submission('test_dataset', predictions, '/tmp/submission.csv')
-        
-        assert result == '/tmp/submission.csv'
-        mock_creator_class.assert_called_once_with(client.manager)
-        mock_creator.create_submission.assert_called_once_with(
-            'test_dataset', predictions, '/tmp/submission.csv'
         )

@@ -265,15 +265,15 @@ class TestDatasetManagerComprehensive:
     def test_validate_dataset_name_valid(self, manager):
         """Test validation of valid dataset names."""
         valid_names = [
-            "dataset1",
-            "my-dataset",
-            "test_data_123",
-            "a" * 100  # Max length
+            ("dataset1", "dataset1"),
+            ("my-dataset", "my_dataset"),  # Dashes replaced with underscores
+            ("test_data_123", "test_data_123"),
+            ("a" * 100, "a" * 100)  # Max length
         ]
         
-        for name in valid_names:
+        for name, expected in valid_names:
             result = manager.validate_dataset_name(name)
-            assert result == name.lower()
+            assert result == expected
 
     def test_validate_dataset_name_empty(self, manager):
         """Test validation of empty dataset name."""

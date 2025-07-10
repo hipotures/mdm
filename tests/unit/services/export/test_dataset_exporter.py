@@ -169,21 +169,36 @@ class TestDatasetExporter:
             with pytest.raises(DatasetError, match="Dataset 'nonexistent' not found"):
                 exporter._load_dataset_info("nonexistent")
 
-    def test_load_dataset_info_backend_mismatch(self, exporter, sample_dataset_info):
+    def test_load_dataset_info_backend_mismatch(self, sample_dataset_info):
         """Test error when backend doesn't match."""
-        # Arrange
-        sample_dataset_info['database']['backend'] = 'duckdb'
-        yaml_content = yaml.dump(sample_dataset_info)
+        # Create a fresh exporter with explicit config to avoid test pollution
+        config = Mock()
+        config.paths.configs_path = "config/datasets"
+        config.paths.datasets_path = "datasets"
+        config.database.default_backend = "sqlite"
         
-        with patch('pathlib.Path.exists', return_value=True):
-            with patch('builtins.open', mock_open(read_data=yaml_content)):
-                # Act & Assert
-                with pytest.raises(DatasetError) as exc_info:
-                    exporter._load_dataset_info("test_dataset")
-                
-                # Verify error message
-                assert "uses 'duckdb' backend" in str(exc_info.value)
-                assert "current backend is 'sqlite'" in str(exc_info.value)
+        with patch('mdm.config.get_config_manager') as mock_get_config:
+            mock_manager = Mock()
+            mock_manager.config = config
+            mock_manager.base_path = Path("/test")
+            mock_get_config.return_value = mock_manager
+            
+            # Create exporter with mocked config
+            exporter = DatasetExporter()
+            
+            # Arrange
+            sample_dataset_info['database']['backend'] = 'duckdb'
+            yaml_content = yaml.dump(sample_dataset_info)
+            
+            with patch('pathlib.Path.exists', return_value=True):
+                with patch('builtins.open', mock_open(read_data=yaml_content)):
+                    # Act & Assert
+                    with pytest.raises(DatasetError) as exc_info:
+                        exporter._load_dataset_info("test_dataset")
+                    
+                    # Verify error message
+                    assert "uses 'duckdb' backend" in str(exc_info.value)
+                    assert "current backend is 'sqlite'" in str(exc_info.value)
 
     @patch('mdm.dataset.exporter.BackendFactory')
     def test_get_backend(self, mock_factory, exporter, sample_dataset_info):

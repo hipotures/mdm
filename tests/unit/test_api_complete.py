@@ -191,11 +191,11 @@ class TestMDMClientComplete:
 
     def test_remove_dataset_success(self, client, mock_manager):
         """Test removing dataset successfully."""
-        mock_manager.delete_dataset.return_value = None
+        mock_manager.remove_dataset.return_value = None
         
         client.remove_dataset("test_dataset", force=True)
         
-        mock_manager.delete_dataset.assert_called_once_with("test_dataset", force=True)
+        mock_manager.remove_dataset.assert_called_once_with("test_dataset")
 
     def test_remove_dataset_not_found(self, client, mock_manager):
         """Test removing non-existent dataset."""
@@ -251,19 +251,30 @@ class TestMDMClientComplete:
         assert result[0] == sample_dataset_info
         mock_manager.search_datasets_by_tag.assert_called_once_with("test")
 
-    def test_get_statistics_success(self, client, mock_manager):
+    def test_get_statistics_success(self, client):
         """Test getting dataset statistics."""
-        stats = DatasetStatistics(
-            row_count=1000,
-            column_count=10,
-            memory_usage_mb=50.0
-        )
-        mock_manager.get_statistics.return_value = stats
+        expected_stats = {
+            'dataset_name': 'test_dataset',
+            'tables': {
+                'train': {'row_count': 1000}
+            },
+            'summary': {
+                'total_rows': 1000,
+                'total_columns': 10
+            }
+        }
         
-        result = client.get_statistics("test_dataset")
-        
-        assert result == stats
-        mock_manager.get_statistics.assert_called_once_with("test_dataset")
+        with patch('mdm.dataset.statistics.DatasetStatistics') as mock_stats_class:
+            mock_stats_instance = Mock()
+            mock_stats_instance.compute_statistics.return_value = expected_stats
+            mock_stats_class.return_value = mock_stats_instance
+            
+            result = client.get_statistics("test_dataset")
+            
+            assert result == expected_stats
+            mock_stats_instance.compute_statistics.assert_called_once_with(
+                "test_dataset", full=False, save=False
+            )
 
     def test_get_statistics_not_found(self, client, mock_manager):
         """Test getting statistics for non-existent dataset."""
@@ -434,7 +445,7 @@ class TestMDMClientComplete:
             adapter = client.get_framework_adapter("sklearn")
             
             assert adapter == mock_adapter
-            mock_adapter_class.assert_called_once_with("sklearn", config=client.config)
+            mock_adapter_class.assert_called_once_with("sklearn")
 
     def test_process_in_chunks(self, client):
         """Test chunk processing."""
@@ -481,9 +492,14 @@ class TestMDMClientComplete:
             'value': range(100)
         })
         
+        # Expected split result - split_by_folds returns dicts with 'train' and 'test' keys
+        expected_folds = [
+            {'train': data[:80], 'test': data[80:]}
+        ]
+        
         with patch('mdm.utils.time_series.TimeSeriesSplitter') as mock_splitter_class:
             mock_splitter = Mock()
-            mock_splitter.split.return_value = [(data[:80], data[80:])]
+            mock_splitter.split_by_folds.return_value = expected_folds
             mock_splitter_class.return_value = mock_splitter
             
             result = client.create_time_series_splits(
@@ -492,6 +508,11 @@ class TestMDMClientComplete:
                 n_splits=1
             )
             
+            # Result should be list of tuples
             assert len(result) == 1
-            assert len(result[0][0]) == 80  # Train
-            assert len(result[0][1]) == 20  # Test
+            assert isinstance(result[0], tuple)
+            assert len(result[0]) == 2
+            assert result[0][0].equals(data[:80])  # train
+            assert result[0][1].equals(data[80:])  # test
+            
+            mock_splitter.split_by_folds.assert_called_once_with(data, n_folds=1, gap_days=0)

@@ -159,17 +159,17 @@ class TestParameterValidation:
         """Test that safe dataset names are accepted."""
         manager = DatasetManager()
         
-        # Valid names that should be accepted
+        # Valid names that should be accepted (input, expected)
         valid_names = [
-            "dataset",
-            "dataset_123",
-            "dataset-name",
-            "MyDataset",  # Will be normalized to lowercase
-            "data_2024_01",
-            "test-dataset-v2",
+            ("dataset", "dataset"),
+            ("dataset_123", "dataset_123"),
+            ("dataset-name", "dataset_name"),  # Dashes replaced with underscores
+            ("MyDataset", "mydataset"),  # Will be normalized to lowercase
+            ("data_2024_01", "data_2024_01"),
+            ("test-dataset-v2", "test_dataset_v2"),  # Dashes replaced with underscores
         ]
         
-        for valid_name in valid_names:
+        for valid_name, expected in valid_names:
             normalized = manager.validate_dataset_name(valid_name)
-            assert normalized == valid_name.lower()
-            assert all(c.isalnum() or c in "_-" for c in normalized)
+            assert normalized == expected
+            assert all(c.isalnum() or c == "_" for c in normalized)
