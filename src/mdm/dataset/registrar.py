@@ -189,7 +189,10 @@ class DatasetRegistrar:
 
         # Record successful registration
         duration_ms = (pd.Timestamp.now() - start_time).total_seconds() * 1000
-        total_rows = sum(info.get('row_count', 0) for info in table_mappings.values())
+        # table_mappings contains table names, get row count from dataset_info
+        total_rows = 0
+        if hasattr(dataset_info, 'statistics') and dataset_info.statistics:
+            total_rows = dataset_info.statistics.get('row_count', 0)
         self.monitor.record_metric(
             MetricType.DATASET_REGISTER,
             f"register_{normalized_name}",

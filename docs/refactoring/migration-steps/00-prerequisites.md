@@ -71,27 +71,26 @@ mypy --version
 #### 2.1 Create Migration Workspace
 ```bash
 # Create migration directories
-mkdir -p ~/mdm-migration/{backups,logs,scripts,comparison-tests}
+mkdir -p ~/DEV/mdm-migration/{backups,logs,scripts,comparison-tests}
 
 # Set up environment variables
-cat >> ~/.bashrc << 'EOF'
-# MDM Migration Environment
-export MDM_MIGRATION_ROOT=~/mdm-migration
-export MDM_ORIGINAL_ROOT=/home/xai/DEV2/mdm
-export MDM_REFACTOR_ROOT=/home/xai/DEV/mdm
-export MDM_MIGRATION_LOG=$MDM_MIGRATION_ROOT/logs/migration.log
-EOF
 
-source ~/.bashrc
+# MDM Migration Environment
+export MDM_MIGRATION_ROOT=~/DEV/mdm-migration
+export MDM_ORIGINAL_ROOT=/home/xai/DEV/mdm.wt.dev2
+export MDM_REFACTOR_ROOT=/home/xai/DEV2/mdm
+export MDM_MIGRATION_LOG=$MDM_MIGRATION_ROOT/logs/migration.log
+
+
 ```
 
 #### 2.2 Install Additional Tools
 ```bash
 # Install migration-specific tools
-pip install --user pytest-benchmark pytest-timeout pytest-xdist memory_profiler
+uv pip install --user pytest-benchmark pytest-timeout pytest-xdist memory_profiler
 
 # Install comparison tools
-pip install --user deepdiff jsondiff
+uv pip install --user deepdiff jsondiff
 ```
 
 #### 2.3 Set Up Git Worktrees
