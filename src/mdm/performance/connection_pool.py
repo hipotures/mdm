@@ -1,7 +1,7 @@
 """Connection pooling for database operations."""
 import time
 import threading
-from typing import Dict, Any, Optional, List, Callable
+from typing import Dict, Any, Optional, List, Callable, Tuple
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 from queue import Queue, Empty, Full

@@ -28,6 +28,11 @@ from .metrics import (
     track_feature_generation,
     record_dataset_size,
 )
+from .logging import (
+    logger,
+    get_logger,
+    configure_logging,
+)
 
 __all__ = [
     # DI Container
@@ -55,5 +60,9 @@ __all__ = [
     'track_query',
     'track_feature_generation',
     'record_dataset_size',
+    # Logging
+    'logger',
+    'get_logger',
+    'configure_logging',
 ]
 
