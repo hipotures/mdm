@@ -13,6 +13,7 @@ from loguru import logger
 from mdm.cli.batch import batch_app
 from mdm.cli.dataset import dataset_app
 from mdm.cli.timeseries import app as timeseries_app
+from mdm.cli.stats import app as stats_app
 from mdm.config import get_config_manager
 from mdm.dataset.manager import DatasetManager
 
@@ -167,6 +168,7 @@ def main_callback():
 app.add_typer(dataset_app, name="dataset", help="Dataset management commands")
 app.add_typer(batch_app, name="batch", help="Batch operations for multiple datasets")
 app.add_typer(timeseries_app, name="timeseries", help="Time series operations")
+app.add_typer(stats_app, name="stats", help="View statistics and monitoring data")
 
 # Create console for output
 console = Console()

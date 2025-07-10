@@ -466,23 +466,28 @@ feature_flags:
     enabled: false  # Not ready yet
 ```
 
-#### Wednesday-Thursday: Monitoring and Metrics
+#### Wednesday-Thursday: Simple Monitoring Integration
 ```python
-# src/mdm/infrastructure/monitoring/metrics.py
-from prometheus_client import Counter, Histogram
+# src/mdm/monitoring/simple.py
+from mdm.monitoring import SimpleMonitor, MetricType
 
-# Define metrics
-registration_duration = Histogram(
-    'mdm_registration_duration_seconds',
-    'Dataset registration duration',
-    ['backend', 'status']
+# Initialize simple monitoring (automatic)
+monitor = SimpleMonitor()
+
+# Track registration operation
+monitor.record_metric(
+    MetricType.DATASET_REGISTER,
+    f"register_{dataset_name}",
+    duration_ms=duration_ms,
+    success=True,
+    dataset_name=dataset_name,
+    row_count=total_rows
 )
 
-feature_generation_duration = Histogram(
-    'mdm_feature_generation_duration_seconds',
-    'Feature generation duration',
-    ['transformer']
-)
+# View metrics via CLI
+# mdm stats show
+# mdm stats summary
+# mdm stats dashboard
 ```
 
 #### Friday: Final Documentation

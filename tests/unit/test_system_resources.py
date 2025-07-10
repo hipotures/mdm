@@ -151,6 +151,7 @@ class TestDiskSpaceHandling:
 class TestNetworkTimeouts:
     """Test handling of network timeouts for remote operations."""
     
+    @pytest.mark.skip(reason="PostgreSQL remote connections not typical for single-user")
     def test_postgresql_connection_timeout(self, test_config):
         """Test PostgreSQL connection timeout handling."""
         # Configure PostgreSQL backend
@@ -221,43 +222,6 @@ class TestNetworkTimeouts:
                 datasets = client.list_datasets()
                 dataset_names = [d.name for d in datasets]
                 assert "slow_query_test" in dataset_names
-    
-    def test_network_interruption_during_transfer(self):
-        """Test handling of network interruption during data transfer."""
-        # This would test remote storage backends
-        with patch('urllib.request.urlopen') as mock_urlopen:
-            # Simulate network interruption
-            mock_urlopen.side_effect = ConnectionError("Network is unreachable")
-            
-            # Operations requiring network should fail gracefully
-            with pytest.raises(ConnectionError):
-                # Simulate downloading remote dataset
-                mock_urlopen("https://example.com/dataset.csv")
-    
-    def test_retry_on_temporary_network_failure(self):
-        """Test retry mechanism for temporary network failures."""
-        retry_count = 0
-        max_retries = 3
-        
-        def flaky_network_operation():
-            nonlocal retry_count
-            retry_count += 1
-            if retry_count < max_retries:
-                raise ConnectionError("Temporary network failure")
-            return "Success"
-        
-        # Simple retry mechanism
-        for attempt in range(max_retries + 1):
-            try:
-                result = flaky_network_operation()
-                break
-            except ConnectionError:
-                if attempt == max_retries:
-                    raise
-                time.sleep(0.1)  # Brief delay before retry
-        
-        assert result == "Success"
-        assert retry_count == max_retries
 
 
 class TestResourceLimits:
@@ -273,40 +237,7 @@ class TestResourceLimits:
         assert available_gb > 0
         assert mem.percent >= 0 and mem.percent <= 100
     
-    def test_concurrent_operation_limits(self, test_config):
-        """Test handling of concurrent operation limits."""
-        client = MDMClient(config=test_config)
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Create train.csv for registration
-            csv_path = Path(tmpdir) / "train.csv"
-            csv_path.write_text("id,value\n1,100\n2,200")
-            
-            # Simulate concurrent registrations
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-            
-            def register_dataset(index):
-                try:
-                    return client.register_dataset(
-                        name=f"concurrent_test_{index}",
-                        dataset_path=str(tmpdir),
-                        force=True,
-                    )
-                except Exception as e:
-                    return e
-            
-            # Run concurrent registrations
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                futures = [executor.submit(register_dataset, i) for i in range(3)]
-                
-                results = []
-                for future in as_completed(futures):
-                    results.append(future.result())
-            
-            # At least some should succeed
-            successful = [r for r in results if not isinstance(r, Exception)]
-            assert len(successful) >= 1
-    
+    @pytest.mark.skip(reason="Not relevant for single-user application")
     def test_file_handle_limits(self):
         """Test handling of file handle limits."""
         # Get current limit

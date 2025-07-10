@@ -745,22 +745,32 @@ jobs:
 ```python
 # tests/monitoring/test_metrics.py
 import pytest
-from prometheus_client import Counter, Histogram
+from mdm.monitoring import SimpleMonitor, MetricType
+import time
 
-# Metrics
-test_runs = Counter('mdm_test_runs_total', 'Total test runs')
-test_duration = Histogram('mdm_test_duration_seconds', 'Test duration')
+# Initialize simple monitor
+monitor = SimpleMonitor()
 
 @pytest.fixture(autouse=True)
 def track_test_metrics(request):
-    """Track test metrics."""
-    test_runs.inc()
+    """Track test metrics using simple monitoring."""
+    test_name = request.node.name
     
     start_time = time.time()
     yield
-    duration = time.time() - start_time
+    duration_ms = (time.time() - start_time) * 1000
     
-    test_duration.observe(duration)
+    # Record test execution
+    monitor.record_metric(
+        MetricType.TEST_EXECUTION,
+        f"test_{test_name}",
+        duration_ms=duration_ms,
+        success=not request.node.rep_call.failed if hasattr(request.node, 'rep_call') else True,
+        metadata={
+            "test_file": request.node.parent.name,
+            "test_function": test_name
+        }
+    )
 ```
 
 ## Test Data Management

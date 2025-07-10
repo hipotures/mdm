@@ -26,6 +26,7 @@ from mdm.models.dataset import DatasetInfo
 from mdm.models.enums import ColumnType
 from mdm.storage.factory import BackendFactory
 from mdm.utils.serialization import serialize_for_yaml
+from mdm.monitoring import SimpleMonitor, MetricType
 
 
 class DatasetRegistrar:
@@ -43,6 +44,7 @@ class DatasetRegistrar:
         self.base_path = config_manager.base_path
         self.feature_generator = FeatureGenerator()
         self._detected_datetime_columns = []
+        self.monitor = SimpleMonitor()
 
     def register(
         self,
@@ -70,7 +72,10 @@ class DatasetRegistrar:
             DatasetError: If registration fails
         """
         logger.info(f"Starting registration for dataset '{name}'")
-
+        
+        # Record start of registration
+        start_time = pd.Timestamp.now()
+        
         # Step 1: Validate dataset name
         normalized_name = self._validate_name(name)
 
@@ -181,6 +186,23 @@ class DatasetRegistrar:
 
         # Step 12: Save registration
         self.manager.register_dataset(dataset_info)
+
+        # Record successful registration
+        duration_ms = (pd.Timestamp.now() - start_time).total_seconds() * 1000
+        total_rows = sum(info.get('row_count', 0) for info in table_mappings.values())
+        self.monitor.record_metric(
+            MetricType.DATASET_REGISTER,
+            f"register_{normalized_name}",
+            duration_ms=duration_ms,
+            success=True,
+            dataset_name=normalized_name,
+            row_count=total_rows,
+            metadata={
+                'files': len(files),
+                'features_generated': len(feature_tables) if feature_tables else 0,
+                'backend': self.config.database.default_backend
+            }
+        )
 
         logger.info(f"Dataset '{normalized_name}' registered successfully")
         return dataset_info

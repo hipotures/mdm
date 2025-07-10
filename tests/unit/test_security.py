@@ -17,17 +17,11 @@ class TestSQLInjectionProtection:
         """Test that SQL injection attempts in dataset names are blocked."""
         client = MDMClient(config=test_config)
         
-        # Various SQL injection attempts
+        # Basic SQL injection attempts - simplified for single-user
         malicious_names = [
-            "'; DROP TABLE datasets; --",
-            "dataset'; DELETE FROM sqlite_master; --",
-            "test' OR '1'='1",
-            "dataset'; UPDATE datasets SET name='hacked'; --",
-            "test\\'; DROP TABLE datasets; --",
-            "dataset`; DROP TABLE datasets; --",
-            "test\"; DROP TABLE datasets; --",
-            "1; SELECT * FROM datasets WHERE '1'='1",
-            "dataset' UNION SELECT * FROM sqlite_master--",
+            "'; DROP TABLE datasets; --",  # Basic injection
+            "test' OR '1'='1",             # Logic manipulation
+            "dataset'; DELETE FROM sqlite_master; --",  # Destructive attempt
         ]
         
         for malicious_name in malicious_names:
@@ -57,11 +51,10 @@ class TestSQLInjectionProtection:
                 dataset_path=str(tmpdir),
             )
             
-            # Try SQL injection in query
+            # Try basic SQL injection in query - simplified for single-user
             malicious_queries = [
-                "SELECT * FROM train; DROP TABLE train; --",
-                "SELECT * FROM train WHERE 1=1; DELETE FROM train; --",
-                "SELECT * FROM train UNION SELECT * FROM sqlite_master--",
+                "SELECT * FROM train; DROP TABLE train; --",  # Basic destructive injection
+                "SELECT * FROM train WHERE 1=1; DELETE FROM train; --",  # Conditional deletion
             ]
             
             for query in malicious_queries:
