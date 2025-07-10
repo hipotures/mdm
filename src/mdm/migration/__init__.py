@@ -22,6 +22,10 @@ from .dataset_migration import (
     DatasetMigrator,
     DatasetValidator,
 )
+from .cli_migration import (
+    CLIMigrator,
+    CLIValidator,
+)
 
 __all__ = [
     'ConfigurationMigrator',
@@ -33,4 +37,6 @@ __all__ = [
     'FeatureValidator',
     'DatasetMigrator',
     'DatasetValidator',
+    'CLIMigrator',
+    'CLIValidator',
 ]

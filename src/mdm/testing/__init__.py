@@ -12,6 +12,7 @@ from .config_comparison import ConfigComparisonTester
 from .storage_comparison import StorageComparisonTester, TestResult
 from .feature_comparison import FeatureComparisonTester, FeatureTestResult
 from .dataset_comparison import DatasetComparisonTester, DatasetTestResult
+from .cli_comparison import CLIComparisonTester, CLITestResult
 
 __all__ = [
     'ComparisonTester',
@@ -23,4 +24,6 @@ __all__ = [
     'FeatureTestResult',
     'DatasetComparisonTester',
     'DatasetTestResult',
+    'CLIComparisonTester',
+    'CLITestResult',
 ]

@@ -36,6 +36,17 @@ from .config_adapters import (
     get_config_manager,
     get_config,
 )
+from .cli_manager import (
+    get_dataset_commands,
+    get_batch_commands,
+    get_timeseries_commands,
+    get_stats_commands,
+    get_cli_formatter,
+    get_cli_config,
+    execute_command,
+    clear_cli_cache,
+    get_cli_metrics,
+)
 
 __all__ = [
     'StorageAdapter',
@@ -60,4 +71,13 @@ __all__ = [
     'NewConfigManagerAdapter',
     'get_config_manager',
     'get_config',
+    'get_dataset_commands',
+    'get_batch_commands',
+    'get_timeseries_commands',
+    'get_stats_commands',
+    'get_cli_formatter',
+    'get_cli_config',
+    'execute_command',
+    'clear_cli_cache',
+    'get_cli_metrics',
 ]
