@@ -177,7 +177,8 @@ console = Console()
 @app.command()
 def version():
     """Show MDM version."""
-    console.print("[bold green]MDM[/bold green] version 0.1.0")
+    from mdm import __version__
+    console.print(f"[bold green]MDM[/bold green] version {__version__}")
 
 
 @app.command()
@@ -189,7 +190,8 @@ def info():
     manager = DatasetManager()
 
     # Header
-    console.print("\n[bold cyan]ML Data Manager[/bold cyan] v0.1.0\n")
+    from mdm import __version__
+    console.print(f"\n[bold cyan]ML Data Manager[/bold cyan] v{__version__}\n")
 
     # Configuration
     console.print("[bold]Configuration:[/bold]")

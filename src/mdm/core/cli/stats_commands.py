@@ -21,6 +21,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from ...interfaces.cli import IStatsCommands
 from ...adapters import get_dataset_manager
 from ...config import get_config_manager
+from ... import __version__
 from .utils import format_size, format_datetime
 
 logger = logging.getLogger(__name__)
@@ -408,7 +409,7 @@ class NewStatsCommands(IStatsCommands):
         """Collect comprehensive system statistics."""
         stats = {
             'timestamp': datetime.now().isoformat(),
-            'version': '0.1.0',  # Would get from package
+            'version': __version__,
             'system': {
                 'mdm_home': str(Path.home() / '.mdm'),
                 'config_file': str(self.config._config_file),

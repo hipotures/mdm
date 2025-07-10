@@ -29,6 +29,7 @@ from ..dataset.manager import DatasetManager
 from .batch import BatchExportOperation, BatchStatsOperation, BatchRemoveOperation
 from ..api import MDMClient
 from ..config import get_config_manager
+from .. import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -330,7 +331,7 @@ class LegacyStatsCommands(IStatsCommands):
         """Show system stats using legacy implementation."""
         # Collect system statistics
         stats = {
-            'version': '0.1.0',
+            'version': __version__,
             'datasets': len(self.manager.list_datasets()),
             'backend': self.config.get('database.default_backend'),
             'cache_dir': str(self.config.get('paths.cache_path'))

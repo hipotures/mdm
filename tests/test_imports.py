@@ -7,7 +7,7 @@ def test_mdm_imports():
     """Test that MDM can be imported."""
     import mdm
     
-    assert mdm.__version__ == "0.1.0"
+    assert mdm.__version__ == "0.2.0"
     assert hasattr(mdm, "MDMError")
 
 
