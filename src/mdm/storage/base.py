@@ -4,13 +4,21 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 import pandas as pd
 from sqlalchemy import Engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from mdm.core.exceptions import StorageError
+from mdm.performance import (
+    QueryOptimizer,
+    ConnectionPool,
+    PoolConfig,
+    CacheManager,
+    BatchOptimizer,
+    get_monitor
+)
 
 
 class StorageBackend(ABC):
@@ -25,6 +33,17 @@ class StorageBackend(ABC):
         self.config = config
         self._engine: Optional[Engine] = None
         self._session_factory: Optional[sessionmaker] = None
+        
+        # Performance optimization components
+        self._query_optimizer: Optional[QueryOptimizer] = None
+        self._connection_pool: Optional[ConnectionPool] = None
+        self._cache_manager: Optional[CacheManager] = None
+        self._batch_optimizer: Optional[BatchOptimizer] = None
+        self._monitor = get_monitor()
+        
+        # Initialize performance optimizations if enabled
+        if config.get('enable_performance_optimizations', True):
+            self._initialize_performance_optimizations()
 
     @property
     @abstractmethod
@@ -96,6 +115,31 @@ class StorageBackend(ABC):
         """
         pass
 
+    def _initialize_performance_optimizations(self) -> None:
+        """Initialize performance optimization components."""
+        # Query optimizer
+        self._query_optimizer = QueryOptimizer(
+            cache_query_plans=self.config.get('cache_query_plans', True)
+        )
+        
+        # Cache manager
+        cache_config = self.config.get('cache', {})
+        self._cache_manager = CacheManager(
+            max_size_mb=cache_config.get('max_size_mb', 100),
+            default_ttl=cache_config.get('default_ttl', 300)
+        )
+        
+        # Batch optimizer
+        batch_config = self.config.get('batch', {})
+        from mdm.performance import BatchConfig
+        self._batch_optimizer = BatchOptimizer(
+            BatchConfig(
+                batch_size=batch_config.get('batch_size', 10000),
+                max_workers=batch_config.get('max_workers', 4),
+                enable_parallel=batch_config.get('enable_parallel', True)
+            )
+        )
+    
     def get_engine(self, database_path: str) -> Engine:
         """Get or create engine for database.
 
@@ -106,7 +150,21 @@ class StorageBackend(ABC):
             SQLAlchemy Engine instance
         """
         if self._engine is None:
-            self._engine = self.create_engine(database_path)
+            # Use connection pool if available
+            if self._connection_pool is None and self.config.get('use_connection_pool', True):
+                pool_config = self.config.get('pool', {})
+                self._connection_pool = ConnectionPool(
+                    database_path,
+                    PoolConfig(
+                        pool_size=pool_config.get('pool_size', 5),
+                        max_overflow=pool_config.get('max_overflow', 10),
+                        timeout=pool_config.get('timeout', 30.0)
+                    )
+                )
+                self._engine = self._connection_pool._engine
+            else:
+                self._engine = self.create_engine(database_path)
+            
             self._session_factory = sessionmaker(bind=self._engine)
         return self._engine
 
@@ -171,7 +229,14 @@ class StorageBackend(ABC):
             if_exists: What to do if table exists ('fail', 'replace', 'append')
         """
         try:
-            df.to_sql(table_name, engine, if_exists=if_exists, index=False)
+            # Use batch optimizer for large dataframes
+            if self._batch_optimizer and len(df) > 10000:
+                with self._monitor.track_operation("table_creation", table=table_name):
+                    # Insert in batches
+                    df.to_sql(table_name, engine, if_exists=if_exists, index=False, 
+                            chunksize=self._batch_optimizer.config.batch_size)
+            else:
+                df.to_sql(table_name, engine, if_exists=if_exists, index=False)
         except Exception as e:
             raise StorageError(f"Failed to create table {table_name}: {e}") from e
 
@@ -192,7 +257,29 @@ class StorageBackend(ABC):
             query = f"SELECT * FROM {table_name}"
             if limit:
                 query += f" LIMIT {limit}"
-            return pd.read_sql_query(query, engine)
+            
+            # Check cache first
+            cache_key = f"table:{table_name}:{limit}"
+            if self._cache_manager:
+                cached_df = self._cache_manager.get(cache_key)
+                if cached_df is not None:
+                    self._monitor.track_cache("table_read", hit=True)
+                    return cached_df
+                else:
+                    self._monitor.track_cache("table_read", hit=False)
+            
+            # Optimize query if optimizer available
+            if self._query_optimizer:
+                query, plan = self._query_optimizer.optimize_query(query, engine)
+            
+            with self._monitor.track_operation("table_read", table=table_name):
+                df = pd.read_sql_query(query, engine)
+            
+            # Cache result
+            if self._cache_manager and len(df) < 100000:  # Don't cache very large results
+                self._cache_manager.set(cache_key, df, ttl=300)
+            
+            return df
         except Exception as e:
             raise StorageError(f"Failed to read table {table_name}: {e}") from e
 
@@ -223,6 +310,31 @@ class StorageBackend(ABC):
 
     def execute_query(self, query: str, engine: Engine) -> Any:
         """Execute arbitrary SQL query.
+        
+        Args:
+            query: SQL query to execute
+            engine: SQLAlchemy engine
+            
+        Returns:
+            Query result
+        """
+        with self._monitor.track_operation("query_execution"):
+            # Optimize query if optimizer available
+            if self._query_optimizer:
+                query, plan = self._query_optimizer.optimize_query(query, engine)
+                if plan.execution_time:
+                    self._monitor.track_query(
+                        plan.query_type.value,
+                        plan.execution_time,
+                        plan.estimated_rows
+                    )
+            
+            with engine.connect() as conn:
+                result = conn.execute(text(query))
+                return result.fetchall()
+    
+    def execute_query_original(self, query: str, engine: Engine) -> Any:
+        """Execute arbitrary SQL query (original implementation).
 
         Args:
             query: SQL query string

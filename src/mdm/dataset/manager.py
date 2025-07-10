@@ -13,6 +13,7 @@ from mdm.core.exceptions import DatasetError, StorageError
 from mdm.models.dataset import DatasetInfo, DatasetStatistics
 from mdm.storage.factory import BackendFactory
 from mdm.utils.serialization import serialize_for_yaml
+from mdm.performance import DatasetCache, get_monitor
 
 
 class DatasetManager:
@@ -41,6 +42,10 @@ class DatasetManager:
         # Also ensure dataset registry directory exists
         self.dataset_registry_dir = self.base_path / config.paths.configs_path
         self.dataset_registry_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize performance components
+        self._cache = DatasetCache(max_size_mb=50)
+        self._monitor = get_monitor()
 
     def register_dataset(self, dataset_info: DatasetInfo) -> None:
         """Register a new dataset.
@@ -97,6 +102,14 @@ class DatasetManager:
             DatasetInfo or None if not found
         """
         dataset_name = name.lower()
+        
+        # Check cache first
+        cached_info = self._cache.get_dataset_info(dataset_name)
+        if cached_info is not None:
+            self._monitor.track_cache("dataset_info", hit=True)
+            return DatasetInfo(**cached_info)
+        else:
+            self._monitor.track_cache("dataset_info", hit=False)
 
         # Try YAML first (new format)
         yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
@@ -159,6 +172,9 @@ class DatasetManager:
             yaml_path = self.dataset_registry_dir / f"{dataset_name}.yaml"
             with open(yaml_path, 'w') as f:
                 yaml.dump(serialize_for_yaml(dataset_info.model_dump()), f, default_flow_style=False, sort_keys=False)
+            
+            # Invalidate cache
+            self._cache.delete(f"dataset_info:{dataset_name}")
 
             logger.info(f"Dataset '{name}' updated successfully")
             return dataset_info
@@ -172,18 +188,19 @@ class DatasetManager:
         Returns:
             List of DatasetInfo objects
         """
-        datasets = []
-        seen_names = set()
+        with self._monitor.track_operation("dataset_list"):
+            datasets = []
+            seen_names = set()
 
-        # First, scan YAML files in registry (primary source)
-        for yaml_file in self.dataset_registry_dir.glob("*.yaml"):
-            try:
-                dataset_info = self.get_dataset(yaml_file.stem)
-                if dataset_info and dataset_info.name not in seen_names:
-                    datasets.append(dataset_info)
-                    seen_names.add(dataset_info.name)
-            except Exception as e:
-                logger.error(f"Failed to load dataset from {yaml_file}: {e}")
+            # First, scan YAML files in registry (primary source)
+            for yaml_file in self.dataset_registry_dir.glob("*.yaml"):
+                try:
+                    dataset_info = self.get_dataset(yaml_file.stem)
+                    if dataset_info and dataset_info.name not in seen_names:
+                        datasets.append(dataset_info)
+                        seen_names.add(dataset_info.name)
+                except Exception as e:
+                    logger.error(f"Failed to load dataset from {yaml_file}: {e}")
 
         # Then scan dataset directories for any missing (backward compatibility)
         for dataset_dir in self.datasets_path.iterdir():

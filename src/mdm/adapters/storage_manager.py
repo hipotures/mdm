@@ -9,6 +9,7 @@ import logging
 from mdm.interfaces.storage import IStorageBackend
 from mdm.adapters.storage_adapters import SQLiteAdapter, DuckDBAdapter, PostgreSQLAdapter
 from mdm.core import feature_flags, metrics_collector
+from mdm.performance import get_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ class StorageBackendManager:
             "duckdb": DuckDBAdapter,
             "postgresql": PostgreSQLAdapter,
         }
+        self._monitor = get_monitor()
         
     def get_backend(
         self, 
@@ -51,39 +53,44 @@ class StorageBackendManager:
         
         # Check feature flag for new storage
         if feature_flags.get("use_new_storage", False):
-            logger.info(f"Using new storage backend for {backend_type}")
-            metrics_collector.increment(
-                "storage.backend_created",
-                tags={"type": backend_type, "implementation": "new"}
-            )
-            
-            # Import here to avoid circular imports
-            from mdm.core.storage.factory import create_storage_backend
-            
-            # Create new backend with config
-            backend = create_storage_backend(backend_type, config)
-            
-            # Note: New backends are not cached as they manage their own connections
-            return backend
+            with self._monitor.track_operation("storage_backend_creation", backend=backend_type, implementation="new"):
+                logger.info(f"Using new storage backend for {backend_type}")
+                metrics_collector.increment(
+                    "storage.backend_created",
+                    tags={"type": backend_type, "implementation": "new"}
+                )
+                
+                # Import here to avoid circular imports
+                from mdm.core.storage.factory import create_storage_backend
+                
+                # Create new backend with config
+                backend = create_storage_backend(backend_type, config)
+                
+                # Note: New backends are not cached as they manage their own connections
+                return backend
         else:
-            logger.debug(f"Using legacy storage backend for {backend_type}")
-            metrics_collector.increment(
-                "storage.backend_created",
-                tags={"type": backend_type, "implementation": "legacy"}
-            )
-            
-            # Return cached adapter if available
-            if backend_type in self._adapters:
-                return self._adapters[backend_type]
-            
-            # Create new adapter
-            adapter_class = self._adapter_classes[backend_type]
-            adapter = adapter_class()
-            
-            # Cache the adapter
-            self._adapters[backend_type] = adapter
-            
-            return adapter
+            with self._monitor.track_operation("storage_backend_creation", backend=backend_type, implementation="legacy"):
+                logger.debug(f"Using legacy storage backend for {backend_type}")
+                metrics_collector.increment(
+                    "storage.backend_created",
+                    tags={"type": backend_type, "implementation": "legacy"}
+                )
+                
+                # Return cached adapter if available
+                if backend_type in self._adapters:
+                    self._monitor.track_cache("storage_backend", hit=True)
+                    return self._adapters[backend_type]
+                
+                self._monitor.track_cache("storage_backend", hit=False)
+                
+                # Create new adapter
+                adapter_class = self._adapter_classes[backend_type]
+                adapter = adapter_class()
+                
+                # Cache the adapter
+                self._adapters[backend_type] = adapter
+                
+                return adapter
     
     def clear_cache(self) -> None:
         """Clear all cached backends."""
