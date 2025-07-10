@@ -8,8 +8,13 @@ This package provides tools for:
 """
 
 from .comparison import ComparisonTester, ComparisonResult
+from .config_comparison import ConfigComparisonTester
+from .storage_comparison import StorageComparisonTester, TestResult
 
 __all__ = [
     'ComparisonTester',
     'ComparisonResult',
+    'ConfigComparisonTester',
+    'StorageComparisonTester',
+    'TestResult',
 ]

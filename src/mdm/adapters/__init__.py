@@ -11,15 +11,37 @@ from .storage_adapters import (
     DuckDBAdapter,
     PostgreSQLAdapter,
 )
+from .storage_manager import (
+    get_storage_backend,
+    clear_storage_cache,
+    get_available_backends,
+)
 from .feature_adapters import FeatureGeneratorAdapter
 from .dataset_adapters import DatasetRegistrarAdapter, DatasetManagerAdapter
+from .config_adapters import (
+    LegacyConfigAdapter,
+    NewConfigAdapter,
+    LegacyConfigManagerAdapter,
+    NewConfigManagerAdapter,
+    get_config_manager,
+    get_config,
+)
 
 __all__ = [
     'StorageAdapter',
     'SQLiteAdapter',
     'DuckDBAdapter', 
     'PostgreSQLAdapter',
+    'get_storage_backend',
+    'clear_storage_cache',
+    'get_available_backends',
     'FeatureGeneratorAdapter',
     'DatasetRegistrarAdapter',
     'DatasetManagerAdapter',
+    'LegacyConfigAdapter',
+    'NewConfigAdapter',
+    'LegacyConfigManagerAdapter',
+    'NewConfigManagerAdapter',
+    'get_config_manager',
+    'get_config',
 ]
