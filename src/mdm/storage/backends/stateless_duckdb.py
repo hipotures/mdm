@@ -301,7 +301,7 @@ class StatelessDuckDBBackend(BackendCompatibilityMixin, IStorageBackend):
                 SELECT table_name 
                 FROM information_schema.tables 
                 WHERE table_schema = 'main'
-                AND table_name NOT LIKE '\_%' ESCAPE '\\'
+                AND table_name NOT LIKE '\\_%' ESCAPE '\\\\'
             """))
             return [row[0] for row in result]
     
