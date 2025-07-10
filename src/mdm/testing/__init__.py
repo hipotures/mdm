@@ -10,6 +10,7 @@ This package provides tools for:
 from .comparison import ComparisonTester, ComparisonResult
 from .config_comparison import ConfigComparisonTester
 from .storage_comparison import StorageComparisonTester, TestResult
+from .feature_comparison import FeatureComparisonTester, FeatureTestResult
 
 __all__ = [
     'ComparisonTester',
@@ -17,4 +18,6 @@ __all__ = [
     'ConfigComparisonTester',
     'StorageComparisonTester',
     'TestResult',
+    'FeatureComparisonTester',
+    'FeatureTestResult',
 ]

@@ -14,6 +14,10 @@ from .storage_migration import (
     StorageMigrator,
     StorageValidator,
 )
+from .feature_migration import (
+    FeatureMigrator,
+    FeatureValidator,
+)
 
 __all__ = [
     'ConfigurationMigrator',
@@ -21,4 +25,6 @@ __all__ = [
     'migrate_config_file',
     'StorageMigrator',
     'StorageValidator',
+    'FeatureMigrator',
+    'FeatureValidator',
 ]

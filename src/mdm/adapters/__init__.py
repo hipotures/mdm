@@ -18,6 +18,10 @@ from .storage_manager import (
 )
 from .feature_adapters import FeatureGeneratorAdapter
 from .dataset_adapters import DatasetRegistrarAdapter, DatasetManagerAdapter
+from .feature_manager import (
+    get_feature_generator,
+    clear_feature_cache,
+)
 from .config_adapters import (
     LegacyConfigAdapter,
     NewConfigAdapter,
@@ -38,6 +42,8 @@ __all__ = [
     'FeatureGeneratorAdapter',
     'DatasetRegistrarAdapter',
     'DatasetManagerAdapter',
+    'get_feature_generator',
+    'clear_feature_cache',
     'LegacyConfigAdapter',
     'NewConfigAdapter',
     'LegacyConfigManagerAdapter',
