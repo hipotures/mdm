@@ -145,11 +145,13 @@ class TestDatasetRegistrarEnhanced:
                 _validate_path=Mock(return_value=data_path),
                 _auto_detect=Mock(return_value={}),
                 _discover_files=Mock(return_value={'data': data_path}),
-                _create_database=Mock(return_value={'backend': 'sqlite'}),
-                _load_data_files=Mock(return_value={}),
-                _infer_metadata=Mock(return_value={}),
-                _generate_features=Mock(),
-                _compute_statistics=Mock()
+                _create_database=Mock(return_value={'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}),
+                _load_data_files=Mock(return_value={'train': 'test_dataset_train'}),
+                _analyze_columns=Mock(return_value={}),
+                _detect_id_columns=Mock(return_value=[]),
+                _infer_problem_type=Mock(return_value=None),
+                _generate_features=Mock(return_value={}),
+                _compute_initial_statistics=Mock(return_value={})
             ):
                 registrar.register('test_dataset', data_path, force=True)
                 
@@ -404,7 +406,7 @@ class TestDatasetRegistrarEnhanced:
             }
             mock_factory.create.return_value = mock_backend
             
-            result = registrar._load_data_files(files, db_info)
+            result = registrar._load_data_files(files, db_info, progress=None)
             
             assert 'train' in result
             assert 'test' in result

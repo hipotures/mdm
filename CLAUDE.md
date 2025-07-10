@@ -15,8 +15,10 @@ uv venv
 source .venv/bin/activate
 uv pip install -e .
 
-# Generate missing lock file
+# Generate lock file if missing
 uv lock
+
+# Dependencies: sqlalchemy, typer, rich, pydantic, pandas, numpy, duckdb, ydata-profiling
 ```
 
 ### Testing
@@ -42,6 +44,9 @@ pytest tests/unit/test_config.py::test_function_name -v
 ./scripts/test_e2e_quick.sh test_name ./data/sample
 ./scripts/test_e2e_simple.sh
 ./scripts/test_e2e_safe.sh
+
+# Check test import paths (pre-commit hook)
+./scripts/check_test_imports.py
 ```
 
 ### Code Quality
@@ -65,15 +70,19 @@ ruff check src/ && black src/ tests/ --line-length 100 --check && mypy src/mdm
 mdm dataset register <name> <path> [--target <col>] [--problem-type <type>] [--force]
 
 # List datasets
-mdm dataset list [--limit N] [--sort-by name|registration_date]
+mdm dataset list [--limit N] [--sort-by name|registration_date|size]
 
 # Dataset operations
 mdm dataset info <name>
 mdm dataset stats <name>
-mdm dataset export <name> [--format csv|parquet|json] [--output <path>]
+mdm dataset export <name> [--format csv|parquet|json] [--output <path>] [--compression gzip|zip]
 mdm dataset remove <name> [--force]
-mdm dataset update <name> [--description "text"] [--tags "tag1,tag2"]
+mdm dataset update <name> [--description "text"] [--tags "tag1,tag2"] [--problem-type type]
 mdm dataset search <pattern> [--tag <tag>]
+
+# Show system info
+mdm info
+mdm version
 ```
 
 ## Architecture and Key Components
@@ -133,11 +142,13 @@ MDM uses a two-tier database system:
   - `MDM_PERFORMANCE_BATCH_SIZE=10000`
   - `MDM_LOGGING_LEVEL=DEBUG`
   - `MDM_LOGGING_FILE=/tmp/mdm.log`
+  - `MDM_PATHS_DATASETS_PATH=custom/path`
 
 ### Logging Configuration
 - File logging: Set via `logging.file` in config or `MDM_LOGGING_FILE` env var
 - Log level: DEBUG shows all operations including batch processing
 - Console output: WARNING and above only (clean CLI experience)
+- Interceptor pattern used to unify standard logging with loguru
 
 ## Recent Improvements
 
@@ -153,6 +164,12 @@ MDM uses a two-tier database system:
 - Feature generation processes data in batches
 - Prevents memory exhaustion on large datasets
 
+### Update Command Improvements (2025-07-08)
+- Fixed exit code behavior (returns 0 when no updates specified)
+- Added input validation for --id-columns and --problem-type
+- Improved error handling with user-friendly messages
+- Added comprehensive test coverage
+
 ## Known Issues and Workarounds
 
 ### Critical Bugs
@@ -163,8 +180,8 @@ MDM uses a two-tier database system:
 
 ### Missing Features
 - Many CLI options in test checklist don't exist (--source, --datetime-columns, etc.)
-- Compressed file support (.csv.gz)
-- Excel file support (.xlsx)
+- Compressed file support (.csv.gz) partially implemented
+- Excel file support (.xlsx) exists but has issues
 - SQLAlchemy echo configuration not working
 - Automatic datetime detection (datetime columns stored as TEXT)
 
@@ -180,6 +197,7 @@ All code, documentation, and communication must be in English.
 - Use MANUAL_TEST_CHECKLIST.md for comprehensive testing (617 test items)
 - Document issues in ISSUES.md
 - Track progress in test_progress.md
+- Pre-commit hook checks test import paths
 
 ### Common Patterns
 - Use SQLAlchemy ORM for all database operations
@@ -192,7 +210,16 @@ All code, documentation, and communication must be in English.
 ### Error Handling
 - DatasetError for dataset-specific issues
 - MDMError for general errors
+- StorageError for backend-specific issues
 - Rich console for user-friendly error display
+
+### Test Fixes Pattern
+When fixing tests:
+- Check for mock method signatures matching actual implementation
+- Ensure _detected_datetime_columns is initialized in DatasetRegistrar tests
+- _load_data_files returns Dict[str, str] not nested dicts
+- Backend initialization must handle errors properly
+- Use appropriate timeouts for performance tests (10s default)
 
 ## Useful Files for Context
 - `docs/03_Database_Architecture.md`: Authoritative backend selection explanation
@@ -200,3 +227,4 @@ All code, documentation, and communication must be in English.
 - `ISSUES.md`: Documented bugs and limitations
 - `test_progress.md`: Testing status and findings
 - `pyproject.toml`: Dependencies and project metadata
+- `scripts/check_test_imports.py`: Pre-commit hook for test imports

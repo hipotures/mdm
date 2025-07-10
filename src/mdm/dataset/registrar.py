@@ -1030,12 +1030,11 @@ class DatasetRegistrar:
         if 'train' in table_mappings:
             table_name = table_mappings['train']
             
-            # Read sample data for profiling
-            backend = BackendFactory.create(engine.url.drivername, {})
-            df = backend.read_table_to_dataframe(table_name, engine, limit=10000)
-            
             # Create minimal profile for type detection
             try:
+                # Read sample data for profiling
+                backend = BackendFactory.create(engine.url.drivername, {})
+                df = backend.read_table_to_dataframe(table_name, engine, limit=10000)
                 # Don't create a new progress if we already have one active
                 logger.info("Analyzing column types with ydata-profiling...")
                 

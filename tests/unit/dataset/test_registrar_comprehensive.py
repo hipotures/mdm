@@ -169,7 +169,7 @@ class TestDatasetRegistrarComprehensive:
         }
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.database_exists.return_value = True
             mock_backend.create_database.return_value = None
@@ -206,7 +206,7 @@ class TestDatasetRegistrarComprehensive:
         files = {'data': data_file}
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.database_exists.return_value = True
             mock_backend.create_database.return_value = None
@@ -289,7 +289,7 @@ class TestDatasetRegistrarComprehensive:
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         tables = {'train': 'train_table', 'test': 'test_table'}
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.get_engine.return_value = Mock()
             mock_backend.close_connections.return_value = None
@@ -397,7 +397,7 @@ class TestDatasetRegistrarComprehensive:
         
         # Act
         with patch('mdm.dataset.registrar.Progress'):
-            with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
                 mock_backend = Mock()
                 mock_backend.get_engine.return_value = Mock(url=Mock(drivername='sqlite'))
                 mock_backend.close_connections.return_value = None
@@ -436,7 +436,7 @@ class TestDatasetRegistrarComprehensive:
         
         sample_df = pd.DataFrame(column_info['train']['sample_data'])
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.read_table_to_dataframe.return_value = sample_df
             mock_factory.create.return_value = mock_backend
@@ -465,7 +465,7 @@ class TestDatasetRegistrarComprehensive:
             assert result['id'] == ColumnType.ID  # Should be ID since it's in id_columns
             assert result['numeric'] == ColumnType.NUMERIC
             assert result['category'] == ColumnType.CATEGORICAL
-            assert result['text'] == ColumnType.TEXT
+            assert result['text'] == ColumnType.CATEGORICAL  # All values are the same
 
     def test_simple_column_type_detection(self, registrar):
         """Test simple column type detection fallback."""
@@ -510,7 +510,7 @@ class TestDatasetRegistrarComprehensive:
         # Assert
         assert result['int_col'] == ColumnType.NUMERIC
         assert result['float_col'] == ColumnType.NUMERIC
-        assert result['str_col'] == ColumnType.CATEGORICAL  # Short strings with low average length are categorical
+        assert result['str_col'] == ColumnType.TEXT  # High unique ratio (1.0 > 0.8)
         assert result['bool_col'] == ColumnType.NUMERIC  # Stored as integer
         assert result['date_col'] == ColumnType.DATETIME  # Should detect datetime from dtype
         assert result['mixed_col'] == ColumnType.CATEGORICAL  # Short mixed strings
@@ -529,7 +529,7 @@ class TestDatasetRegistrarComprehensive:
         dataset_dir.mkdir(parents=True)
         (dataset_dir / "test_file.txt").write_text("test content")
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.close_connections.return_value = None
             
@@ -569,7 +569,7 @@ class TestDatasetRegistrarComprehensive:
         files = {'data': Path('/nonexistent/bad.csv')}
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.database_exists.return_value = True
             mock_backend.create_database.return_value = None
@@ -652,7 +652,7 @@ class TestDatasetRegistrarComprehensive:
         files = {'data': large_file}
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.storage.factory.BackendFactory') as mock_factory:
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
             mock_backend = Mock()
             mock_backend.database_exists.return_value = True
             mock_backend.create_database.return_value = None
