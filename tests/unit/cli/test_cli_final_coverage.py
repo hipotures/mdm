@@ -68,7 +68,7 @@ class TestMainCLIFinal:
         # Verify logger was configured properly
         assert mock_logger.remove.called
         assert mock_logger.add.called
-        # Should have file, console, and SQLAlchemy handlers
+        # Should have file and console handlers, plus SQLAlchemy since echo=True and level=DEBUG
         assert mock_logger.add.call_count >= 3
         
     @patch('mdm.config.get_config_manager')

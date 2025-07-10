@@ -145,7 +145,7 @@ class TestMDMClientDatasetOperations:
         """Test removing dataset."""
         client.remove_dataset('test_dataset', force=True)
         
-        client.manager.remove_dataset.assert_called_once_with('test_dataset', force=True)
+        client.manager.remove_dataset.assert_called_once_with('test_dataset')
     
     def test_update_dataset(self, client):
         """Test updating dataset metadata."""

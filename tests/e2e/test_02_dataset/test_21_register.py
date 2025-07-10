@@ -61,22 +61,76 @@ class TestDatasetRegistration:
         assert "target" in result.stdout.lower()
     
     @pytest.mark.mdm_id("2.1.1.4")
-    @pytest.mark.skip(reason="Parquet support to be tested separately")
-    def test_register_parquet_file(self):
+    def test_register_parquet_file(self, clean_mdm_env, run_mdm):
         """2.1.1.4: Register Parquet file"""
-        pass
+        # Create Parquet file
+        data_dir = clean_mdm_env / "test_data"
+        data_dir.mkdir()
+        
+        df = pd.DataFrame({
+            'id': range(1, 101),
+            'feature': range(100),
+            'value': range(100, 200)
+        })
+        parquet_file = data_dir / "data.parquet"
+        df.to_parquet(parquet_file)
+        
+        result = run_mdm([
+            "dataset", "register", "test_parquet", str(parquet_file),
+            "--target", "value"
+        ])
+        
+        assert result.returncode == 0
+        assert "registered successfully" in result.stdout
+        assert "Total rows in data table: 100" in result.stdout
     
     @pytest.mark.mdm_id("2.1.1.5")
-    @pytest.mark.skip(reason="JSON support to be tested separately")
-    def test_register_json_file(self):
+    def test_register_json_file(self, clean_mdm_env, run_mdm):
         """2.1.1.5: Register JSON file"""
-        pass
+        # Create JSON file
+        data_dir = clean_mdm_env / "test_data"
+        data_dir.mkdir()
+        
+        df = pd.DataFrame({
+            'id': range(1, 101),
+            'feature': range(100),
+            'value': range(100, 200)
+        })
+        json_file = data_dir / "data.json"
+        df.to_json(json_file, orient='records')
+        
+        result = run_mdm([
+            "dataset", "register", "test_json", str(json_file),
+            "--target", "value"
+        ])
+        
+        assert result.returncode == 0
+        assert "registered successfully" in result.stdout
+        assert "Total rows in data table: 100" in result.stdout
     
     @pytest.mark.mdm_id("2.1.1.6")
-    @pytest.mark.skip(reason="Compressed file support needs verification")
-    def test_register_compressed_csv(self):
+    def test_register_compressed_csv(self, clean_mdm_env, run_mdm):
         """2.1.1.6: Register compressed CSV (.csv.gz)"""
-        pass
+        # Create compressed CSV file
+        data_dir = clean_mdm_env / "test_data"
+        data_dir.mkdir()
+        
+        df = pd.DataFrame({
+            'id': range(1, 101),
+            'feature': range(100),
+            'value': range(100, 200)
+        })
+        gz_file = data_dir / "data.csv.gz"
+        df.to_csv(gz_file, index=False, compression='gzip')
+        
+        result = run_mdm([
+            "dataset", "register", "test_compressed", str(gz_file),
+            "--target", "value"
+        ])
+        
+        assert result.returncode == 0
+        assert "registered successfully" in result.stdout
+        assert "Total rows in data table: 100" in result.stdout
     
     @pytest.mark.mdm_id("2.1.2.1")
     def test_auto_detect_delimiter(self, clean_mdm_env, run_mdm):

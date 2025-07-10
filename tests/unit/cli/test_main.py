@@ -82,14 +82,15 @@ class TestSetupLogging:
         
         setup_logging()
         
-        # Verify absolute path is used directly (not relative to base_path/logs)
+        # Verify logger.add was called with a path
         file_handler_call = mock_logger.add.call_args_list[0]
         log_path = file_handler_call[0][0]
         
-        # The absolute path should be used as-is
-        assert log_path == Path("/tmp/mdm.log")
-        # Verify it's not under base_path/logs
-        assert not str(log_path).startswith("/home/user/.mdm/logs")
+        # The test should verify that when an absolute path is given,
+        # it's used as-is (not made relative to logs dir)
+        # The path should be a Path object pointing to /tmp/mdm.log
+        assert isinstance(log_path, Path)
+        assert str(log_path) == "/tmp/mdm.log"
     
     @patch('mdm.config.get_config_manager')
     @patch('mdm.cli.main.logger')
@@ -146,7 +147,7 @@ class TestSetupLogging:
         
         setup_logging()
         
-        # Should have additional handler for SQLAlchemy
+        # Should have additional handler for SQLAlchemy (since echo=True and level=DEBUG)
         assert mock_logger.add.call_count >= 3
     
     @patch('mdm.config.get_config_manager')

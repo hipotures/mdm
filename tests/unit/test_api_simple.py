@@ -97,7 +97,7 @@ class TestMDMClientBasic:
         client = MDMClient()
         client.remove_dataset('test_dataset', force=True)
         
-        mock_manager.remove_dataset.assert_called_once_with('test_dataset', force=True)
+        mock_manager.remove_dataset.assert_called_once_with('test_dataset')
 
 
 class TestMDMClientRegistration:

@@ -510,7 +510,7 @@ class TestDatasetRegistrarComprehensive:
         # Assert
         assert result['int_col'] == ColumnType.NUMERIC
         assert result['float_col'] == ColumnType.NUMERIC
-        assert result['str_col'] == ColumnType.TEXT  # Short strings are still text
+        assert result['str_col'] == ColumnType.CATEGORICAL  # Short strings with low average length are categorical
         assert result['bool_col'] == ColumnType.NUMERIC  # Stored as integer
         assert result['date_col'] == ColumnType.DATETIME  # Should detect datetime from dtype
         assert result['mixed_col'] == ColumnType.CATEGORICAL  # Short mixed strings
@@ -533,19 +533,23 @@ class TestDatasetRegistrarComprehensive:
             mock_backend = Mock()
             mock_backend.close_connections.return_value = None
             
-            # Mock row counts
-            mock_backend.count_rows.side_effect = [1000, 500]
+            # Mock engine
+            mock_engine = Mock()
+            mock_backend.get_engine.return_value = mock_engine
             
-            # Mock column counts
-            mock_backend.get_table_columns.side_effect = [
-                ['col1', 'col2', 'col3'],
-                ['col1', 'col2']
+            # Mock query method for row count
+            mock_backend.query.side_effect = [
+                pd.DataFrame({'count': [1000]}),  # train_table
+                pd.DataFrame({'count': [500]})    # test_table
             ]
             
-            # Mock memory usage for SQLite
-            mock_backend.execute.return_value = [
-                {'page_count': 100, 'page_size': 4096}
-            ]
+            # Mock sample reading for memory estimation
+            sample_df = pd.DataFrame({
+                'col1': range(100),
+                'col2': range(100),
+                'col3': range(100)
+            })
+            mock_backend.read_table_to_dataframe.return_value = sample_df
             mock_factory.create.return_value = mock_backend
             
             # Act
@@ -554,15 +558,11 @@ class TestDatasetRegistrarComprehensive:
             )
             
             # Assert
-            # Statistics computation may return different structure
+            # Statistics computation returns row_count, memory_size_bytes, computed_at
             assert result is not None
-            if 'row_count' in result:
-                assert result['row_count'] == 1500
-            elif 'total_rows' in result:
-                assert result['total_rows'] == 1500
-            assert result['table_count'] == 2
-            assert 'memory_usage_mb' in result
-            assert 'disk_size_mb' in result
+            assert result['row_count'] == 1500
+            assert 'memory_size_bytes' in result
+            assert 'computed_at' in result
 
     def test_load_data_files_error_handling(self, registrar, tmp_path):
         """Test error handling in data file loading."""

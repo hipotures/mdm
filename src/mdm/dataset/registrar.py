@@ -1244,6 +1244,7 @@ class DatasetRegistrar:
         """
         from rich.progress import Progress, SpinnerColumn, TextColumn
         
+        backend = None
         try:
             logger.info(f"Computing initial statistics for dataset '{dataset_name}'")
             
@@ -1368,5 +1369,5 @@ class DatasetRegistrar:
             return None
         
         finally:
-            if hasattr(backend, 'close_connections'):
+            if backend and hasattr(backend, 'close_connections'):
                 backend.close_connections()

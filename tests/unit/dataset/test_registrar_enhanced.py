@@ -106,6 +106,9 @@ class TestDatasetRegistrarEnhanced:
         # Mock all the registration steps
         mock_manager.dataset_exists.return_value = False
         
+        # Initialize detected_datetime_columns
+        registrar._detected_datetime_columns = []
+        
         with patch.multiple(
             'mdm.dataset.registrar.DatasetRegistrar',
             _validate_path=Mock(return_value=data_path),
@@ -143,7 +146,7 @@ class TestDatasetRegistrarEnhanced:
                 _auto_detect=Mock(return_value={}),
                 _discover_files=Mock(return_value={'data': data_path}),
                 _create_database=Mock(return_value={'backend': 'sqlite'}),
-                _load_data=Mock(return_value={}),
+                _load_data_files=Mock(return_value={}),
                 _infer_metadata=Mock(return_value={}),
                 _generate_features=Mock(),
                 _compute_statistics=Mock()
@@ -557,6 +560,9 @@ class TestDatasetRegistrarEnhanced:
         data_path = tmp_path / "data.csv"
         data_path.write_text("id,value\n1,100\n")
         
+        # Initialize detected_datetime_columns
+        registrar._detected_datetime_columns = []
+        
         mock_manager.dataset_exists.return_value = True
         
         with patch('mdm.dataset.operations.RemoveOperation') as mock_remove:
@@ -663,6 +669,9 @@ class TestDatasetRegistrarEnhanced:
         """Test that appropriate log messages are generated."""
         data_path = tmp_path / "data.csv"
         data_path.write_text("id,value\n1,100\n")
+        
+        # Initialize detected_datetime_columns
+        registrar._detected_datetime_columns = []
         
         with patch('mdm.dataset.registrar.logger') as mock_logger:
             with patch.multiple(

@@ -259,7 +259,7 @@ class TestDatasetRegistrar:
         result = registrar._create_database(dataset_name)
         
         # Assert
-        assert result['backend'] == 'sqlite'
+        assert result['backend'] == registrar.config.database.default_backend
         assert 'path' in result
         assert dataset_name in result['path']
 

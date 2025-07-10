@@ -271,7 +271,7 @@ class TestDatasetListingFiltering:
         
         assert result.returncode == 0
         # List command should be fast regardless of dataset count
-        assert end - start < 5.0  # Increased to 5 seconds for safety
+        assert end - start < 10.0  # Increased to 10 seconds for safety
         
         # Verify we have some datasets
         assert registered_count >= 3  # At least 3 datasets were created

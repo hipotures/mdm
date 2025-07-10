@@ -804,7 +804,7 @@ class TestDatasetRegistrar90Coverage:
             )
             
             # Mock table info
-            def get_table_info(table):
+            def get_table_info(table, engine):
                 sample = train_sample if table == 'train' else test_sample
                 return {
                     'row_count': 1000 if table == 'train' else 500,
@@ -875,6 +875,14 @@ class TestDatasetRegistrar90Coverage:
                     'partial_id': 'INTEGER',
                     'null_id': 'INTEGER'
                 },
+                'sample_data': {
+                    'id': list(range(1000)),
+                    'user_id': list(range(100, 1100)),
+                    'idx': list(range(1000)),
+                    'category_id': ['cat_' + str(i % 10) for i in range(1000)],  # Low uniqueness
+                    'partial_id': list(range(500)) + [None] * 500,  # Has nulls and not unique
+                    'null_id': [i if i % 2 == 0 else None for i in range(1000)]  # Has nulls
+                },
                 'column_details': {
                     'id': {'type': ColumnType.ID, 'unique_count': 1000, 'null_count': 0, 'total_count': 1000},
                     'user_id': {'type': ColumnType.NUMERIC, 'unique_count': 1000, 'null_count': 0, 'total_count': 1000},
@@ -890,6 +898,12 @@ class TestDatasetRegistrar90Coverage:
                     'user_id': 'INTEGER',
                     'idx': 'INTEGER', 
                     'new_col': 'INTEGER'
+                },
+                'sample_data': {
+                    'id': list(range(500)),
+                    'user_id': list(range(100, 600)),
+                    'idx': list(range(500)),
+                    'new_col': list(range(500))
                 },
                 'column_details': {
                     'id': {'type': ColumnType.ID, 'unique_count': 500, 'null_count': 0, 'total_count': 500},
@@ -919,6 +933,9 @@ class TestDatasetRegistrar90Coverage:
         column_info = {
             'train': {
                 'columns': {'target': 'INTEGER'},
+                'sample_data': {
+                    'target': [0, 1] * 500  # Binary values
+                },
                 'column_details': {
                     'target': {
                         'type': ColumnType.NUMERIC,
@@ -936,6 +953,9 @@ class TestDatasetRegistrar90Coverage:
         column_info = {
             'train': {
                 'columns': {'target': 'TEXT'},
+                'sample_data': {
+                    'target': ['A', 'B', 'C', 'D', 'E'] * 200  # 5 classes
+                },
                 'column_details': {
                     'target': {
                         'type': ColumnType.CATEGORICAL,
@@ -951,6 +971,9 @@ class TestDatasetRegistrar90Coverage:
         column_info = {
             'train': {
                 'columns': {'target': 'REAL'},
+                'sample_data': {
+                    'target': [i * 0.1 for i in range(1000)]  # Float values
+                },
                 'column_details': {
                     'target': {
                         'type': ColumnType.NUMERIC,
@@ -968,6 +991,10 @@ class TestDatasetRegistrar90Coverage:
         column_info = {
             'train': {
                 'columns': {'target': 'REAL', 'date': 'TEXT'},
+                'sample_data': {
+                    'target': [i * 0.1 for i in range(1000)],
+                    'date': pd.date_range('2024-01-01', periods=1000).strftime('%Y-%m-%d').tolist()
+                },
                 'column_details': {
                     'target': {
                         'type': ColumnType.NUMERIC,
@@ -988,6 +1015,9 @@ class TestDatasetRegistrar90Coverage:
         column_info = {
             'test': {
                 'columns': {'target': 'REAL'},
+                'sample_data': {
+                    'target': [1.0, 2.0, 3.0]
+                },
                 'column_details': {
                     'target': {'type': ColumnType.NUMERIC}
                 }
@@ -995,7 +1025,7 @@ class TestDatasetRegistrar90Coverage:
         }
         assert registrar._infer_problem_type(column_info, 'target') is None
 
-    def test_generate_features(self, registrar, mock_feature_generator):
+    def test_generate_features(self, registrar, mock_feature_generator, tmp_path):
         """Test feature generation."""
         normalized_name = "test_dataset"
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
@@ -1069,12 +1099,11 @@ class TestDatasetRegistrar90Coverage:
                             normalized_name, db_info, table_mappings
                         )
                         
-                        # Method returns None if computation fails
-                        if result is not None:
-                            assert result['row_count'] == 1500
-                        assert result['total_columns'] == 9
+                        # Method returns statistics dict
+                        assert result is not None
+                        assert result['row_count'] == 1500
                         assert 'memory_size_bytes' in result
-                        assert 'tables' in result
+                        assert 'computed_at' in result
 
     def test_compute_initial_statistics_with_error(self, registrar):
         """Test statistics computation error handling."""
@@ -1148,19 +1177,24 @@ class TestDatasetRegistrar90Coverage:
         mock_report.to_json.return_value = "invalid json"
         
         with patch('mdm.dataset.registrar.ProfileReport', return_value=mock_report):
-            with patch('mdm.dataset.registrar.logger') as mock_logger:
-                task = Mock()
-                # Call with all required parameters
-                column_info = {'test_table': {'columns': {'id': 'INTEGER', 'value': 'INTEGER'}}}
-                table_mappings = {'train': 'test_table'}
-                mock_engine = Mock()
-                mock_engine.url.drivername = 'sqlite'
-                registrar._detect_column_types_with_profiling(
-                    column_info, table_mappings, mock_engine, None, []
-                )
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.read_table_to_dataframe.return_value = df
+                mock_factory.create.return_value = mock_backend
                 
-                # Should fall back to simple detection
-                mock_logger.warning.assert_called()
+                with patch('mdm.dataset.registrar.logger') as mock_logger:
+                    task = Mock()
+                    # Call with all required parameters
+                    column_info = {'test_table': {'columns': {'id': 'INTEGER', 'value': 'INTEGER'}}}
+                    table_mappings = {'train': 'test_table'}
+                    mock_engine = Mock()
+                    mock_engine.url.drivername = 'sqlite'
+                    registrar._detect_column_types_with_profiling(
+                        column_info, table_mappings, mock_engine, None, []
+                    )
+                    
+                    # Should fall back to simple detection
+                    mock_logger.warning.assert_called()
 
     def test_detect_column_types_profiling_unsupported_types(self, registrar):
         """Test handling of unsupported profiling types."""
@@ -1180,18 +1214,23 @@ class TestDatasetRegistrar90Coverage:
         })
         
         with patch('mdm.dataset.registrar.ProfileReport', return_value=mock_report):
-            # Call with all required parameters
-            column_info = {'test_table': {'columns': {
-                'unsupported': 'TEXT',
-                'constant': 'TEXT', 
-                'rejected': 'TEXT'
-            }}}
-            table_mappings = {'train': 'test_table'}
-            mock_engine = Mock()
-            mock_engine.url.drivername = 'sqlite'
-            result = registrar._detect_column_types_with_profiling(
-                column_info, table_mappings, mock_engine, None, []
-            )
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.read_table_to_dataframe.return_value = df
+                mock_factory.create.return_value = mock_backend
+                
+                # Call with all required parameters
+                column_info = {'test_table': {'columns': {
+                    'unsupported': 'TEXT',
+                    'constant': 'TEXT', 
+                    'rejected': 'TEXT'
+                }}}
+                table_mappings = {'train': 'test_table'}
+                mock_engine = Mock()
+                mock_engine.url.drivername = 'sqlite'
+                result = registrar._detect_column_types_with_profiling(
+                    column_info, table_mappings, mock_engine, None, []
+                )
             
             # Check that unsupported types are handled
             # Result is a dict of column types

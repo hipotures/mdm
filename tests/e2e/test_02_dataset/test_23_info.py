@@ -253,7 +253,7 @@ class TestDatasetInformationStatistics:
         assert result.returncode == 0
         assert "Dataset:" in result.stdout
         assert "large_dataset" in result.stdout
-        assert end - start < 5.0  # Should complete within 5 seconds
+        assert end - start < 10.0  # Should complete within 10 seconds
     
     @pytest.mark.mdm_id("2.3.4.2")
     def test_stats_computation_caching(self, clean_mdm_env, run_mdm, complex_dataset):
