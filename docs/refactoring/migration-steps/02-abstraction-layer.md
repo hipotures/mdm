@@ -4,17 +4,27 @@
 
 Create interfaces and adapter classes to enable parallel implementation without modifying existing code. This layer provides the foundation for gradual migration.
 
+> ⚠️ **CRITICAL PREREQUISITE**: You MUST complete [Step 1.5: API Analysis](01.5-api-analysis.md) before starting this step. The interfaces must be based on ACTUAL usage, not idealistic design.
+
 ## Duration
 
-2 weeks (Weeks 3-4)
+2 weeks (Weeks 4-5)
+
+## Prerequisites
+
+- ✅ Step 1.5 (API Analysis) MUST be complete
+- ✅ Have complete API usage reports for all components
+- ✅ Generated interfaces from actual usage analysis
+- ✅ Compatibility test suite ready
 
 ## Objectives
 
-1. Define Protocol interfaces for all major components
+1. Define Protocol interfaces based on **actual API usage analysis**
 2. Create adapter classes wrapping existing implementations
-3. Introduce dependency injection points
-4. Update type hints throughout the codebase
-5. Validate adapters match original behavior
+3. Ensure **100% method coverage** from usage analysis
+4. Introduce dependency injection points
+5. Update type hints throughout the codebase
+6. Validate adapters match original behavior
 
 ## Design Principles
 
@@ -31,6 +41,10 @@ Create interfaces and adapter classes to enable parallel implementation without 
 
 ##### 1.1 Create Storage Protocol
 ```python
+# ⚠️ WARNING: This is an INCOMPLETE example!
+# You MUST use the interface generated from Step 1.5 API Analysis
+# See: generated_storage_interface.py from the analysis
+
 # Create: src/mdm/interfaces/storage.py
 from typing import Protocol, Any, Dict, List, Optional, runtime_checkable
 from sqlalchemy.engine import Engine
@@ -38,44 +52,37 @@ import pandas as pd
 
 @runtime_checkable
 class IStorageBackend(Protocol):
-    """Storage backend interface"""
+    """Storage backend interface - MUST include ALL methods from usage analysis"""
     
-    def get_engine(self) -> Engine:
-        """Get SQLAlchemy engine"""
+    # ✅ Methods found in usage analysis (partial list):
+    def get_engine(self, database_path: str) -> Engine:
+        """Get SQLAlchemy engine - Used 11 times"""
         ...
     
-    def create_dataset(self, dataset_name: str, config: Dict[str, Any]) -> None:
-        """Create a new dataset"""
+    def create_table_from_dataframe(self, df: pd.DataFrame, table_name: str, 
+                                   engine: Engine, if_exists: str = "fail") -> None:
+        """Create table from DataFrame - Used 10 times"""
         ...
     
-    def dataset_exists(self, dataset_name: str) -> bool:
-        """Check if dataset exists"""
+    def query(self, query: str) -> pd.DataFrame:
+        """Execute SQL query - Used 9 times"""
         ...
     
-    def drop_dataset(self, dataset_name: str) -> None:
-        """Remove dataset"""
+    def read_table_to_dataframe(self, table_name: str, engine: Engine, 
+                               limit: Optional[int] = None) -> pd.DataFrame:
+        """Read table to DataFrame - Used 7 times"""
         ...
     
-    def load_data(self, dataset_name: str, table_name: str = "data") -> pd.DataFrame:
-        """Load dataset data"""
+    def close_connections(self) -> None:
+        """Close all connections - Used 7 times"""
         ...
     
-    def save_data(self, dataset_name: str, data: pd.DataFrame, 
-                  table_name: str = "data", if_exists: str = "replace") -> None:
-        """Save data to dataset"""
-        ...
+    # ⚠️ CRITICAL: Add ALL 14 methods found in usage analysis!
+    # Missing methods WILL cause runtime failures
     
-    def get_metadata(self, dataset_name: str) -> Dict[str, Any]:
-        """Get dataset metadata"""
-        ...
-    
-    def update_metadata(self, dataset_name: str, metadata: Dict[str, Any]) -> None:
-        """Update dataset metadata"""
-        ...
-    
-    def close(self) -> None:
-        """Close connections and cleanup"""
-        ...
+    # ❌ These methods were NOT found in usage analysis:
+    # def load_data() - This was an idealistic design, not actual usage
+    # def save_data() - This was wishful thinking, not real usage
 
 
 @runtime_checkable

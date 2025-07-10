@@ -431,7 +431,9 @@ def isolated_mdm_home(tmp_path, monkeypatch):
 
 ## Next Steps
 
-Once all tests are green and stable, proceed to [02-abstraction-layer.md](02-abstraction-layer.md).
+Once all tests are green and stable, proceed to [01.5-api-analysis.md](01.5-api-analysis.md).
+
+> ⚠️ **CRITICAL**: Do NOT skip Step 1.5! API Analysis is mandatory before creating any abstraction layers. Skipping this step resulted in 79% of methods being missing from the refactored implementation.
 
 ## Notes
 
