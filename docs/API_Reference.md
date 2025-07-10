@@ -1,671 +1,666 @@
 # MDM API Reference
 
+## Overview
+
+The MDM (ML Data Manager) API provides a comprehensive interface for managing machine learning datasets. This document covers the new architecture introduced in the 2025 refactoring.
+
 ## Table of Contents
-1. [MDMClient](#mdmclient)
-2. [Dataset Operations](#dataset-operations)
-3. [Data Access](#data-access)
-4. [Export/Import](#exportimport)
-5. [Search and Filter](#search-and-filter)
-6. [Batch Operations](#batch-operations)
-7. [Exceptions](#exceptions)
-8. [Models](#models)
 
-## MDMClient
+1. [Core Interfaces](#core-interfaces)
+2. [Storage API](#storage-api)
+3. [Dataset API](#dataset-api)
+4. [Feature Engineering API](#feature-engineering-api)
+5. [Configuration API](#configuration-api)
+6. [Performance API](#performance-api)
+7. [Migration API](#migration-api)
 
-The main entry point for programmatic access to MDM.
+## Core Interfaces
 
-### Constructor
+### IStorageBackend
+
+The foundation interface for all storage backends.
 
 ```python
-from mdm import MDMClient
+from mdm.interfaces import IStorageBackend
 
-client = MDMClient(config: Optional[MDMConfig] = None)
+class IStorageBackend(ABC):
+    """Abstract interface for storage backends."""
+    
+    @abstractmethod
+    def get_engine(self, database_path: str) -> Engine:
+        """Get SQLAlchemy engine for database operations."""
+        pass
+    
+    @abstractmethod
+    def initialize_database(self, engine: Engine) -> None:
+        """Initialize database schema."""
+        pass
+    
+    @abstractmethod
+    def create_table_from_dataframe(
+        self, df: pd.DataFrame, table_name: str, 
+        engine: Engine, if_exists: str = "fail"
+    ) -> None:
+        """Create table from pandas DataFrame."""
+        pass
 ```
 
-**Parameters:**
-- `config` (Optional[MDMConfig]): Custom configuration. If None, uses default configuration from `~/.mdm/mdm.yaml`
+### IDatasetManager
 
-**Example:**
+Interface for dataset management operations.
+
 ```python
-# Use default configuration
-client = MDMClient()
+from mdm.interfaces import IDatasetManager
 
-# Use custom configuration
-from mdm.config import MDMConfig
-custom_config = MDMConfig(
-    database={"default_backend": "postgresql"},
-    performance={"batch_size": 50000}
-)
-client = MDMClient(config=custom_config)
+class IDatasetManager(ABC):
+    """Abstract interface for dataset management."""
+    
+    @abstractmethod
+    def register_dataset(self, dataset_info: DatasetInfo) -> None:
+        """Register a new dataset."""
+        pass
+    
+    @abstractmethod
+    def get_dataset(self, name: str) -> Optional[DatasetInfo]:
+        """Retrieve dataset information."""
+        pass
+    
+    @abstractmethod
+    def list_datasets(self) -> List[DatasetInfo]:
+        """List all registered datasets."""
+        pass
 ```
 
-## Dataset Operations
+### IFeatureGenerator
 
-### register_dataset
-
-Register a new dataset in MDM.
+Interface for feature engineering operations.
 
 ```python
-def register_dataset(
-    self,
-    name: str,
-    dataset_path: Union[str, Path],
-    target_column: Optional[str] = None,
-    problem_type: Optional[str] = None,
-    id_columns: Optional[List[str]] = None,
-    description: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    source: Optional[str] = None,
-    force: bool = False,
-    generate_features: bool = True
-) -> DatasetInfo
+from mdm.interfaces import IFeatureGenerator
+
+class IFeatureGenerator(ABC):
+    """Abstract interface for feature generation."""
+    
+    @abstractmethod
+    def generate_features(
+        self, df: pd.DataFrame, 
+        column_types: Dict[str, str]
+    ) -> pd.DataFrame:
+        """Generate features from DataFrame."""
+        pass
+    
+    @abstractmethod
+    def get_available_transformers(self) -> List[str]:
+        """Get list of available feature transformers."""
+        pass
 ```
 
-**Parameters:**
-- `name` (str): Unique dataset name
-- `dataset_path` (Union[str, Path]): Path to dataset file or directory
-- `target_column` (Optional[str]): Name of target column for ML
-- `problem_type` (Optional[str]): One of: 'binary_classification', 'multiclass_classification', 'regression', 'time_series', 'clustering'
-- `id_columns` (Optional[List[str]]): List of ID columns
-- `description` (Optional[str]): Dataset description
-- `tags` (Optional[List[str]]): Tags for categorization
-- `source` (Optional[str]): Data source information
-- `force` (bool): Overwrite if dataset exists
-- `generate_features` (bool): Generate engineered features
+## Storage API
 
-**Returns:**
-- `DatasetInfo`: Dataset information object
+### Getting a Storage Backend
 
-**Raises:**
-- `DatasetError`: If registration fails
-- `ValueError`: If parameters are invalid
-
-**Example:**
 ```python
-# Basic registration
-info = client.register_dataset(
-    name="sales_2024",
-    dataset_path="/data/sales.csv"
-)
+from mdm.adapters import get_storage_backend
 
-# Full registration with metadata
-info = client.register_dataset(
-    name="customer_churn",
-    dataset_path="/data/customers/",
-    target_column="churned",
-    problem_type="binary_classification",
-    id_columns=["customer_id"],
-    description="Customer churn prediction dataset",
-    tags=["classification", "customer", "2024"],
-    source="CRM System Export",
-    generate_features=True
-)
+# Get storage backend based on feature flags
+backend = get_storage_backend("sqlite", config={
+    "pragmas": {"journal_mode": "WAL"},
+    "timeout": 30
+})
+
+# Use the backend
+engine = backend.get_engine("/path/to/database.db")
 ```
 
-### get_dataset
+### Available Backends
 
-Retrieve dataset information.
+1. **SQLite** - Lightweight, file-based storage
+2. **DuckDB** - Columnar storage for analytics
+3. **PostgreSQL** - Enterprise-grade relational database
+
+### Storage Configuration
 
 ```python
-def get_dataset(self, name: str) -> Optional[DatasetInfo]
+# SQLite configuration
+sqlite_config = {
+    "pragmas": {
+        "journal_mode": "WAL",
+        "synchronous": "NORMAL",
+        "cache_size": -64000,
+        "temp_store": "MEMORY"
+    },
+    "timeout": 30,
+    "enable_performance_optimizations": True
+}
+
+# DuckDB configuration
+duckdb_config = {
+    "pragmas": {
+        "memory_limit": "4GB",
+        "threads": 4
+    },
+    "extensions": ["parquet", "json"]
+}
+
+# PostgreSQL configuration
+postgresql_config = {
+    "host": "localhost",
+    "port": 5432,
+    "user": "mdm_user",
+    "password": "secure_password",
+    "database": "mdm_db",
+    "pool_size": 5,
+    "max_overflow": 10
+}
 ```
 
-**Parameters:**
-- `name` (str): Dataset name
+## Dataset API
 
-**Returns:**
-- `Optional[DatasetInfo]`: Dataset information or None if not found
-
-**Example:**
-```python
-info = client.get_dataset("sales_2024")
-if info:
-    print(f"Dataset: {info.name}")
-    print(f"Rows: {info.metadata.get('row_count', 'Unknown')}")
-    print(f"Target: {info.target_column}")
-```
-
-### list_datasets
-
-List all registered datasets.
+### Dataset Registration
 
 ```python
-def list_datasets(
-    self,
-    limit: Optional[int] = None,
-    offset: int = 0,
-    sort_by: str = "name",
-    tags: Optional[List[str]] = None,
-    problem_type: Optional[str] = None
-) -> List[DatasetInfo]
-```
+from mdm.adapters import get_dataset_registrar
+from mdm.models import DatasetInfo
 
-**Parameters:**
-- `limit` (Optional[int]): Maximum number of datasets to return
-- `offset` (int): Number of datasets to skip
-- `sort_by` (str): Sort field ('name', 'created_at', 'size')
-- `tags` (Optional[List[str]]): Filter by tags
-- `problem_type` (Optional[str]): Filter by problem type
+# Get registrar
+registrar = get_dataset_registrar()
 
-**Returns:**
-- `List[DatasetInfo]`: List of dataset information objects
-
-**Example:**
-```python
-# List all datasets
-datasets = client.list_datasets()
-
-# List with filters
-ml_datasets = client.list_datasets(
-    limit=10,
-    sort_by="created_at",
-    tags=["ml", "production"],
+# Register dataset
+dataset_info = registrar.register_dataset(
+    name="iris_dataset",
+    path="/data/iris.csv",
+    target_column="species",
     problem_type="classification"
 )
 ```
 
-### update_dataset
-
-Update dataset metadata.
+### Dataset Management
 
 ```python
-def update_dataset(
-    self,
-    name: str,
-    description: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    target_column: Optional[str] = None,
-    problem_type: Optional[str] = None,
-    id_columns: Optional[List[str]] = None
-) -> DatasetInfo
+from mdm.adapters import get_dataset_manager
+
+# Get manager
+manager = get_dataset_manager()
+
+# List datasets
+datasets = manager.list_datasets()
+
+# Get specific dataset
+dataset = manager.get_dataset("iris_dataset")
+
+# Update dataset
+manager.update_dataset("iris_dataset", {
+    "description": "Classic Iris flower dataset",
+    "tags": ["classification", "flowers", "example"]
+})
+
+# Search datasets
+results = manager.search_datasets("iris")
+results_by_tag = manager.search_datasets_by_tag("classification")
+
+# Delete dataset
+manager.delete_dataset("iris_dataset", force=True)
 ```
 
-**Parameters:**
-- `name` (str): Dataset name
-- `description` (Optional[str]): New description
-- `tags` (Optional[List[str]]): New tags (replaces existing)
-- `target_column` (Optional[str]): New target column
-- `problem_type` (Optional[str]): New problem type
-- `id_columns` (Optional[List[str]]): New ID columns
+### Dataset Statistics
 
-**Returns:**
-- `DatasetInfo`: Updated dataset information
-
-**Example:**
 ```python
-updated = client.update_dataset(
-    "sales_2024",
-    description="Updated sales data with Q4 included",
-    tags=["sales", "2024", "complete"]
+# Get statistics
+stats = manager.get_statistics("iris_dataset")
+
+# Save new statistics
+from mdm.models import DatasetStatistics
+new_stats = DatasetStatistics(
+    row_count=150,
+    column_count=5,
+    memory_usage_bytes=12000,
+    # ... other fields
+)
+manager.save_statistics("iris_dataset", new_stats)
+```
+
+## Feature Engineering API
+
+### Basic Feature Generation
+
+```python
+from mdm.adapters import get_feature_generator
+
+# Get generator
+generator = get_feature_generator()
+
+# Generate features
+df_with_features = generator.generate_features(
+    df=original_df,
+    column_types={
+        "age": "numeric",
+        "category": "categorical",
+        "text": "text"
+    }
 )
 ```
 
-### remove_dataset
-
-Remove a dataset from MDM.
+### Custom Feature Transformers
 
 ```python
-def remove_dataset(self, name: str, force: bool = False) -> None
+from mdm.interfaces import IFeatureTransformer
+from mdm.core.features import register_transformer
+
+@register_transformer("custom")
+class CustomTransformer(IFeatureTransformer):
+    """Custom feature transformer."""
+    
+    def fit(self, df: pd.DataFrame, columns: List[str]) -> None:
+        """Fit transformer on data."""
+        # Implementation
+        pass
+    
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Transform data."""
+        # Implementation
+        pass
 ```
 
-**Parameters:**
-- `name` (str): Dataset name
-- `force` (bool): Skip confirmation (always True internally)
+### Feature Pipeline
 
-**Raises:**
-- `DatasetError`: If dataset not found or removal fails
-
-**Example:**
 ```python
-# Remove dataset
-client.remove_dataset("old_dataset")
+from mdm.core.features import FeaturePipeline
+
+# Create pipeline
+pipeline = FeaturePipeline()
+
+# Add transformers
+pipeline.add_transformer("numeric", ["age", "salary"])
+pipeline.add_transformer("categorical", ["department", "role"])
+pipeline.add_transformer("text", ["description"])
+
+# Fit and transform
+pipeline.fit(train_df)
+transformed_df = pipeline.transform(test_df)
 ```
 
-## Data Access
+## Configuration API
 
-### load_dataset
-
-Load dataset into memory as pandas DataFrame(s).
+### Configuration Management
 
 ```python
-def load_dataset(
-    self,
-    name: str,
-    tables: Optional[List[str]] = None,
-    columns: Optional[List[str]] = None,
-    sample_size: Optional[int] = None,
-    as_iterator: bool = False,
-    chunk_size: int = 10000
-) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame], Iterator[pd.DataFrame]]
+from mdm.adapters import get_config_manager, get_config
+
+# Get configuration manager
+config_manager = get_config_manager()
+
+# Get current configuration
+config = get_config()
+
+# Update configuration
+config_manager.update_config({
+    "database": {
+        "default_backend": "duckdb"
+    },
+    "performance": {
+        "batch_size": 5000
+    }
+})
+
+# Environment variable override
+# MDM_DATABASE_DEFAULT_BACKEND=postgresql
+# MDM_PERFORMANCE_BATCH_SIZE=10000
 ```
 
-**Parameters:**
-- `name` (str): Dataset name
-- `tables` (Optional[List[str]]): Tables to load (default: ['train', 'test'])
-- `columns` (Optional[List[str]]): Columns to load
-- `sample_size` (Optional[int]): Random sample size
-- `as_iterator` (bool): Return iterator for memory efficiency
-- `chunk_size` (int): Chunk size for iterator
-
-**Returns:**
-- Single DataFrame (if one table)
-- Tuple of DataFrames (if multiple tables)
-- Iterator of DataFrames (if as_iterator=True)
-
-**Example:**
-```python
-# Load full dataset
-train_df, test_df = client.load_dataset("sales_2024")
-
-# Load specific columns
-df = client.load_dataset(
-    "sales_2024",
-    tables=["train"],
-    columns=["date", "amount", "category"]
-)
-
-# Load as iterator for large datasets
-for chunk in client.load_dataset("huge_dataset", as_iterator=True):
-    # Process chunk
-    process_chunk(chunk)
-
-# Load sample
-sample_df = client.load_dataset("sales_2024", sample_size=1000)
-```
-
-### load_dataset_files
-
-Load specific files from a dataset.
+### Configuration Schema
 
 ```python
-def load_dataset_files(
-    self,
-    name: str,
-    sample_size: Optional[int] = None
-) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]
-```
+from mdm.models import MDMConfig
 
-**Parameters:**
-- `name` (str): Dataset name
-- `sample_size` (Optional[int]): Sample size per file
-
-**Returns:**
-- `Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]`: (train_df, test_df)
-
-**Example:**
-```python
-train_df, test_df = client.load_dataset_files("sales_2024")
-if test_df is not None:
-    print(f"Test set size: {len(test_df)}")
-```
-
-### get_dataset_stats
-
-Get detailed statistics for a dataset.
-
-```python
-def get_dataset_stats(self, name: str) -> Dict[str, Any]
-```
-
-**Parameters:**
-- `name` (str): Dataset name
-
-**Returns:**
-- `Dict[str, Any]`: Statistics including row counts, memory usage, column types
-
-**Example:**
-```python
-stats = client.get_dataset_stats("sales_2024")
-print(f"Total rows: {stats['row_count']}")
-print(f"Memory usage: {stats['memory_size_mb']:.2f} MB")
-print(f"Numeric columns: {stats['numeric_columns']}")
-```
-
-## Export/Import
-
-### export_dataset
-
-Export dataset to files.
-
-```python
-def export_dataset(
-    self,
-    name: str,
-    output_dir: str,
-    format: str = "csv",
-    tables: Optional[List[str]] = None,
-    compression: Optional[str] = None
-) -> List[str]
-```
-
-**Parameters:**
-- `name` (str): Dataset name
-- `output_dir` (str): Output directory path
-- `format` (str): Export format ('csv', 'parquet', 'json')
-- `tables` (Optional[List[str]]): Tables to export
-- `compression` (Optional[str]): Compression type ('gzip', 'zip', 'snappy')
-
-**Returns:**
-- `List[str]`: List of exported file paths
-
-**Example:**
-```python
-# Export as CSV
-files = client.export_dataset(
-    "sales_2024",
-    output_dir="/exports/",
-    format="csv"
-)
-
-# Export as compressed Parquet
-files = client.export_dataset(
-    "sales_2024",
-    output_dir="/exports/",
-    format="parquet",
-    compression="snappy"
+config = MDMConfig(
+    database=DatabaseConfig(
+        default_backend="sqlite",
+        sqlite=SQLiteConfig(...),
+        duckdb=DuckDBConfig(...),
+        postgresql=PostgreSQLConfig(...)
+    ),
+    paths=PathsConfig(
+        base_path="~/.mdm",
+        datasets_path="datasets",
+        configs_path="config/datasets"
+    ),
+    logging=LoggingConfig(
+        level="INFO",
+        file=None,
+        format="..."
+    ),
+    performance=PerformanceConfig(
+        batch_size=10000,
+        max_workers=4,
+        enable_profiling=False
+    )
 )
 ```
 
-## Search and Filter
+## Performance API
 
-### search_datasets
-
-Search datasets by name or metadata.
+### Query Optimization
 
 ```python
-def search_datasets(
-    self,
-    query: str,
-    search_in: List[str] = ["name", "description", "tags"],
-    limit: Optional[int] = None
-) -> List[DatasetInfo]
+from mdm.performance import QueryOptimizer
+
+# Create optimizer
+optimizer = QueryOptimizer(cache_query_plans=True)
+
+# Optimize query
+optimized_query, plan = optimizer.optimize_query(
+    "SELECT * FROM large_table WHERE category = 'A'",
+    connection
+)
+
+# Check optimization hints
+if plan.optimization_hints:
+    for hint in plan.optimization_hints:
+        print(f"Hint: {hint}")
 ```
 
-**Parameters:**
-- `query` (str): Search query
-- `search_in` (List[str]): Fields to search
-- `limit` (Optional[int]): Maximum results
+### Caching
 
-**Returns:**
-- `List[DatasetInfo]`: Matching datasets
-
-**Example:**
 ```python
-# Search by name
-sales_datasets = client.search_datasets("sales")
+from mdm.performance import CacheManager, CachePolicy
 
-# Search in specific fields
-customer_datasets = client.search_datasets(
-    "customer",
-    search_in=["name", "tags"]
+# Create cache manager
+cache = CacheManager(
+    max_size_mb=100,
+    policy=CachePolicy.LRU,
+    default_ttl=300
+)
+
+# Use cache decorator
+@cache.cached(ttl=60)
+def expensive_operation(dataset_name: str):
+    # Expensive computation
+    return result
+
+# Manual cache operations
+cache.set("key", value, ttl=120)
+value = cache.get("key")
+cache.delete("key")
+```
+
+### Batch Processing
+
+```python
+from mdm.performance import BatchOptimizer, BatchConfig
+
+# Configure batch processing
+config = BatchConfig(
+    batch_size=10000,
+    max_workers=4,
+    enable_parallel=True
+)
+optimizer = BatchOptimizer(config)
+
+# Process dataframe in batches
+result_df = optimizer.process_dataframe_batches(
+    df=large_df,
+    process_func=lambda batch: batch.apply(transform),
+    progress_callback=lambda done, total: print(f"{done}/{total}")
 )
 ```
 
-### filter_datasets
-
-Filter datasets by criteria.
+### Connection Pooling
 
 ```python
-def filter_datasets(
-    self,
-    min_rows: Optional[int] = None,
-    max_rows: Optional[int] = None,
-    created_after: Optional[datetime] = None,
-    created_before: Optional[datetime] = None,
-    has_target: Optional[bool] = None,
-    backend: Optional[str] = None
-) -> List[DatasetInfo]
-```
+from mdm.performance import ConnectionPool, PoolConfig
 
-**Parameters:**
-- `min_rows` (Optional[int]): Minimum row count
-- `max_rows` (Optional[int]): Maximum row count
-- `created_after` (Optional[datetime]): Created after date
-- `created_before` (Optional[datetime]): Created before date
-- `has_target` (Optional[bool]): Has target column
-- `backend` (Optional[str]): Storage backend type
-
-**Returns:**
-- `List[DatasetInfo]`: Filtered datasets
-
-**Example:**
-```python
-# Find large datasets
-large_datasets = client.filter_datasets(min_rows=1000000)
-
-# Find recent datasets with targets
-ml_ready = client.filter_datasets(
-    created_after=datetime(2024, 1, 1),
-    has_target=True
+# Configure pool
+pool = ConnectionPool(
+    connection_string="postgresql://...",
+    config=PoolConfig(
+        pool_size=5,
+        max_overflow=10,
+        timeout=30.0,
+        recycle=3600
+    )
 )
+
+# Use pooled connection
+with pool.get_connection() as conn:
+    result = conn.execute("SELECT * FROM datasets")
 ```
 
-## Batch Operations
-
-### batch_export
-
-Export multiple datasets at once.
+### Performance Monitoring
 
 ```python
-def batch_export(
-    self,
-    dataset_names: List[str],
-    output_dir: str,
-    format: str = "csv",
-    compression: Optional[str] = None,
-    parallel: bool = True
-) -> Dict[str, List[str]]
+from mdm.performance import get_monitor
+
+# Get global monitor
+monitor = get_monitor()
+
+# Track operations
+with monitor.track_operation("dataset_registration") as timer:
+    # Perform operation
+    pass
+    print(f"Duration: {timer.duration}s")
+
+# Track queries
+monitor.track_query("select", duration=0.05, rows=100)
+
+# Get performance report
+report = monitor.get_report()
+print(f"Total operations: {report['summary']['total_operations']}")
 ```
 
-**Parameters:**
-- `dataset_names` (List[str]): Dataset names to export
-- `output_dir` (str): Output directory
-- `format` (str): Export format
-- `compression` (Optional[str]): Compression type
-- `parallel` (bool): Export in parallel
+## Migration API
 
-**Returns:**
-- `Dict[str, List[str]]`: Map of dataset name to exported files
+### Feature Flags
 
-**Example:**
 ```python
-# Export multiple datasets
-results = client.batch_export(
-    ["sales_2023", "sales_2024", "sales_forecast"],
-    output_dir="/backups/",
-    format="parquet",
-    compression="snappy"
+from mdm.core import feature_flags
+
+# Check feature flag
+if feature_flags.get("use_new_storage"):
+    # Use new implementation
+    pass
+else:
+    # Use legacy implementation
+    pass
+
+# Set feature flag
+feature_flags.set("use_new_storage", True)
+
+# Bulk update
+feature_flags.set_multiple({
+    "use_new_storage": True,
+    "use_new_features": True,
+    "use_new_config": True
+})
+```
+
+### Migration Validation
+
+```python
+from mdm.migration import MigrationValidator
+
+# Create validator
+validator = MigrationValidator()
+
+# Validate storage migration
+results = validator.validate_storage_migration(
+    legacy_backend=legacy_storage,
+    new_backend=new_storage,
+    test_data=sample_df
 )
+
+# Check compatibility
+if validator.check_compatibility("dataset_name"):
+    print("Dataset is compatible with new backend")
 ```
 
-### batch_update
-
-Update multiple datasets at once.
+### Progressive Rollout
 
 ```python
-def batch_update(
-    self,
-    updates: Dict[str, Dict[str, Any]]
-) -> Dict[str, DatasetInfo]
+from mdm.migration import RolloutManager
+
+# Create rollout manager
+rollout = RolloutManager()
+
+# Configure rollout percentage
+rollout.set_rollout_percentage("use_new_storage", 25)
+
+# Check if enabled for specific context
+if rollout.is_enabled("use_new_storage", context={"user_id": 123}):
+    # Use new implementation
+    pass
 ```
 
-**Parameters:**
-- `updates` (Dict[str, Dict[str, Any]]): Map of dataset name to update fields
+## Error Handling
 
-**Returns:**
-- `Dict[str, DatasetInfo]`: Map of dataset name to updated info
-
-**Example:**
-```python
-updates = {
-    "sales_2023": {"tags": ["historical", "sales"]},
-    "sales_2024": {"tags": ["current", "sales"]},
-}
-results = client.batch_update(updates)
-```
-
-## Exceptions
-
-### DatasetError
-
-Base exception for dataset-related errors.
+### Exception Hierarchy
 
 ```python
-from mdm.core.exceptions import DatasetError
+from mdm.core.exceptions import (
+    MDMError,           # Base exception
+    DatasetError,       # Dataset-related errors
+    StorageError,       # Storage backend errors
+    ConfigError,        # Configuration errors
+    ValidationError,    # Data validation errors
+    MigrationError      # Migration-related errors
+)
 
 try:
-    client.get_dataset("nonexistent")
+    # Perform operations
+    pass
 except DatasetError as e:
-    print(f"Dataset error: {e}")
-```
-
-### StorageError
-
-Storage backend errors.
-
-```python
-from mdm.core.exceptions import StorageError
-
-try:
-    client.load_dataset("corrupted_dataset")
+    # Handle dataset-specific error
+    logger.error(f"Dataset error: {e}")
 except StorageError as e:
-    print(f"Storage error: {e}")
+    # Handle storage error
+    logger.error(f"Storage error: {e}")
+except MDMError as e:
+    # Handle general MDM error
+    logger.error(f"MDM error: {e}")
 ```
 
-### ConfigurationError
-
-Configuration-related errors.
+### Error Context
 
 ```python
-from mdm.core.exceptions import ConfigurationError
+from mdm.core.exceptions import add_error_context
 
 try:
-    client = MDMClient(config=invalid_config)
-except ConfigurationError as e:
-    print(f"Config error: {e}")
+    # Risky operation
+    pass
+except Exception as e:
+    # Add context and re-raise
+    add_error_context(e, {
+        "dataset": "iris_dataset",
+        "operation": "feature_generation",
+        "backend": "sqlite"
+    })
+    raise
 ```
 
-## Models
+## Best Practices
 
-### DatasetInfo
+### 1. Resource Management
 
-Dataset information model.
+Always use context managers for database connections:
 
 ```python
-@dataclass
-class DatasetInfo:
-    name: str
-    description: Optional[str]
-    source: str
-    created_at: datetime
-    updated_at: datetime
-    tables: Dict[str, str]
-    target_column: Optional[str]
-    id_columns: List[str]
-    problem_type: Optional[ProblemType]
-    tags: List[str]
-    database: Dict[str, Any]
-    metadata: Dict[str, Any]
+# Good
+with backend.session(db_path) as session:
+    # Perform operations
+    pass
+
+# Avoid
+session = backend.get_session(db_path)
+# Operations without proper cleanup
 ```
 
-### ProblemType
+### 2. Batch Processing
 
-Enumeration of supported problem types.
+For large datasets, always use batch processing:
 
 ```python
-from enum import Enum
+# Good
+optimizer = BatchOptimizer(BatchConfig(batch_size=10000))
+result = optimizer.process_dataframe_batches(large_df, process_func)
 
-class ProblemType(str, Enum):
-    BINARY_CLASSIFICATION = "binary_classification"
-    MULTICLASS_CLASSIFICATION = "multiclass_classification"
-    REGRESSION = "regression"
-    TIME_SERIES = "time_series"
-    CLUSTERING = "clustering"
+# Avoid
+result = large_df.apply(process_func)  # May cause memory issues
 ```
 
-### ColumnType
+### 3. Feature Flags
 
-Column type enumeration.
+Use feature flags for gradual migration:
 
 ```python
-from enum import Enum
+# Good
+if feature_flags.get("use_new_implementation"):
+    result = new_implementation()
+else:
+    result = legacy_implementation()
 
-class ColumnType(str, Enum):
-    NUMERIC = "numeric"
-    CATEGORICAL = "categorical"
-    TEXT = "text"
-    DATETIME = "datetime"
-    BINARY = "binary"
-    ID = "id"
-    TARGET = "target"
+# Avoid
+result = new_implementation()  # No fallback
 ```
 
-## Advanced Usage
+### 4. Error Handling
 
-### Custom Feature Engineering
+Always provide meaningful error context:
 
 ```python
-# Register dataset with custom features
-from mdm.features import CustomTransformer
+# Good
+try:
+    register_dataset(name, path)
+except Exception as e:
+    raise DatasetError(
+        f"Failed to register dataset '{name}' from '{path}': {e}"
+    ) from e
 
-class PriceFeatures(CustomTransformer):
-    def transform(self, df):
-        df['price_log'] = np.log1p(df['price'])
-        df['price_squared'] = df['price'] ** 2
-        return df
-
-# Register with custom transformer
-client.register_dataset(
-    "sales_advanced",
-    dataset_path="/data/sales.csv",
-    custom_transformers=[PriceFeatures()]
-)
+# Avoid
+try:
+    register_dataset(name, path)
+except:
+    raise  # No context
 ```
 
-### Memory-Efficient Processing
+### 5. Performance Monitoring
+
+Track performance-critical operations:
 
 ```python
-# Process large dataset in chunks
-def process_large_dataset(name: str):
-    total_processed = 0
-    
-    for chunk in client.load_dataset(name, as_iterator=True, chunk_size=50000):
-        # Process chunk
-        processed = process_chunk(chunk)
-        total_processed += len(processed)
-        
-        # Save results incrementally
-        save_results(processed)
-    
-    return total_processed
+# Good
+with monitor.track_operation("expensive_operation", dataset=name):
+    result = perform_expensive_operation()
+
+# Avoid
+result = perform_expensive_operation()  # No monitoring
 ```
 
-### Integration with ML Frameworks
+## Appendix
+
+### Environment Variables
+
+Complete list of supported environment variables:
+
+- `MDM_DATABASE_DEFAULT_BACKEND`: Default storage backend
+- `MDM_DATABASE_SQLITE_TIMEOUT`: SQLite connection timeout
+- `MDM_DATABASE_DUCKDB_MEMORY_LIMIT`: DuckDB memory limit
+- `MDM_DATABASE_POSTGRESQL_HOST`: PostgreSQL host
+- `MDM_PATHS_BASE_PATH`: Base directory for MDM
+- `MDM_LOGGING_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
+- `MDM_LOGGING_FILE`: Log file path
+- `MDM_PERFORMANCE_BATCH_SIZE`: Default batch size
+- `MDM_PERFORMANCE_MAX_WORKERS`: Maximum parallel workers
+
+### Type Definitions
+
+Common type definitions used throughout the API:
 
 ```python
-# scikit-learn integration
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from typing import Dict, List, Optional, Union, Any
+from pathlib import Path
+import pandas as pd
 
-# Load dataset
-X, _ = client.load_dataset("customer_churn", tables=["train"])
-y = X.pop("churned")
-
-# Train model
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-model = RandomForestClassifier()
-model.fit(X_train, y_train)
-
-# PyTorch integration
-import torch
-from torch.utils.data import DataLoader, TensorDataset
-
-# Load and convert to tensors
-df = client.load_dataset("image_features", tables=["train"])
-X = torch.tensor(df.drop("label", axis=1).values, dtype=torch.float32)
-y = torch.tensor(df["label"].values, dtype=torch.long)
-
-# Create DataLoader
-dataset = TensorDataset(X, y)
-loader = DataLoader(dataset, batch_size=32, shuffle=True)
+DataFrameDict = Dict[str, pd.DataFrame]
+ColumnTypes = Dict[str, str]
+ConfigDict = Dict[str, Any]
+MetricsDict = Dict[str, Union[int, float]]
 ```
