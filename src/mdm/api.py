@@ -331,7 +331,10 @@ class MDMClient:
         Raises:
             DatasetError: If dataset not found or removal fails
         """
-        self.manager.delete_dataset(name, force=force)
+        if force:
+            self.manager.remove_dataset(name)
+        else:
+            self.manager.delete_dataset(name, force=False)
 
     def export_dataset(
         self,
@@ -602,7 +605,7 @@ class MDMClient:
         """
         from mdm.utils.integration import SubmissionCreator
         
-        creator = SubmissionCreator()
+        creator = SubmissionCreator(self.manager)
         if format == "kaggle":
             return creator.create_kaggle_submission(
                 predictions,
@@ -624,7 +627,7 @@ class MDMClient:
             Framework adapter instance
         """
         from mdm.utils.integration import MLFrameworkAdapter
-        return MLFrameworkAdapter(framework, config=self.config)
+        return MLFrameworkAdapter(framework)
 
     def process_in_chunks(
         self,
@@ -680,14 +683,17 @@ class MDMClient:
         """
         from mdm.utils.time_series import TimeSeriesSplitter
         
-        splitter = TimeSeriesSplitter()
-        return splitter.split(
-            data,
-            time_column=time_column,
-            n_splits=n_splits,
-            test_size=test_size,
-            gap=gap
-        )
+        splitter = TimeSeriesSplitter(time_column)
+        
+        # If n_splits is specified, use fold-based splitting
+        if n_splits is not None:
+            gap_days = gap if gap is not None else 0
+            return [(fold['train'], fold['test']) 
+                    for fold in splitter.split_by_folds(data, n_folds=n_splits, gap_days=gap_days)]
+        
+        # Otherwise, do a single time-based split
+        result = splitter.split_by_time(data, test_size=test_size or 0.2)
+        return [(result['train'], result['test'])]
 
     @property
     def performance_monitor(self) -> PerformanceMonitor:

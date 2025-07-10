@@ -42,6 +42,7 @@ class DatasetRegistrar:
         self.config = config_manager.config
         self.base_path = config_manager.base_path
         self.feature_generator = FeatureGenerator()
+        self._detected_datetime_columns = []
 
     def register(
         self,

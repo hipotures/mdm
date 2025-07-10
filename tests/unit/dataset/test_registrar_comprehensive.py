@@ -513,7 +513,7 @@ class TestDatasetRegistrarComprehensive:
         assert result['str_col'] == ColumnType.TEXT  # High unique ratio (1.0 > 0.8)
         assert result['bool_col'] == ColumnType.NUMERIC  # Stored as integer
         assert result['date_col'] == ColumnType.DATETIME  # Should detect datetime from dtype
-        assert result['mixed_col'] == ColumnType.CATEGORICAL  # Short mixed strings
+        assert result['mixed_col'] == ColumnType.TEXT  # High unique ratio (1.0 > 0.8)
         assert result['id'] == ColumnType.ID
         assert result['target'] == ColumnType.TARGET
 

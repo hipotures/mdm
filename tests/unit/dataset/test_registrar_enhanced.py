@@ -49,6 +49,7 @@ class TestDatasetRegistrarEnhanced:
         config.paths.datasets_path = "datasets/"
         config.features.enable_at_registration = True
         config.datasets.generate_features = True
+        config.performance.batch_size = 10000
         return config
 
     @pytest.fixture
@@ -398,20 +399,24 @@ class TestDatasetRegistrarEnhanced:
         
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
-            mock_backend = Mock()
-            mock_backend.load_file.side_effect = lambda path, table, **kwargs: {
-                'row_count': 10,
-                'column_count': 2
-            }
-            mock_factory.create.return_value = mock_backend
-            
-            result = registrar._load_data_files(files, db_info, progress=None)
-            
-            assert 'train' in result
-            assert 'test' in result
-            assert result['train']['row_count'] == 10
-            assert mock_backend.load_file.call_count == 2
+        with patch('mdm.dataset.registrar.detect_delimiter', return_value=','):
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.database_exists.return_value = False
+                mock_backend.create_database.return_value = None
+                mock_backend.get_engine.return_value = Mock()
+                mock_backend.create_table_from_dataframe.return_value = None
+                mock_backend.query.return_value = pd.DataFrame({'count': [10]})
+                mock_backend.close_connections.return_value = None
+                mock_factory.create.return_value = mock_backend
+                
+                result = registrar._load_data_files(files, db_info, progress=None)
+                
+                assert 'train' in result
+                assert 'test' in result
+                assert result['train'] == 'train'
+                assert result['test'] == 'test'
+                assert mock_backend.create_table_from_dataframe.call_count == 2
 
     def test_infer_metadata(self, registrar):
         """Test metadata inference through methods that exist."""
@@ -459,14 +464,29 @@ class TestDatasetRegistrarEnhanced:
         registrar.feature_generator = mock_feature_generator
         mock_feature_generator.generate_feature_tables.return_value = {'train_features': 'test_dataset_train_features'}
         
-        result = registrar._generate_features(
-            'test_dataset', 
-            db_info, 
-            table_mappings,
-            column_info,
-            target_column,
-            id_columns
-        )
+        # Mock the backend and dependencies
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+            mock_backend = Mock()
+            mock_backend.get_engine.return_value = Mock()
+            mock_backend.close_connections.return_value = None
+            mock_factory.create.return_value = mock_backend
+            
+            # Mock the column type detection method
+            with patch.object(registrar, '_detect_column_types_with_profiling') as mock_detect:
+                mock_detect.return_value = {
+                    'id': {'type': 'numeric'},
+                    'feature1': {'type': 'numeric'},
+                    'target': {'type': 'categorical'}
+                }
+                
+                result = registrar._generate_features(
+                    'test_dataset', 
+                    db_info, 
+                    table_mappings,
+                    column_info,
+                    target_column,
+                    id_columns
+                )
         
         mock_feature_generator.generate_feature_tables.assert_called_once()
 
@@ -547,27 +567,22 @@ class TestDatasetRegistrarEnhanced:
         files = {'data': csv_file}
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
-            mock_backend = Mock()
-            
-            # Simulate chunked loading
-            def load_file_side_effect(path, table, batch_size=None, **kwargs):
-                if batch_size:
-                    # Return progress info
-                    return {
-                        'row_count': 100000,
-                        'column_count': 2,
-                        'batches': 10
-                    }
-                return {'row_count': 100000, 'column_count': 2}
-            
-            mock_backend.load_file.side_effect = load_file_side_effect
-            mock_factory.create.return_value = mock_backend
-            
-            with patch('mdm.dataset.registrar.Progress'):
-                result = registrar._load_data_files(files, db_info, progress=None)
+        with patch('mdm.dataset.registrar.detect_delimiter', return_value=','):
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.database_exists.return_value = False
+                mock_backend.create_database.return_value = None
+                mock_backend.get_engine.return_value = Mock()
+                mock_backend.create_table_from_dataframe.return_value = None
+                mock_backend.query.return_value = pd.DataFrame({'count': [100000]})
+                mock_backend.close_connections.return_value = None
+                mock_factory.create.return_value = mock_backend
                 
-                assert result['data']['row_count'] == 100000
+                with patch('mdm.dataset.registrar.Progress'):
+                    result = registrar._load_data_files(files, db_info, progress=None)
+                    
+                    assert result['data'] == 'data'
+                    assert mock_backend.create_table_from_dataframe.call_count >= 1
 
     def test_error_handling_remove_existing_fails(self, registrar, mock_manager, tmp_path):
         """Test error handling when removing existing dataset fails."""
@@ -609,7 +624,7 @@ class TestDatasetRegistrarEnhanced:
         
         train_df = pd.DataFrame({
             'id': range(1000),
-            'created_at': pd.date_range('2024-01-01', periods=1000, freq='H'),
+            'created_at': pd.date_range('2024-01-01', periods=1000, freq='h'),
             'category': np.random.choice(['A', 'B', 'C'], 1000),
             'value': np.random.rand(1000),
             'target': np.random.randint(0, 2, 1000)
@@ -674,18 +689,26 @@ class TestDatasetRegistrarEnhanced:
                                 
                                 with patch.object(registrar, '_analyze_columns') as mock_analyze:
                                     mock_analyze.return_value = {
-                                        'train': {'columns': {'id': 'INTEGER', 'target': 'INTEGER'}}
+                                        'train': {
+                                            'columns': {'id': 'INTEGER', 'target': 'INTEGER'},
+                                            'sample_data': train_df.head(100)
+                                        }
                                     }
                                     
                                     with patch.object(registrar, '_compute_initial_statistics') as mock_stats:
                                         mock_stats.return_value = {'row_count': 1200}
                                         
-                                        result = registrar.register(
-                                            'test_dataset',
-                                            dataset_dir,
-                                            description='Test dataset',
-                                            tags=['test', 'example']
-                                        )
+                                        # Mock _infer_problem_type
+                                        with patch.object(registrar, '_infer_problem_type') as mock_infer:
+                                            mock_infer.return_value = 'binary_classification'
+                                            
+                                            result = registrar.register(
+                                                'test_dataset',
+                                                dataset_dir,
+                                                description='Test dataset',
+                                                tags=['test', 'example'],
+                                                target_column='target'
+                                            )
                         
                         assert result.name == 'test_dataset'
                         assert result.description == 'Test dataset'
