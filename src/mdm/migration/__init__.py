@@ -18,6 +18,10 @@ from .feature_migration import (
     FeatureMigrator,
     FeatureValidator,
 )
+from .dataset_migration import (
+    DatasetMigrator,
+    DatasetValidator,
+)
 
 __all__ = [
     'ConfigurationMigrator',
@@ -27,4 +31,6 @@ __all__ = [
     'StorageValidator',
     'FeatureMigrator',
     'FeatureValidator',
+    'DatasetMigrator',
+    'DatasetValidator',
 ]

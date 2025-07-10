@@ -22,6 +22,12 @@ from .feature_manager import (
     get_feature_generator,
     clear_feature_cache,
 )
+from .dataset_manager import (
+    get_dataset_registrar,
+    get_dataset_manager,
+    clear_dataset_cache,
+    get_registration_metrics,
+)
 from .config_adapters import (
     LegacyConfigAdapter,
     NewConfigAdapter,
@@ -44,6 +50,10 @@ __all__ = [
     'DatasetManagerAdapter',
     'get_feature_generator',
     'clear_feature_cache',
+    'get_dataset_registrar',
+    'get_dataset_manager',
+    'clear_dataset_cache',
+    'get_registration_metrics',
     'LegacyConfigAdapter',
     'NewConfigAdapter',
     'LegacyConfigManagerAdapter',
