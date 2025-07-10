@@ -826,10 +826,9 @@ class TestDatasetRegistrarCoverage:
         # Enable feature generation
         registrar.config.features.enable_at_registration = True
         
-        # Create mock feature generator
-        mock_feature_generator = Mock()
-        mock_feature_generator.generate_feature_tables.return_value = {'train_features': 'test_dataset_train_features'}
-        registrar.feature_generator = mock_feature_generator
+        # Use the existing feature generator from the registrar fixture
+        # and add the generate_feature_tables method
+        registrar.feature_generator.generate_feature_tables = Mock(return_value={'train_features': 'test_dataset_train_features'})
         
         with patch('mdm.dataset.registrar.logger') as mock_logger:
             result = registrar._generate_features(
@@ -841,10 +840,10 @@ class TestDatasetRegistrarCoverage:
             assert any('Generating features' in str(call) for call in mock_logger.info.call_args_list)
             
             # Feature generator should be called
-            mock_feature_generator.generate_feature_tables.assert_called_once()
+            registrar.feature_generator.generate_feature_tables.assert_called_once()
             
             # Check the call arguments
-            call_kwargs = mock_feature_generator.generate_feature_tables.call_args.kwargs
+            call_kwargs = registrar.feature_generator.generate_feature_tables.call_args.kwargs
             assert call_kwargs['dataset_name'] == normalized_name
             assert call_kwargs['target_column'] == target_column
             assert call_kwargs['id_columns'] == id_columns
