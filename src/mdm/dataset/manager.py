@@ -349,11 +349,11 @@ class DatasetManager:
         if not name:
             raise DatasetError("Dataset name cannot be empty")
 
-        # Normalize to lowercase
-        normalized = name.lower()
+        # Normalize to lowercase and replace dashes with underscores
+        normalized = name.lower().replace('-', '_')
 
         # Check for valid characters
-        if not all(c.isalnum() or c in "_-" for c in normalized):
+        if not all(c.isalnum() or c == '_' for c in normalized):
             raise DatasetError(
                 "Dataset name can only contain alphanumeric characters, underscores, and dashes"
             )
@@ -459,4 +459,21 @@ class DatasetManager:
             except Exception as e:
                 logger.error(f"Error searching {yaml_file}: {e}")
 
+        return matches
+
+    def search_datasets_by_tag(self, tag: str) -> List[DatasetInfo]:
+        """Search for datasets by tag.
+        
+        Args:
+            tag: Tag to search for
+            
+        Returns:
+            List of DatasetInfo objects with the specified tag
+        """
+        matches = []
+        
+        for dataset in self.list_datasets():
+            if dataset.tags and tag in dataset.tags:
+                matches.append(dataset)
+        
         return matches

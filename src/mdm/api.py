@@ -331,9 +331,7 @@ class MDMClient:
         Raises:
             DatasetError: If dataset not found or removal fails
         """
-        # DatasetManager.remove_dataset doesn't accept force parameter
-        # It internally uses force=True, so we just call it directly
-        self.manager.remove_dataset(name)
+        self.manager.delete_dataset(name, force=force)
 
     def export_dataset(
         self,
@@ -379,7 +377,7 @@ class MDMClient:
 
         return [str(f) for f in exported_files]
 
-    def get_statistics(self, name: str, full: bool = False) -> dict[str, Any]:
+    def get_statistics(self, name: str, full: bool = False) -> Optional[Any]:
         """Get dataset statistics.
 
         Args:
@@ -387,15 +385,12 @@ class MDMClient:
             full: Whether to compute full statistics
 
         Returns:
-            Statistics dictionary
+            DatasetStatistics object or None
 
         Raises:
             DatasetError: If dataset not found
         """
-        from mdm.dataset.operations import StatsOperation
-
-        stats_op = StatsOperation()
-        return stats_op.execute(name, full=full)
+        return self.manager.get_statistics(name)
 
     def split_time_series(
         self,
@@ -469,57 +464,230 @@ class MDMClient:
             dataset_info.id_columns,
         )
 
-    def create_submission(
+
+    def search_datasets(
+        self,
+        query: str,
+        deep: bool = False,
+        case_sensitive: bool = False
+    ) -> List[DatasetInfo]:
+        """Search for datasets.
+
+        Args:
+            query: Search query
+            deep: Whether to search in database metadata
+            case_sensitive: Whether search is case-sensitive
+
+        Returns:
+            List of matching DatasetInfo objects
+        """
+        return self.manager.search_datasets(query, deep=deep, case_sensitive=case_sensitive)
+
+    def search_datasets_by_tag(self, tag: str) -> List[DatasetInfo]:
+        """Search datasets by tag.
+
+        Args:
+            tag: Tag to search for
+
+        Returns:
+            List of DatasetInfo objects with the tag
+        """
+        return self.manager.search_datasets_by_tag(tag)
+
+    def load_dataset(
         self,
         name: str,
-        predictions: Union[pd.Series, pd.DataFrame, list],
-        output_path: Optional[str] = None,
-    ) -> str:
-        """Create submission file.
+        table: Optional[str] = None,
+        sample_size: Optional[int] = None
+    ) -> pd.DataFrame:
+        """Load dataset as DataFrame.
 
         Args:
             name: Dataset name
-            predictions: Model predictions
-            output_path: Output file path
+            table: Table name (default: 'train' or 'data')
+            sample_size: Optional sample size
 
         Returns:
-            Path to created submission file
+            DataFrame
+
+        Raises:
+            DatasetError: If dataset or table not found
+        """
+        dataset_info = self.get_dataset(name)
+        if not dataset_info:
+            raise DatasetError(f"Dataset '{name}' not found")
+
+        # Determine table to load
+        if table is None:
+            table = 'train' if 'train' in dataset_info.tables else 'data'
+        
+        if table not in dataset_info.tables:
+            raise DatasetError(f"Table '{table}' not found in dataset '{name}'")
+
+        # Get backend and load data
+        backend = self.manager.get_backend(name)
+        db_path = dataset_info.database.get('path')
+        if not db_path:
+            raise DatasetError(f"No database path found for dataset '{name}'")
+        
+        engine = backend.get_engine(db_path)
+        table_name = dataset_info.tables[table]
+        df = backend.query(f"SELECT * FROM {table_name}")
+
+        # Sample if requested
+        if sample_size and len(df) > sample_size:
+            df = df.sample(n=sample_size, random_state=42)
+
+        return df
+
+    def get_column_info(
+        self,
+        name: str,
+        table: Optional[str] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """Get column information for dataset.
+
+        Args:
+            name: Dataset name
+            table: Table name (default: 'train' or 'data')
+
+        Returns:
+            Dictionary mapping column names to info
 
         Raises:
             DatasetError: If dataset not found
         """
-        creator = SubmissionCreator(self.manager)
-        return creator.create_submission(name, predictions, output_path)
+        dataset_info = self.get_dataset(name)
+        if not dataset_info:
+            raise DatasetError(f"Dataset '{name}' not found")
+
+        # Determine table
+        if table is None:
+            table = 'train' if 'train' in dataset_info.tables else 'data'
+        
+        if table not in dataset_info.tables:
+            raise DatasetError(f"Table '{table}' not found in dataset '{name}'")
+
+        # Get backend and analyze columns
+        backend = self.manager.get_backend(name)
+        db_path = dataset_info.database.get('path')
+        engine = backend.get_engine(db_path)
+        
+        table_name = dataset_info.tables[table]
+        columns = backend.get_columns(table_name)
+        
+        column_info = {}
+        for col in columns:
+            column_info[col] = backend.analyze_column(col, table_name, engine)
+        
+        return column_info
+
+    def create_submission(
+        self,
+        predictions: pd.DataFrame,
+        output_path: str,
+        format: str = "kaggle",
+        dataset_name: Optional[str] = None
+    ) -> Path:
+        """Create submission file.
+
+        Args:
+            predictions: Predictions DataFrame
+            output_path: Output file path
+            format: Submission format
+            dataset_name: Optional dataset name for context
+
+        Returns:
+            Path to created submission file
+        """
+        from mdm.utils.integration import SubmissionCreator
+        
+        creator = SubmissionCreator()
+        if format == "kaggle":
+            return creator.create_kaggle_submission(
+                predictions,
+                output_path
+            )
+        else:
+            raise ValueError(f"Unknown submission format: {format}")
+
+    def get_framework_adapter(
+        self,
+        framework: str
+    ) -> 'MLFrameworkAdapter':
+        """Get ML framework adapter.
+
+        Args:
+            framework: Framework name ('sklearn', 'pytorch', etc.)
+
+        Returns:
+            Framework adapter instance
+        """
+        from mdm.utils.integration import MLFrameworkAdapter
+        return MLFrameworkAdapter(framework, config=self.config)
 
     def process_in_chunks(
         self,
-        name: str,
+        data: pd.DataFrame,
         process_func: Callable,
-        table_name: str = 'train',
         chunk_size: Optional[int] = None,
-        show_progress: bool = True,
-    ) -> list[Any]:
-        """Process dataset in chunks.
+        show_progress: bool = True
+    ) -> List[Any]:
+        """Process data in chunks.
 
         Args:
-            name: Dataset name
+            data: DataFrame to process
             process_func: Function to apply to each chunk
-            table_name: Table to process
-            chunk_size: Chunk size (default from config)
+            chunk_size: Chunk size
             show_progress: Whether to show progress
 
         Returns:
             List of results from each chunk
-
-        Raises:
-            DatasetError: If dataset not found
         """
-        # Load data
-        df = self.load_table(name, table_name)
-
-        # Process in chunks
+        from mdm.utils.performance import ChunkProcessor
+        
         processor = ChunkProcessor(chunk_size)
-        return processor.process_dataframe(df, process_func, show_progress)
+        return processor.process(data, process_func, show_progress)
+
+    def monitor_performance(self):
+        """Get performance monitor context manager.
+
+        Returns:
+            PerformanceMonitor context manager
+        """
+        from mdm.utils.performance import PerformanceMonitor
+        return PerformanceMonitor()
+
+    def create_time_series_splits(
+        self,
+        data: pd.DataFrame,
+        time_column: str,
+        n_splits: int = 5,
+        test_size: Optional[Union[int, float]] = None,
+        gap: int = 0
+    ) -> List[tuple[pd.DataFrame, pd.DataFrame]]:
+        """Create time series cross-validation splits.
+
+        Args:
+            data: DataFrame with time series data
+            time_column: Name of time column
+            n_splits: Number of splits
+            test_size: Size of test set
+            gap: Gap between train and test
+
+        Returns:
+            List of (train, test) DataFrame tuples
+        """
+        from mdm.utils.time_series import TimeSeriesSplitter
+        
+        splitter = TimeSeriesSplitter()
+        return splitter.split(
+            data,
+            time_column=time_column,
+            n_splits=n_splits,
+            test_size=test_size,
+            gap=gap
+        )
 
     @property
     def performance_monitor(self) -> PerformanceMonitor:
