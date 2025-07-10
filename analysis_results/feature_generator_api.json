@@ -1,0 +1,34 @@
+{
+  "target_class": "FeatureGenerator",
+  "total_method_calls": 2,
+  "unique_methods": 2,
+  "total_attr_access": 0,
+  "unique_attributes": 0,
+  "methods": {
+    "generate_feature_tables": {
+      "count": 1,
+      "locations": [
+        {
+          "file": "src/mdm/dataset/registrar.py",
+          "line": 1009,
+          "object": "self.feature_generator",
+          "args_count": 0,
+          "has_kwargs": true
+        }
+      ]
+    },
+    "generate": {
+      "count": 1,
+      "locations": [
+        {
+          "file": "src/mdm/monitoring/dashboard.py",
+          "line": 315,
+          "object": "generator",
+          "args_count": 1,
+          "has_kwargs": false
+        }
+      ]
+    }
+  },
+  "attributes": {}
+}

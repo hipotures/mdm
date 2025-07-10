@@ -120,7 +120,11 @@ class APIUsageAnalyzer(ast.NodeVisitor):
     
     def analyze_file(self, filepath: Path):
         """Analyze a single Python file."""
-        self.current_file = str(filepath.relative_to(Path.cwd()))
+        # Try to make path relative, but use absolute if that fails
+        try:
+            self.current_file = str(filepath.relative_to(Path.cwd()))
+        except ValueError:
+            self.current_file = str(filepath)
         
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
