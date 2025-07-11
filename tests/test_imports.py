@@ -7,7 +7,11 @@ def test_mdm_imports():
     """Test that MDM can be imported."""
     import mdm
     
-    assert mdm.__version__ == "0.2.0"
+    # Version should be dynamically loaded from pyproject.toml
+    assert mdm.__version__  # Just check it exists
+    assert isinstance(mdm.__version__, str)
+    # Check it's a valid version format
+    assert "." in mdm.__version__  # Has version separators
     assert hasattr(mdm, "MDMError")
 
 

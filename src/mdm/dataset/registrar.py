@@ -806,6 +806,11 @@ class DatasetRegistrar:
             for table_key, table_name in tables.items():
                 # Get table info
                 table_info = backend.get_table_info(table_name, engine)
+                
+                # Check if table_info is valid
+                if not table_info or 'columns' not in table_info:
+                    logger.error(f"Invalid table info for {table_name}: {table_info}")
+                    raise DatasetError(f"Failed to get table info for {table_name}")
 
                 # Get sample data for analysis
                 sample_df = backend.read_table_to_dataframe(table_name, engine, limit=1000)

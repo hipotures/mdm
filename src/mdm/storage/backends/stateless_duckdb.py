@@ -15,15 +15,14 @@ import logging
 from pathlib import Path
 import duckdb
 
-from ...interfaces.storage import IStorageBackend
+from ...storage.base import StorageBackend
 from ...config import get_config
-from .compatibility_mixin import BackendCompatibilityMixin
 from ...core.exceptions import StorageError
 
 logger = logging.getLogger(__name__)
 
 
-class StatelessDuckDBBackend(BackendCompatibilityMixin, IStorageBackend):
+class StatelessDuckDBBackend(StorageBackend):
     """
     Stateless DuckDB backend with full compatibility.
     
@@ -36,7 +35,9 @@ class StatelessDuckDBBackend(BackendCompatibilityMixin, IStorageBackend):
     
     def __init__(self):
         """Initialize backend without any state."""
-        self.config = get_config()
+        config = get_config()
+        super().__init__(config.model_dump())  # Initialize base class with config dict
+        self.config = config
         self.datasets_path = Path(self.config.paths.datasets_path)
         
         # For compatibility with singleton pattern
@@ -293,6 +294,27 @@ class StatelessDuckDBBackend(BackendCompatibilityMixin, IStorageBackend):
         conn.close()
         
         logger.info(f"Created DuckDB database: {db_path}")
+    
+    def get_database_path(self, dataset_name: str, base_path: Path) -> str:
+        """Get database path for dataset (implements abstract method)."""
+        return str(base_path / dataset_name / f"{dataset_name}.duckdb")
+    
+    def create_engine(self, database_path: str) -> Engine:
+        """Create SQLAlchemy engine for the database."""
+        return create_engine(f"duckdb:///{database_path}")
+    
+    def initialize_database(self, engine: Engine) -> None:
+        """Initialize database with required tables."""
+        # For DuckDB, we don't need to do anything special
+        # Tables are created when data is written
+        pass
+    
+    def drop_database(self, database_path: str) -> None:
+        """Drop an existing database."""
+        db_path = Path(database_path)
+        if db_path.exists():
+            db_path.unlink()
+            logger.info(f"Dropped DuckDB database: {db_path}")
     
     def get_table_names(self, engine: Engine) -> List[str]:
         """Get list of table names in database."""

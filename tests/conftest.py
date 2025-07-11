@@ -8,6 +8,7 @@ import pytest
 
 from mdm.config import get_config
 from mdm.dataset.manager import DatasetManager
+from mdm.core import configure_services
 
 
 @pytest.fixture
@@ -30,6 +31,9 @@ def test_config(temp_dir):
     Path(config.paths.datasets_path).mkdir(parents=True, exist_ok=True)
     Path(config.paths.configs_path).mkdir(parents=True, exist_ok=True)
     Path(config.logging.file).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Configure DI container
+    configure_services(config.model_dump())
     
     return config
 

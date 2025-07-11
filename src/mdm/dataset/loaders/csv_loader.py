@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 
 from .base import FileLoader
-from ...utils.io import detect_delimiter
+from ...dataset.auto_detect import detect_delimiter
 
 logger = logging.getLogger(__name__)
 
