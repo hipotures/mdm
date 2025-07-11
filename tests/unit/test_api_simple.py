@@ -15,125 +15,185 @@ from mdm.models.enums import ProblemType
 class TestMDMClientBasic:
     """Test MDMClient basic functionality."""
     
-    @patch('mdm.api.get_config')
-    @patch('mdm.api.DatasetManager')
-    def test_init_default(self, mock_manager_class, mock_get_config):
+    @patch('mdm.api.mdm_client.get_config')
+    @patch('mdm.core.get_service')
+    def test_init_default(self, mock_get_service, mock_get_config):
         """Test default initialization."""
         mock_config = Mock()
         mock_get_config.return_value = mock_config
         
+        # Mock the specialized clients
+        mock_get_service.side_effect = lambda cls: Mock()
+        
         client = MDMClient()
         
         assert client.config == mock_config
-        assert client.manager == mock_manager_class.return_value
+        assert client.registration is not None
+        assert client.query is not None
+        assert client.ml is not None
+        assert client.export is not None
+        assert client.management is not None
     
     def test_init_with_config(self):
         """Test initialization with config."""
         mock_config = Mock()
-        with patch('mdm.api.DatasetManager') as mock_manager:
+        with patch('mdm.core.get_service') as mock_get_service:
+            mock_get_service.side_effect = lambda cls: Mock()
             client = MDMClient(config=mock_config)
             assert client.config == mock_config
     
-    @patch('mdm.api.DatasetManager')
-    def test_dataset_exists(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_dataset_exists(self, mock_get_service):
         """Test checking if dataset exists."""
-        mock_manager = mock_manager_class.return_value
-        mock_manager.dataset_exists.return_value = True
+        # Setup mock query client
+        mock_query = Mock()
+        mock_dataset = Mock(spec=DatasetInfo)
+        mock_query.get_dataset.return_value = mock_dataset
+        
+        # Configure mock_get_service to return appropriate clients
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        result = client.dataset_exists('test_dataset')
+        # MDMClient doesn't have dataset_exists method, we use get_dataset
+        result = client.get_dataset('test_dataset')
         
-        assert result is True
-        mock_manager.dataset_exists.assert_called_once_with('test_dataset')
+        assert result == mock_dataset
+        mock_query.get_dataset.assert_called_once_with('test_dataset')
     
-    @patch('mdm.api.DatasetManager')
-    def test_get_dataset(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_get_dataset(self, mock_get_service):
         """Test getting dataset info."""
-        mock_manager = mock_manager_class.return_value
+        # Setup mock query client
+        mock_query = Mock()
         mock_info = Mock(spec=DatasetInfo)
-        mock_manager.get_dataset.return_value = mock_info
+        mock_query.get_dataset.return_value = mock_info
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
         result = client.get_dataset('test_dataset')
         
         assert result == mock_info
-        mock_manager.get_dataset.assert_called_once_with('test_dataset')
+        mock_query.get_dataset.assert_called_once_with('test_dataset')
     
-    @patch('mdm.api.DatasetManager')
-    def test_list_datasets_no_filter(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_list_datasets_no_filter(self, mock_get_service):
         """Test listing datasets without filter."""
-        mock_manager = mock_manager_class.return_value
+        # Setup mock query client
+        mock_query = Mock()
         mock_datasets = [Mock(), Mock()]
-        mock_manager.list_datasets.return_value = mock_datasets
+        mock_query.list_datasets.return_value = mock_datasets
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
         result = client.list_datasets()
         
         assert result == mock_datasets
-        mock_manager.list_datasets.assert_called_once()
+        mock_query.list_datasets.assert_called_once()
     
-    @patch('mdm.api.DatasetManager')
-    def test_list_datasets_with_filter(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_list_datasets_with_filter(self, mock_get_service):
         """Test listing datasets with filter."""
-        mock_manager = mock_manager_class.return_value
+        # Setup mock query client
+        mock_query = Mock()
         mock_dataset1 = Mock()
         mock_dataset1.name = 'test1'
         mock_dataset2 = Mock() 
         mock_dataset2.name = 'test2'
-        mock_manager.list_datasets.return_value = [mock_dataset1, mock_dataset2]
+        mock_query.list_datasets.return_value = [mock_dataset1, mock_dataset2]
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        # Filter to only get datasets with 'test1' in name
-        result = client.list_datasets(filter_func=lambda d: d.name == 'test1')
+        # MDMClient.list_datasets doesn't support filter_func, filtering must be done after
+        result = client.list_datasets()
+        filtered_result = [d for d in result if d.name == 'test1']
         
-        assert len(result) == 1
-        assert result[0] == mock_dataset1
+        assert len(filtered_result) == 1
+        assert filtered_result[0] == mock_dataset1
     
-    @patch('mdm.api.DatasetManager')
-    def test_remove_dataset(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_remove_dataset(self, mock_get_service):
         """Test removing dataset."""
-        mock_manager = mock_manager_class.return_value
+        # Setup mock management client
+        mock_management = Mock()
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'ManagementClient':
+                return mock_management
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
         client.remove_dataset('test_dataset', force=True)
         
-        mock_manager.remove_dataset.assert_called_once_with('test_dataset')
+        mock_management.remove_dataset.assert_called_once_with('test_dataset', True)
 
 
 class TestMDMClientRegistration:
     """Test dataset registration."""
     
-    @patch('mdm.api.DatasetRegistrar')
-    @patch('mdm.api.DatasetManager')
-    def test_register_dataset_path_not_exists(self, mock_manager_class, mock_registrar_class):
+    @patch('mdm.core.get_service')
+    def test_register_dataset_path_not_exists(self, mock_get_service):
         """Test registering dataset with non-existent path."""
-        mock_manager = mock_manager_class.return_value
-        mock_manager.dataset_exists.return_value = False
-        mock_manager.validate_dataset_name.side_effect = lambda x: x.lower()
+        # Setup mock registration client
+        mock_registration = Mock()
+        mock_registration.register_dataset.side_effect = DatasetError("Path does not exist")
         
-        mock_registrar = mock_registrar_class.return_value
-        mock_registrar.register.side_effect = DatasetError("Path does not exist")
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'RegistrationClient':
+                return mock_registration
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
         
         with pytest.raises(DatasetError, match="Path does not exist"):
             client.register_dataset('test', '/nonexistent/path')
     
-    @patch('mdm.api.DatasetRegistrar')
-    @patch('mdm.api.DatasetManager')
-    @patch('mdm.api.Path')
-    def test_register_dataset_success(self, mock_path_class, mock_manager_class, mock_registrar_class):
+    @patch('mdm.core.get_service')
+    def test_register_dataset_success(self, mock_get_service):
         """Test successful dataset registration."""
-        # Setup path
-        mock_path = Mock()
-        mock_path.exists.return_value = True
-        mock_path_class.return_value = mock_path
-        
-        # Setup registrar
-        mock_registrar = Mock()
+        # Setup mock registration client
+        mock_registration = Mock()
         mock_info = Mock(spec=DatasetInfo)
-        mock_registrar.register.return_value = mock_info
-        mock_registrar_class.return_value = mock_registrar
+        mock_registration.register_dataset.return_value = mock_info
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'RegistrationClient':
+                return mock_registration
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
         result = client.register_dataset(
@@ -144,236 +204,228 @@ class TestMDMClientRegistration:
         )
         
         assert result == mock_info
-        mock_registrar.register.assert_called_once()
+        mock_registration.register_dataset.assert_called_once()
 
 
 class TestMDMClientDataOperations:
     """Test data loading and query operations."""
     
-    @patch('mdm.api.BackendFactory')
-    @patch('mdm.api.DatasetManager')
-    def test_load_dataset_train(self, mock_manager_class, mock_factory_class):
+    @patch('mdm.core.get_service')
+    def test_load_dataset_train(self, mock_get_service):
         """Test loading train dataset."""
-        # Setup manager
-        mock_manager = mock_manager_class.return_value
-        mock_info = Mock()
-        mock_info.database = {'backend': 'sqlite', 'path': '/tmp/test.db'}
-        mock_info.tables = {'train': 'train_table'}
-        mock_manager.get_dataset.return_value = mock_info
-        
-        # Setup backend
-        mock_backend = Mock()
-        mock_backend.get_engine.return_value = Mock()
+        # Setup mock query client
+        mock_query = Mock()
         expected_df = pd.DataFrame({'col1': [1, 2, 3]})
-        mock_backend.read_table.return_value = expected_df
-        mock_factory_class.create.return_value = mock_backend
+        # load_dataset_files returns a dictionary, not a tuple
+        mock_query.load_dataset_files.return_value = {'train': expected_df}
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        client.get_dataset = Mock(return_value=mock_info)
-        client.manager.get_backend.return_value = mock_backend
-        mock_backend.read_table_to_dataframe.return_value = expected_df
+        result = client.load_dataset_files('test_dataset')
         
-        train_df, test_df = client.load_dataset_files('test_dataset')
-        
-        pd.testing.assert_frame_equal(train_df, expected_df)
-        assert test_df is None
+        assert 'train' in result
+        pd.testing.assert_frame_equal(result['train'], expected_df)
+        assert 'test' not in result
     
-    @patch('mdm.api.DatasetManager')
-    def test_load_dataset_specific_table(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_load_dataset_specific_table(self, mock_get_service):
         """Test loading specific table."""
-        client = MDMClient()
-        
-        # Setup mocks
-        mock_info = Mock()
-        mock_info.database = {'backend': 'sqlite', 'path': '/tmp/test.db'}
-        mock_info.tables = {'train': 'train_table', 'test': 'test_table'}
-        client.get_dataset = Mock(return_value=mock_info)
-        
-        mock_backend = Mock()
-        mock_engine = Mock()
-        mock_backend.get_engine.return_value = mock_engine
+        # Setup mock query client
+        mock_query = Mock()
         expected_df = pd.DataFrame({'col1': [4, 5, 6]})
-        mock_backend.read_table_to_dataframe.return_value = expected_df
-        client.manager.get_backend.return_value = mock_backend
+        # MDMClient doesn't have load_table, it has load_dataset with table parameter
+        mock_query.load_dataset.return_value = expected_df
         
-        # load_dataset_files doesn't take table parameter, use load_table instead
-        result = client.load_table('test_dataset', 'test')
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
+        
+        client = MDMClient()
+        result = client.load_dataset('test_dataset', table='test')
         
         pd.testing.assert_frame_equal(result, expected_df)
-        
-        # Verify
-        client.get_dataset.assert_called_once_with('test_dataset')
-        client.manager.get_backend.assert_called_once_with('test_dataset')
-        mock_backend.get_engine.assert_called_once_with('/tmp/test.db')
-        mock_backend.read_table_to_dataframe.assert_called_once_with('test_table', mock_engine)
+        mock_query.load_dataset.assert_called_once_with('test_dataset', table='test')
     
-    @patch('mdm.api.DatasetManager')
-    def test_load_dataset_not_found(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_load_dataset_not_found(self, mock_get_service):
         """Test loading non-existent dataset."""
-        mock_manager = mock_manager_class.return_value
-        mock_manager.get_dataset.return_value = None
+        # Setup mock query client
+        mock_query = Mock()
+        mock_query.load_dataset_files.side_effect = DatasetError("Dataset 'nonexistent' not found")
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
         
-        client.get_dataset = Mock(return_value=None)
-        
-        with pytest.raises(ValueError, match="Dataset 'nonexistent' not found"):
+        with pytest.raises(DatasetError, match="Dataset 'nonexistent' not found"):
             client.load_dataset_files('nonexistent')
     
-    @patch('mdm.api.BackendFactory')
-    @patch('mdm.api.DatasetManager')
-    def test_query(self, mock_manager_class, mock_factory_class):
+    @patch('mdm.core.get_service')
+    def test_query(self, mock_get_service):
         """Test executing query."""
-        mock_manager = mock_manager_class.return_value
-        mock_info = Mock()
-        mock_info.database = {'backend': 'sqlite', 'path': '/tmp/test.db'}
-        mock_manager.get_dataset.return_value = mock_info
-        
-        mock_backend = Mock()
-        mock_backend.get_engine.return_value = Mock()
+        # Setup mock query client
+        mock_query = Mock()
         expected_df = pd.DataFrame({'count': [42]})
-        mock_backend.query.return_value = expected_df
-        mock_factory_class.create.return_value = mock_backend
+        mock_query.query_dataset.return_value = expected_df
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'QueryClient':
+                return mock_query
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        mock_backend.execute_query.return_value = expected_df
-        client.manager.get_backend.return_value = mock_backend
-        
         result = client.query_dataset('test_dataset', "SELECT COUNT(*) FROM train")
         
         pd.testing.assert_frame_equal(result, expected_df)
-        mock_backend.execute_query.assert_called_once_with("SELECT COUNT(*) FROM train")
+        mock_query.query_dataset.assert_called_once_with('test_dataset', "SELECT COUNT(*) FROM train")
 
 
 class TestMDMClientUtils:
     """Test utility methods."""
     
-    @patch('mdm.api.DatasetManager')
-    def test_get_stats(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_get_stats(self, mock_get_service):
         """Test getting dataset statistics."""
-        mock_manager = mock_manager_class.return_value
-        stats_obj = Mock()
-        stats_obj.row_count = 1000
-        stats_obj.column_count = 10
-        mock_manager.get_statistics.return_value = stats_obj
+        # Setup mock management client
+        mock_management = Mock()
+        expected_stats = {
+            'dataset_name': 'test_dataset', 
+            'tables': {'train': {'row_count': 1000}},
+            'summary': {'total_rows': 1000, 'total_columns': 10}
+        }
+        mock_management.get_statistics.return_value = expected_stats
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'ManagementClient':
+                return mock_management
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
+        result = client.get_statistics('test_dataset')
         
-        # Use the statistics module directly as get_statistics does
-        with patch('mdm.dataset.statistics.DatasetStatistics') as mock_stats_class:
-            mock_stats = mock_stats_class.return_value
-            expected_stats = {
-                'dataset_name': 'test_dataset', 
-                'tables': {'train': {'row_count': stats_obj.row_count}},
-                'summary': {'total_rows': stats_obj.row_count, 'total_columns': stats_obj.column_count}
-            }
-            mock_stats.compute_statistics.return_value = expected_stats
-            
-            result = client.get_statistics('test_dataset')
-            
-            assert result == expected_stats
-            mock_stats.compute_statistics.assert_called_once_with('test_dataset', full=False, save=False)
+        assert result == expected_stats
+        mock_management.get_statistics.assert_called_once_with('test_dataset', False)
     
-    @patch('mdm.api.DatasetManager')
-    def test_export_dataset(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_export_dataset(self, mock_get_service):
         """Test exporting dataset."""
-        mock_manager = mock_manager_class.return_value
+        # Setup mock export client
+        mock_export = Mock()
+        mock_export.export_dataset.return_value = ['/tmp/export/train.parquet']
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'ExportClient':
+                return mock_export
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        with patch('mdm.dataset.operations.ExportOperation') as mock_export_op:
-            mock_export = mock_export_op.return_value
-            mock_export.execute.return_value = [Path('/tmp/export/train.parquet')]
-            
-            result = client.export_dataset('test_dataset', '/tmp/export', format='parquet')
-            
-            mock_export.execute.assert_called_once()
-            assert result == ['/tmp/export/train.parquet']
+        result = client.export_dataset('test_dataset', '/tmp/export', format='parquet')
+        
+        assert result == ['/tmp/export/train.parquet']
+        mock_export.export_dataset.assert_called_once_with('test_dataset', '/tmp/export', format='parquet')
     
-    @patch('mdm.api.DatasetManager')
-    def test_update_metadata(self, mock_manager_class):
+    @patch('mdm.core.get_service')
+    def test_update_metadata(self, mock_get_service):
         """Test updating dataset metadata."""
-        mock_manager = mock_manager_class.return_value
+        # Setup mock management client
+        mock_management = Mock()
+        mock_management.update_dataset.return_value = Mock()
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'ManagementClient':
+                return mock_management
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        # update_metadata doesn't exist, use update_dataset
-        mock_manager.update_dataset.return_value = Mock()
-        
         client.update_dataset(
             'test_dataset',
             description='Updated description',
             tags=['new', 'tags']
         )
         
-        mock_manager.update_dataset.assert_called_once_with(
+        mock_management.update_dataset.assert_called_once_with(
             'test_dataset',
-            {
-                'description': 'Updated description',
-                'tags': ['new', 'tags']
-            }
+            description='Updated description',
+            tags=['new', 'tags']
         )
 
 
 class TestMDMClientIntegration:
     """Test integration utilities."""
     
-    @patch('mdm.api.MLFrameworkAdapter')
-    @patch('mdm.api.DatasetManager')
-    def test_to_sklearn(self, mock_manager_class, mock_adapter_class):
+    @patch('mdm.core.get_service')
+    def test_to_sklearn(self, mock_get_service):
         """Test converting to sklearn format."""
-        mock_adapter = mock_adapter_class.return_value
+        # Setup mock ML client
+        mock_ml = Mock()
         expected_result = {'X_train': Mock(), 'y_train': Mock()}
-        mock_adapter.prepare_data.return_value = expected_result
+        mock_ml.prepare_for_ml.return_value = expected_result
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'MLIntegrationClient':
+                return mock_ml
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        
-        # Setup dataset info
-        mock_info = Mock()
-        mock_info.target_column = 'target'
-        mock_info.id_columns = ['id']
-        client.get_dataset = Mock(return_value=mock_info)
-        
-        # Setup load_dataset_files
-        train_df = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
-        test_df = pd.DataFrame({'feature': [3, 4], 'target': [1, 0]})
-        client.load_dataset_files = Mock(return_value=(train_df, test_df))
         
         # Call prepare_for_ml
-        result = client.prepare_for_ml('test_dataset', framework='sklearn', sample_size=100)
+        result = client.prepare_for_ml('test_dataset', framework='sklearn')
         
         assert result == expected_result
-        client.get_dataset.assert_called_once_with('test_dataset')
-        client.load_dataset_files.assert_called_once_with('test_dataset', 100)
-        mock_adapter_class.assert_called_once_with('sklearn')
-        mock_adapter.prepare_data.assert_called_once_with(
-            train_df, test_df, 'target', ['id']
-        )
+        mock_ml.prepare_for_ml.assert_called_once_with('test_dataset', 'sklearn')
     
-    @patch('mdm.api.MLFrameworkAdapter')
-    @patch('mdm.api.DatasetManager')
-    def test_to_tensorflow(self, mock_manager_class, mock_adapter_class):
+    @patch('mdm.core.get_service')
+    def test_to_tensorflow(self, mock_get_service):
         """Test converting to TensorFlow format."""
-        mock_adapter = mock_adapter_class.return_value
+        # Setup mock ML client
+        mock_ml = Mock()
         expected_result = {'train_ds': Mock(), 'test_ds': Mock()}
-        mock_adapter.prepare_data.return_value = expected_result
+        mock_ml.prepare_for_ml.return_value = expected_result
+        
+        # Configure mock_get_service
+        def get_service_side_effect(cls):
+            if cls.__name__ == 'MLIntegrationClient':
+                return mock_ml
+            return Mock()
+        
+        mock_get_service.side_effect = get_service_side_effect
         
         client = MDMClient()
-        
-        # Setup dataset info
-        mock_info = Mock()
-        mock_info.target_column = 'target'
-        mock_info.id_columns = None
-        client.get_dataset = Mock(return_value=mock_info)
-        
-        # Setup load_dataset_files
-        train_df = pd.DataFrame({'feature': [1, 2], 'target': [0, 1]})
-        test_df = pd.DataFrame({'feature': [3, 4], 'target': [1, 0]})
-        client.load_dataset_files = Mock(return_value=(train_df, test_df))
         
         # Call prepare_for_ml
         result = client.prepare_for_ml('test_dataset', framework='tensorflow')
         
         assert result == expected_result
-        mock_adapter_class.assert_called_once_with('tensorflow')
-        mock_adapter.prepare_data.assert_called_once_with(
-            train_df, test_df, 'target', None
-        )
+        mock_ml.prepare_for_ml.assert_called_once_with('test_dataset', 'tensorflow')
