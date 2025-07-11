@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Optional
 from loguru import logger
 
-# Remove default logger
-logger.remove()
+# Don't remove handlers here - let main.py manage them
 
 # Global logger configuration
 _configured = False
@@ -118,15 +117,7 @@ def intercept_standard_logging():
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
 
-# Auto-configure on import
-import os
-if not _configured:
-    level = os.environ.get("MDM_LOGGING_LEVEL", "INFO")
-    log_file = os.environ.get("MDM_LOGGING_FILE")
-    configure_logging(level=level, log_file=log_file)
-    
-    # Intercept standard logging
-    intercept_standard_logging()
+# Don't auto-configure on import - let main.py handle it
 
 
 __all__ = ["logger", "get_logger", "configure_logging"]

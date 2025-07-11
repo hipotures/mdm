@@ -207,6 +207,7 @@ class DatasetRegistrar:
             }
         )
 
+        # Log dataset registration
         logger.info(f"Dataset '{normalized_name}' registered successfully")
         return dataset_info
 

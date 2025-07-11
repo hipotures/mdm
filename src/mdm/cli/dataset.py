@@ -158,6 +158,10 @@ def register(
     ),
 ):
     """Register a new dataset."""
+    # Log registration start
+    from loguru import logger
+    logger.info(f"Starting registration of dataset '{name}'")
+    
     try:
         registrar = DatasetRegistrar()
 

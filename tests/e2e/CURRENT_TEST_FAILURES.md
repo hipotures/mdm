@@ -1,12 +1,25 @@
 # Current MDM E2E Test Failures
 
-**Generated:** 2025-07-08 21:30:00
+**Generated:** 2025-07-11 09:45:15
 
-## Summary: 0 failures
+## Summary: 2 failures across 1 categories
 
-All E2E tests are currently passing.
+## Failures by Error Type
 
-## Recent Fixes
+### Unknown (2 failures)
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_file_logging_yaml
+- **Logging Configuration**: test_14_logging.py::TestLoggingConfiguration::test_file_logging_env
 
-### Dataset Info/Stats
-- **test_dataset_stats_null_counts**: Fixed by correcting the key name in dataset.py from 'total_missing' to 'total_missing_cells' to match the statistics module output.
+## Detailed Failures by Category
+
+### Logging Configuration (2 failures)
+
+#### test_file_logging_yaml
+- **Error Type**: Unknown
+- **Message**: assert "test_file_log" in log_content
+
+#### test_file_logging_env
+- **Error Type**: Unknown
+- **Message**: assert "test_file_log" in log_content
+
+## Common Issues and Recommended Fixes

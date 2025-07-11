@@ -97,7 +97,7 @@ class LoggingConfig(BaseModel):
     file: str = Field(default="mdm.log", description="Log file name")
     max_bytes: int = Field(default=10485760, ge=1, description="Max log file size")
     backup_count: int = Field(default=5, ge=0, description="Number of backup files")
-    format: Literal["json", "console"] = Field(default="json", description="Log format")
+    format: Literal["json", "console"] = Field(default="console", description="Log format")
 
 
 class TemporalConfig(BaseModel):
