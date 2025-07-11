@@ -1,13 +1,19 @@
 """Core functionality for MDM."""
 
-from .container import (
-    DIContainer,
-    container,
-    configure_container,
+from .di import (
+    Container,
+    get_container,
+    configure_services,
     inject,
     get_service,
-    has_service,
-    ServiceNotFoundError,
+    create_scope,
+    ServiceNotRegisteredError,
+)
+from .exceptions import (
+    MDMError,
+    DatasetError,
+    StorageError,
+    ConfigError,
 )
 from .metrics import (
     MetricsCollector,
@@ -26,13 +32,18 @@ from .logging import (
 
 __all__ = [
     # DI Container
-    'DIContainer',
-    'container',
-    'configure_container',
+    'Container',
+    'get_container',
+    'configure_services',
     'inject',
     'get_service',
-    'has_service',
-    'ServiceNotFoundError',
+    'create_scope',
+    'ServiceNotRegisteredError',
+    # Exceptions
+    'MDMError',
+    'DatasetError',
+    'StorageError',
+    'ConfigError',
     # Metrics
     'MetricsCollector',
     'metrics_collector',

@@ -23,22 +23,34 @@ class MDMClient:
     a clean API while keeping the implementation modular.
     """
 
-    def __init__(self, config=None):
-        """Initialize MDM client.
+    def __init__(
+        self,
+        registration: Optional[RegistrationClient] = None,
+        query: Optional[QueryClient] = None,
+        ml: Optional[MLIntegrationClient] = None,
+        export: Optional[ExportClient] = None,
+        management: Optional[ManagementClient] = None,
+        config: Optional[dict] = None
+    ):
+        """Initialize MDM client with dependency injection.
 
         Args:
-            config: Optional configuration object. If not provided,
-                   loads from default location.
+            registration: Registration client instance
+            query: Query client instance  
+            ml: ML integration client instance
+            export: Export client instance
+            management: Management client instance
+            config: Optional configuration dict
         """
-        self.config = config or get_config()
-        self._manager = DatasetManager()
+        # If clients are not provided, get them from DI container
+        from mdm.core import get_service
         
-        # Initialize specialized clients
-        self.registration = RegistrationClient(self.config, self._manager)
-        self.query = QueryClient(self.config, self._manager)
-        self.ml = MLIntegrationClient(self.config, self._manager)
-        self.export = ExportClient(self.config, self._manager)
-        self.management = ManagementClient(self.config, self._manager)
+        self.config = config or get_config()
+        self.registration = registration or get_service(RegistrationClient)
+        self.query = query or get_service(QueryClient)
+        self.ml = ml or get_service(MLIntegrationClient)
+        self.export = export or get_service(ExportClient)
+        self.management = management or get_service(ManagementClient)
         
         # Performance monitoring
         self._performance_monitor = None

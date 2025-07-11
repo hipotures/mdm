@@ -16,6 +16,22 @@ class ConfigManager:
 
     CONFIG_FILE_NAME = "mdm.yaml"
     ENV_PREFIX = "MDM_"
+    
+    # Mapping of environment variable patterns to config paths
+    # This replaces the hardcoded string manipulations
+    ENV_MAPPINGS = {
+        # Pattern: (env_parts, config_path)
+        ("feature", "engineering"): "feature_engineering",
+        ("default", "backend"): "default_backend",
+        ("batch", "size"): "batch_size",
+        ("connection", "timeout"): "connection_timeout",
+        ("show", "progress"): "show_progress",
+        ("datasets", "path"): "datasets_path",
+        ("configs", "path"): "configs_path",
+        ("logs", "path"): "logs_path",
+        ("custom", "features", "path"): "custom_features_path",
+        ("n", "bins"): "n_bins",
+    }
 
     def __init__(self, config_path: Optional[Path] = None):
         """Initialize configuration manager.
@@ -132,38 +148,8 @@ class ConfigManager:
             if not parts:
                 continue
 
-            # Handle special cases where underscore is part of the key name
-            # e.g., MDM_DATABASE_DEFAULT_BACKEND -> database.default_backend
-            if len(parts) >= 2 and parts[0] == "feature" and parts[1] == "engineering":
-                # Combine feature_engineering
-                parts = ["feature_engineering"] + parts[2:]
-            if len(parts) >= 3 and parts[1] == "default" and parts[2] == "backend":
-                # Combine default_backend
-                parts = [parts[0], "default_backend"] + parts[3:]
-            elif len(parts) >= 3 and parts[1] == "batch" and parts[2] == "size":
-                # Combine batch_size
-                parts = [parts[0], "batch_size"] + parts[3:]
-            elif len(parts) >= 3 and parts[1] == "connection" and parts[2] == "timeout":
-                # Combine connection_timeout
-                parts = [parts[0], "connection_timeout"] + parts[3:]
-            elif len(parts) >= 3 and parts[1] == "show" and parts[2] == "progress":
-                # Combine show_progress
-                parts = [parts[0], "show_progress"] + parts[3:]
-            elif len(parts) >= 3 and parts[1] == "datasets" and parts[2] == "path":
-                # Combine datasets_path
-                parts = [parts[0], "datasets_path"] + parts[3:]
-            elif len(parts) >= 3 and parts[1] == "configs" and parts[2] == "path":
-                # Combine configs_path
-                parts = [parts[0], "configs_path"] + parts[3:]
-            elif len(parts) >= 3 and parts[1] == "logs" and parts[2] == "path":
-                # Combine logs_path
-                parts = [parts[0], "logs_path"] + parts[3:]
-            elif len(parts) >= 4 and parts[1] == "custom" and parts[2] == "features" and parts[3] == "path":
-                # Combine custom_features_path
-                parts = [parts[0], "custom_features_path"] + parts[4:]
-            elif len(parts) >= 3 and parts[-2] == "n" and parts[-1] == "bins":
-                # Combine n_bins at the end
-                parts = parts[:-2] + ["n_bins"]
+            # Apply mappings to combine multi-word keys
+            parts = self._apply_key_mappings(parts)
 
             # Navigate config dict and set value
             current = config_dict
@@ -180,6 +166,30 @@ class ConfigManager:
             current[key] = self._convert_env_value(env_value)
 
         return config_dict
+    
+    def _apply_key_mappings(self, parts: list[str]) -> list[str]:
+        """Apply ENV_MAPPINGS to combine multi-word keys.
+        
+        Args:
+            parts: List of environment variable parts
+            
+        Returns:
+            List with multi-word keys combined according to ENV_MAPPINGS
+        """
+        # Check each mapping pattern
+        for pattern, replacement in self.ENV_MAPPINGS.items():
+            pattern_len = len(pattern)
+            
+            # Search for the pattern in parts
+            for i in range(len(parts) - pattern_len + 1):
+                # Check if pattern matches at position i
+                if tuple(parts[i:i + pattern_len]) == pattern:
+                    # Replace the pattern with the combined key
+                    new_parts = parts[:i] + [replacement] + parts[i + pattern_len:]
+                    # Recursively apply in case there are multiple patterns
+                    return self._apply_key_mappings(new_parts)
+        
+        return parts
 
     def _convert_env_value(self, value: str) -> Any:
         """Convert environment variable string to appropriate type."""

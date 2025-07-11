@@ -12,7 +12,13 @@ os.environ["YDATA_SUPPRESS_BANNER"] = "1"
 # Suppress all tqdm progress bars globally
 os.environ["TQDM_DISABLE"] = "1"
 
-__version__ = "0.2.0"
+try:
+    from importlib.metadata import version, PackageNotFoundError
+    __version__ = version("mdm")
+except PackageNotFoundError:
+    # Package is not installed, use development version
+    __version__ = "0.0.0+dev"
+
 __author__ = "MDM Development Team"
 
 # Lazy imports - only import when actually used
