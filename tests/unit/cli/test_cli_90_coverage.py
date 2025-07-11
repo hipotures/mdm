@@ -378,7 +378,7 @@ class TestTimeseriesCoverage:
             'value': range(100),
             'group': ['A'] * 50 + ['B'] * 50
         })
-        mock_client.load_dataset_files.return_value = (train_df, None)
+        mock_client.load_dataset_files.return_value = {'train': train_df}
         mock_client_class.return_value = mock_client
         
         # Setup analyzer mock
