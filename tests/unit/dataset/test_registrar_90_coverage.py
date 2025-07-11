@@ -172,7 +172,23 @@ class TestDatasetRegistrar90Coverage:
             with patch('mdm.dataset.registrar.logger') as mock_logger:
                 # Mock the rest to continue
                 with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
-                    with patch('mdm.dataset.registrar.BackendFactory'):
+                    with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                        mock_backend = Mock()
+                        mock_backend.create_table_from_dataframe = Mock()
+                        mock_backend.get_table_info.return_value = {
+                            'columns': [
+                                {'name': 'id', 'type': 'INTEGER'},
+                                {'name': 'value', 'type': 'INTEGER'}
+                            ],
+                            'row_count': 1
+                        }
+                        mock_backend.read_table_to_dataframe.return_value = pd.DataFrame({
+                            'id': [1], 'value': [100]
+                        })
+                        mock_backend.close_connections = Mock()
+                        mock_backend.get_engine.return_value = Mock()
+                        mock_factory.create.return_value = mock_backend
+                        
                         with patch('pathlib.Path.mkdir'):
                             registrar.register('test_dataset', data_path, force=True)
                             
@@ -198,7 +214,24 @@ class TestDatasetRegistrar90Coverage:
         mock_manager.dataset_exists.return_value = False
         
         with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
-            with patch('mdm.dataset.registrar.BackendFactory'):
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.create_table_from_dataframe = Mock()
+                mock_backend.get_table_info.return_value = {
+                    'columns': [
+                        {'name': 'id', 'type': 'INTEGER'},
+                        {'name': 'value', 'type': 'INTEGER'},
+                        {'name': 'target', 'type': 'INTEGER'}
+                    ],
+                    'row_count': 1
+                }
+                mock_backend.read_table_to_dataframe.return_value = pd.DataFrame({
+                    'id': [1], 'value': [100], 'target': [0]
+                })
+                mock_backend.close_connections = Mock()
+                mock_backend.get_engine.return_value = Mock()
+                mock_factory.create.return_value = mock_backend
+                
                 with patch('pathlib.Path.mkdir'):
                     result = registrar.register(
                         'test_dataset', 
@@ -500,7 +533,7 @@ class TestDatasetRegistrar90Coverage:
                     result = registrar._load_data_files(files, db_info, progress)
                     # Unknown format files are skipped with a warning
                     assert len(result) == 0
-                    mock_logger.warning.assert_called_with(f"Unsupported file type: {unknown_file}")
+                    mock_logger.warning.assert_called_with(f"No loader found for file type: {unknown_file}")
 
     def test_load_data_files_read_error(self, registrar, tmp_path):
         """Test handling file read errors."""
@@ -510,7 +543,18 @@ class TestDatasetRegistrar90Coverage:
         files = {'bad': bad_json}
         db_info = {'backend': 'sqlite', 'path': str(tmp_path / 'test.db')}
         
-        with patch('mdm.dataset.registrar.BackendFactory'):
+        with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+            mock_backend = Mock()
+            mock_backend.create_table_from_dataframe = Mock()
+            mock_backend.get_table_info.return_value = {
+                'columns': [{'name': 'id', 'type': 'INTEGER'}],
+                'row_count': 0
+            }
+            mock_backend.read_table_to_dataframe.return_value = pd.DataFrame()
+            mock_backend.close_connections = Mock()
+            mock_backend.get_engine.return_value = Mock()
+            mock_factory.create.return_value = mock_backend
+            
             progress = Progress()
             with progress:
                 with pytest.raises(DatasetError, match="Failed to load"):
@@ -1138,7 +1182,24 @@ class TestDatasetRegistrar90Coverage:
         data_path.write_text("id,value,target\n1,100,0\n")
         
         with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
-            with patch('mdm.dataset.registrar.BackendFactory'):
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.create_table_from_dataframe = Mock()
+                mock_backend.get_table_info.return_value = {
+                    'columns': [
+                        {'name': 'id', 'type': 'INTEGER'},
+                        {'name': 'value', 'type': 'INTEGER'},
+                        {'name': 'target', 'type': 'INTEGER'}
+                    ],
+                    'row_count': 1
+                }
+                mock_backend.read_table_to_dataframe.return_value = pd.DataFrame({
+                    'id': [1], 'value': [100], 'target': [0]
+                })
+                mock_backend.close_connections = Mock()
+                mock_backend.get_engine.return_value = Mock()
+                mock_factory.create.return_value = mock_backend
+                
                 with patch.object(registrar, '_compute_initial_statistics', return_value=None):
                     with patch('pathlib.Path.mkdir'):
                         result = registrar.register('test_dataset', data_path)
@@ -1156,7 +1217,24 @@ class TestDatasetRegistrar90Coverage:
         registrar.config.feature_engineering.enabled = False
         
         with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
-            with patch('mdm.dataset.registrar.BackendFactory'):
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.create_table_from_dataframe = Mock()
+                mock_backend.get_table_info.return_value = {
+                    'columns': [
+                        {'name': 'id', 'type': 'INTEGER'},
+                        {'name': 'value', 'type': 'INTEGER'},
+                        {'name': 'target', 'type': 'INTEGER'}
+                    ],
+                    'row_count': 1
+                }
+                mock_backend.read_table_to_dataframe.return_value = pd.DataFrame({
+                    'id': [1], 'value': [100], 'target': [0]
+                })
+                mock_backend.close_connections = Mock()
+                mock_backend.get_engine.return_value = Mock()
+                mock_factory.create.return_value = mock_backend
+                
                 with patch('pathlib.Path.mkdir'):
                     result = registrar.register('test_dataset', data_path)
                     
@@ -1173,7 +1251,24 @@ class TestDatasetRegistrar90Coverage:
         registrar.config.feature_engineering.enabled = True
         
         with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
-            with patch('mdm.dataset.registrar.BackendFactory'):
+            with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                mock_backend = Mock()
+                mock_backend.create_table_from_dataframe = Mock()
+                mock_backend.get_table_info.return_value = {
+                    'columns': [
+                        {'name': 'id', 'type': 'INTEGER'},
+                        {'name': 'value', 'type': 'INTEGER'},
+                        {'name': 'target', 'type': 'INTEGER'}
+                    ],
+                    'row_count': 1
+                }
+                mock_backend.read_table_to_dataframe.return_value = pd.DataFrame({
+                    'id': [1], 'value': [100], 'target': [0]
+                })
+                mock_backend.close_connections = Mock()
+                mock_backend.get_engine.return_value = Mock()
+                mock_factory.create.return_value = mock_backend
+                
                 with patch('pathlib.Path.mkdir'):
                     # But kwargs override to disable
                     result = registrar.register(
