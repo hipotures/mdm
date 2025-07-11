@@ -16,7 +16,7 @@ from mdm.storage.backends.stateless_sqlite import StatelessSQLiteBackend
 from mdm.storage.backends.stateless_duckdb import StatelessDuckDBBackend
 from mdm.storage.factory import BackendFactory
 from mdm.core.exceptions import StorageError, BackendError
-from mdm.config import MDMConfig
+from mdm.models.config import MDMConfig
 
 
 class TestStatelessSQLiteBackend:
