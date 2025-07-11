@@ -120,6 +120,9 @@ class QueryClient(BaseClient):
             db_info = dataset.database
             db_path = f"{db_info['backend']}://{db_info['user']}:{db_info['password']}@{db_info['host']}:{db_info['port']}/{db_info['database']}"
 
+        # Get engine from backend
+        engine = backend.get_engine(db_path)
+        
         # Load tables
         result = {}
         tables_to_load = dict(dataset.tables)
@@ -130,9 +133,9 @@ class QueryClient(BaseClient):
         for table_key, table_name in tables_to_load.items():
             logger.info(f"Loading table {table_name}")
             if limit:
-                df = backend.read_table_to_dataframe(table_name, db_path, limit=limit)
+                df = backend.read_table_to_dataframe(table_name, engine, limit=limit)
             else:
-                df = backend.read_table_to_dataframe(table_name, db_path)
+                df = backend.read_table_to_dataframe(table_name, engine)
             result[table_key] = df
 
         return result

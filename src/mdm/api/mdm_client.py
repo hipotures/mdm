@@ -1,6 +1,7 @@
 """Refactored MDM Client - facade for specialized clients."""
 
-from typing import Optional
+from typing import Optional, Dict
+import pandas as pd
 
 from mdm.config import get_config
 from mdm.dataset.manager import DatasetManager
@@ -105,6 +106,14 @@ class MDMClient:
     def get_statistics(self, name: str, full: bool = False):
         """Get pre-computed statistics for a dataset. See ManagementClient.get_statistics."""
         return self.management.get_statistics(name, full)
+    
+    def load_dataset_files(self, name: str, include_features: bool = True, limit: Optional[int] = None) -> Dict[str, pd.DataFrame]:
+        """Load dataset files. See QueryClient.load_dataset_files."""
+        return self.query.load_dataset_files(name, include_features, limit)
+    
+    def split_time_series(self, name: str, n_splits: int = 5, test_size: float = 0.2, gap: int = 0, strategy: str = "expanding"):
+        """Split time series for cross-validation. See MLIntegrationClient.split_time_series."""
+        return self.ml.split_time_series(name, n_splits, test_size, gap, strategy)
     
     @property
     def performance_monitor(self) -> PerformanceMonitor:

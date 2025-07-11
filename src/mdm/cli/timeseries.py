@@ -33,7 +33,13 @@ def analyze(
             raise typer.Exit(1)
 
         # Load data
-        train_df, _ = client.load_dataset_files(dataset)
+        dfs = client.load_dataset_files(dataset)
+        
+        # Get the train dataframe
+        train_df = dfs.get('train', dfs.get('data', None))
+        if train_df is None:
+            console.print(f"[red]Error:[/red] No train data found in dataset '{dataset}'")
+            raise typer.Exit(1)
 
         # Analyze
         analyzer = TimeSeriesAnalyzer(dataset_info.time_column, dataset_info.target_column)
@@ -78,11 +84,13 @@ def analyze(
 @app.command()
 def split(
     dataset: str = typer.Argument(..., help="Dataset name"),
-    test_days: int = typer.Option(30, "--test-days", help="Number of days for test set"),
-    val_days: Optional[int] = typer.Option(None, "--val-days", help="Number of days for validation set"),
+    test_size: float = typer.Option(0.2, "--test-size", help="Test set size (fraction or number of days)"),
+    n_splits: int = typer.Option(3, "--n-splits", help="Number of splits for cross-validation"),
+    gap: int = typer.Option(0, "--gap", help="Gap between train and test sets"),
+    strategy: str = typer.Option("expanding", "--strategy", help="Strategy: 'expanding' or 'sliding'"),
     output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for splits"),
 ):
-    """Split time series dataset by time."""
+    """Split time series dataset for cross-validation."""
     try:
         client = MDMClient()
 
@@ -93,19 +101,29 @@ def split(
             raise typer.Exit(1)
 
         # Split data
-        console.print(f"Splitting dataset '{dataset}' by time...")
-        splits = client.split_time_series(dataset, test_days, val_days)
+        console.print(f"Splitting dataset '{dataset}' for cross-validation...")
+        splits = client.split_time_series(dataset, n_splits, test_size, gap, strategy)
 
         # Display split info
-        console.print("\n[bold]Split Results:[/bold]")
-        for split_name, df in splits.items():
+        console.print(f"\n[bold]Cross-Validation Splits ({strategy} window):[/bold]")
+        console.print(f"Number of splits: {len(splits)}")
+        console.print(f"Test size: {test_size}")
+        if gap > 0:
+            console.print(f"Gap between train/test: {gap}")
+        
+        for i, (train_df, test_df) in enumerate(splits):
+            console.print(f"\n[bold]Split {i+1}:[/bold]")
             time_col = dataset_info.time_column
-            if time_col and time_col in df.columns:
-                time_min = df[time_col].min()
-                time_max = df[time_col].max()
-                console.print(f"  {split_name}: {len(df):,} rows ({time_min} to {time_max})")
+            if time_col and time_col in train_df.columns and time_col in test_df.columns:
+                train_min = train_df[time_col].min()
+                train_max = train_df[time_col].max()
+                test_min = test_df[time_col].min()
+                test_max = test_df[time_col].max()
+                console.print(f"  train: {len(train_df):,} rows ({train_min} to {train_max})")
+                console.print(f"  test:  {len(test_df):,} rows ({test_min} to {test_max})")
             else:
-                console.print(f"  {split_name}: {len(df):,} rows")
+                console.print(f"  train: {len(train_df):,} rows")
+                console.print(f"  test:  {len(test_df):,} rows")
 
         # Save splits if output directory specified
         if output_dir:
@@ -144,7 +162,11 @@ def validate(
             raise typer.Exit(1)
 
         # Load data
-        train_df, _ = client.load_dataset_files(dataset)
+        dfs = client.load_dataset_files(dataset)
+        train_df = dfs.get('train', dfs.get('data', None))
+        if train_df is None:
+            console.print(f"[red]Error:[/red] No train data found in dataset '{dataset}'")
+            raise typer.Exit(1)
 
         # Create folds
         from mdm.utils.time_series import TimeSeriesSplitter

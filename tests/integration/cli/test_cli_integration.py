@@ -301,12 +301,12 @@ class TestCLIWorkflows:
         # Split time series
         result = runner.invoke(app, [
             "timeseries", "split", "ts_test",
-            "--test-days", "30",
-            "--val-days", "30"
+            "--test-size", "0.2",
+            "--n-splits", "3"
         ])
         assert result.exit_code == 0
+        assert "Cross-Validation Splits" in result.stdout
         assert "train:" in result.stdout
-        assert "validation:" in result.stdout
         assert "test:" in result.stdout
         
         # Cross-validation
