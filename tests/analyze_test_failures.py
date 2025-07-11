@@ -44,36 +44,39 @@ class UnifiedTestRunner(BaseTestRunner):
         if self.scope in ["unit", "all"]:
             categories.extend([
                 # CLI tests
-                ("tests/unit/cli/test_main.py", "CLI Main Module"),
                 ("tests/unit/cli/test_dataset_commands.py", "Dataset Commands"),
                 ("tests/unit/cli/test_batch_commands.py", "Batch Commands"),
-                ("tests/unit/cli/test_timeseries_commands.py", "Timeseries Commands"),
-                ("tests/unit/cli/test_cli_90_coverage.py", "CLI Coverage Tests"),
-                ("tests/unit/cli/test_cli_improved_coverage.py", "CLI Improved Coverage"),
                 ("tests/unit/cli/test_cli_final_coverage.py", "CLI Final Coverage"),
                 ("tests/unit/cli/test_cli_direct_90.py", "CLI Direct Tests"),
-                ("tests/unit/cli/test_cli_final_90.py", "CLI Final Tests"),
+                ("tests/unit/cli/test_dataset_update_comprehensive.py", "Dataset Update Comprehensive"),
                 
                 # API tests
                 ("tests/unit/test_api_simple.py", "API Simple Tests"),
                 ("tests/unit/test_api_complete.py", "API Complete Tests"),
                 ("tests/unit/test_api_comprehensive.py", "API Comprehensive Tests"),
+                ("tests/unit/api/test_api_error_handling.py", "API Error Handling"),
                 
                 # Dataset tests
                 ("tests/unit/dataset/test_dataset_config.py", "Dataset Config"),
                 ("tests/unit/dataset/test_manager_complete.py", "Dataset Manager"),
+                ("tests/unit/dataset/test_manager_comprehensive.py", "Dataset Manager Comprehensive"),
                 ("tests/unit/dataset/test_registrar_final.py", "Dataset Registrar"),
+                ("tests/unit/dataset/test_registrar_comprehensive.py", "Dataset Registrar Comprehensive"),
+                ("tests/unit/dataset/test_registrar_90_coverage.py", "Dataset Registrar 90% Coverage"),
+                ("tests/unit/dataset/test_registrar_coverage.py", "Dataset Registrar Coverage"),
+                ("tests/unit/dataset/test_registrar_enhanced.py", "Dataset Registrar Enhanced"),
+                ("tests/unit/dataset/test_metadata_comprehensive.py", "Metadata Comprehensive"),
+                ("tests/unit/dataset/test_metadata_90_coverage.py", "Metadata 90% Coverage"),
+                ("tests/unit/dataset/test_operations_comprehensive.py", "Operations Comprehensive"),
+                ("tests/unit/dataset/test_utils_complete.py", "Dataset Utils Complete"),
+                ("tests/unit/dataset/test_utils_comprehensive.py", "Dataset Utils Comprehensive"),
                 
                 # Storage tests
-                ("tests/unit/storage/test_sqlite_comprehensive.py", "SQLite Storage"),
-                ("tests/unit/storage/test_duckdb_complete.py", "DuckDB Storage"),
-                ("tests/unit/storage/test_postgresql_complete.py", "PostgreSQL Storage"),
+                ("tests/unit/storage/test_stateless_backends.py", "Stateless Storage Backends"),
                 
                 # Repository tests
-                ("tests/unit/repositories/test_backend_factory.py", "Backend Factory"),
                 ("tests/unit/repositories/test_dataset_manager.py", "Dataset Manager Repository"),
                 ("tests/unit/repositories/test_feature_registry.py", "Feature Registry"),
-                ("tests/unit/repositories/test_storage_backend.py", "Storage Backend"),
                 
                 # Service tests
                 ("tests/unit/services/test_dataset_service.py", "Dataset Service"),
@@ -83,6 +86,33 @@ class UnifiedTestRunner(BaseTestRunner):
                 ("tests/unit/services/batch/test_batch_export.py", "Batch Export"),
                 ("tests/unit/services/batch/test_batch_stats.py", "Batch Stats"),
                 ("tests/unit/services/batch/test_batch_remove.py", "Batch Remove"),
+                ("tests/unit/services/operations/test_export_operation.py", "Export Operation"),
+                ("tests/unit/services/operations/test_info_operation.py", "Info Operation"),
+                ("tests/unit/services/operations/test_list_operation.py", "List Operation"),
+                ("tests/unit/services/operations/test_remove_operation.py", "Remove Operation"),
+                ("tests/unit/services/operations/test_search_operation.py", "Search Operation"),
+                ("tests/unit/services/operations/test_stats_operation.py", "Stats Operation"),
+                ("tests/unit/services/operations/test_update_operation.py", "Update Operation"),
+                ("tests/unit/services/registration/test_auto_detect.py", "Auto Detect"),
+                ("tests/unit/services/registration/test_dataset_registrar.py", "Dataset Registrar Service"),
+                
+                # Feature tests
+                ("tests/unit/features/test_engine_complete.py", "Feature Engine Complete"),
+                
+                # Utils tests
+                ("tests/unit/utils/test_paths.py", "Utils Paths"),
+                ("tests/unit/utils/test_paths_comprehensive.py", "Utils Paths Comprehensive"),
+                ("tests/unit/utils/test_time_series_utils.py", "Time Series Utils"),
+                
+                # Other unit tests
+                ("tests/unit/test_data_integrity.py", "Data Integrity"),
+                ("tests/unit/test_edge_cases.py", "Edge Cases"),
+                ("tests/unit/test_large_files.py", "Large Files"),
+                ("tests/unit/test_mdm_models.py", "MDM Models"),
+                ("tests/unit/test_security.py", "Security"),
+                ("tests/unit/test_serialization.py", "Serialization"),
+                ("tests/unit/test_system_resources.py", "System Resources"),
+                ("tests/unit/test_time_series.py", "Time Series"),
             ])
         
         # Integration tests
@@ -94,6 +124,7 @@ class UnifiedTestRunner(BaseTestRunner):
                 ("tests/integration/test_dataset_update.py", "Dataset Update"),
                 ("tests/integration/test_statistics_computation.py", "Statistics Computation"),
                 ("tests/integration/test_storage_backends.py", "Storage Backends"),
+                ("tests/test_integration_testing.py", "Integration Testing Framework"),
             ])
         
         # E2E tests
@@ -107,6 +138,8 @@ class UnifiedTestRunner(BaseTestRunner):
                 ("tests/e2e/test_02_dataset/test_21_register.py", "Dataset Registration"),
                 ("tests/e2e/test_02_dataset/test_22_list.py", "Dataset Listing"),
                 ("tests/e2e/test_02_dataset/test_23_info.py", "Dataset Info/Stats"),
+                ("tests/e2e/test_isolation.py", "E2E Isolation"),
+                ("tests/e2e/test_summary.py", "E2E Summary"),
             ])
         
         return categories
@@ -207,7 +240,9 @@ def main():
                '  %(prog)s --scope unit                       # Analyze only unit tests\n'
                '  %(prog)s --scope e2e --github               # Analyze E2E tests and create issues (dry run)\n'
                '  %(prog)s --github --no-dry-run --limit 50   # Create up to X GitHub issues\n'
-               '  %(prog)s --category "CLI*"                  # Analyze only CLI-related tests\n',
+               '  %(prog)s --category "CLI*"                  # Analyze only CLI-related tests\n'
+               '  %(prog)s --scope e2e --parallel 4           # Run E2E tests with 4 parallel workers\n'
+               '  %(prog)s --parallel 8                       # Run all tests with 8 parallel workers\n',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -232,6 +267,10 @@ def main():
     parser.add_argument('--output', '-o', help='Save report to file')
     parser.add_argument('--quiet', '-q', action='store_true',
                        help='Minimal output')
+    
+    # Parallel execution
+    parser.add_argument('--parallel', '-p', type=int, default=1, metavar='N',
+                       help='Number of parallel test workers (default: 1, sequential)')
     
     args = parser.parse_args()
     
@@ -273,7 +312,7 @@ def main():
     
     # Run tests
     runner = UnifiedTestRunner(scope=args.scope)
-    test_suites = runner.run_all_tests(show_progress=not args.quiet)
+    test_suites = runner.run_all_tests(show_progress=not args.quiet, max_workers=args.parallel)
     
     # Get all failures
     all_failures = []

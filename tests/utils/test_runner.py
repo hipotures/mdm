@@ -8,6 +8,10 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 import json
+import time
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 try:
     from rich.console import Console
@@ -92,6 +96,16 @@ class BaseTestRunner(ABC):
             "--durations=0"  # Show all test durations
         ]
         
+        # For E2E tests, ensure proper isolation
+        env = None
+        if 'e2e' in str(test_path):
+            import os
+            env = os.environ.copy()
+            # Each test gets its own isolated temp directory
+            import tempfile
+            temp_dir = tempfile.mkdtemp(prefix="mdm_test_")
+            env['MDM_HOME_DIR'] = temp_dir
+        
         # Only add json report if plugin is available
         try:
             import pytest_json_report
@@ -105,7 +119,7 @@ class BaseTestRunner(ABC):
         if extra_args:
             cmd.extend(extra_args)
         
-        return subprocess.run(cmd, capture_output=True, text=True)
+        return subprocess.run(cmd, capture_output=True, text=True, env=env)
     
     def parse_pytest_output(self, result: subprocess.CompletedProcess, test_file: str, category: str) -> TestSuite:
         """Parse pytest output and create TestSuite."""
@@ -277,9 +291,58 @@ class BaseTestRunner(ABC):
             seconds = int(duration % 60)
             return f"{minutes}m{seconds}s"
     
-    def run_all_tests(self, show_progress: bool = True) -> Dict[str, TestSuite]:
-        """Run all test categories and return results."""
+    def run_single_test(self, test_file: str, category_name: str) -> TestSuite:
+        """Run a single test category."""
+        test_path = self.project_root / test_file
+        
+        # Track timing
+        start_time = time.time()
+        
+        if not test_path.exists():
+            # Return empty suite for non-existent tests
+            suite = TestSuite(name=category_name)
+            suite.total_duration = 0.0
+            return suite
+        
+        result = self.run_pytest(test_path)
+        suite = self.parse_pytest_output(result, test_file, category_name)
+        
+        # Calculate total duration
+        total_duration = time.time() - start_time
+        suite.total_duration = total_duration
+        
+        # Add error result if no tests found but pytest failed
+        if suite.total_tests == 0 and result.returncode != 0:
+            suite.results.append(TestResult(
+                test_name="pytest_error",
+                file_path=test_file,
+                category=category_name,
+                passed=False,
+                error_type="Test Execution Error",
+                error_message=result.stderr[:200] if result.stderr else "Unknown error",
+                output=result.stdout + "\n" + result.stderr
+            ))
+        
+        return suite
+    
+    def run_all_tests(self, show_progress: bool = True, max_workers: int = 1) -> Dict[str, TestSuite]:
+        """Run all test categories and return results.
+        
+        Args:
+            show_progress: Whether to show progress
+            max_workers: Maximum number of parallel workers (default 1 for sequential)
+        """
         test_categories = self.get_test_categories()
+        
+        # Sequential execution (original behavior)
+        if max_workers == 1:
+            return self._run_tests_sequential(test_categories, show_progress)
+        
+        # Parallel execution
+        return self._run_tests_parallel(test_categories, show_progress, max_workers)
+    
+    def _run_tests_sequential(self, test_categories: List[Tuple[str, str]], show_progress: bool) -> Dict[str, TestSuite]:
+        """Run tests sequentially (original implementation)."""
         
         if show_progress and RICH_AVAILABLE:
             console.print(f"\n[bold]Running {self.__class__.__name__} tests...[/bold]")
@@ -291,53 +354,26 @@ class BaseTestRunner(ABC):
                 console=console
             ) as progress:
                 for test_file, category_name in test_categories:
-                    test_path = self.project_root / test_file
+                    task = progress.add_task(f"[dim]⋯[/dim] Testing {category_name}...", total=1)
                     
-                    if not test_path.exists():
-                        task = progress.add_task(
-                            f"[yellow]Skipping {category_name} (not found)[/yellow]", 
-                            total=1
-                        )
-                        progress.update(task, completed=1)
-                        continue
-                    
-                    task = progress.add_task(f"Testing {category_name}...", total=1)
-                    
-                    # Track timing
-                    import time
-                    start_time = time.time()
-                    
-                    result = self.run_pytest(test_path)
-                    suite = self.parse_pytest_output(result, test_file, category_name)
-                    
-                    # Calculate total duration and store it
-                    total_duration = time.time() - start_time
-                    suite.total_duration = total_duration
-                    
+                    suite = self.run_single_test(test_file, category_name)
                     self.test_suites[category_name] = suite
                     
-                    # Debug: print if no tests found
-                    if suite.total_tests == 0 and result.returncode != 0:
-                        # There was an error running tests
-                        suite.results.append(TestResult(
-                            test_name="pytest_error",
-                            file_path=test_file,
-                            category=category_name,
-                            passed=False,
-                            error_type="Test Execution Error",
-                            error_message=result.stderr[:200] if result.stderr else "Unknown error",
-                            output=result.stdout + "\n" + result.stderr
-                        ))
-                    
                     # Format duration with coloring
-                    duration_str = self._format_duration(total_duration)
-                    if total_duration >= 60:
+                    duration_str = self._format_duration(suite.total_duration)
+                    if suite.total_duration >= 60:
                         duration_display = f"[yellow][{duration_str}][/yellow]"
                     else:
                         duration_display = f"[{duration_str}]"
                     
                     # Update progress with result
-                    if suite.failed_tests > 0:
+                    if suite.total_tests == 0:
+                        progress.update(
+                            task, 
+                            description=f"[yellow]⊘[/yellow] Skipping {category_name} (not found)",
+                            completed=1
+                        )
+                    elif suite.failed_tests > 0:
                         progress.update(
                             task, 
                             description=f"[red]✗[/red] {category_name} {duration_display} ({suite.failed_tests} failures)",
@@ -355,32 +391,258 @@ class BaseTestRunner(ABC):
             print("=" * 80)
             
             for test_file, category_name in test_categories:
-                test_path = self.project_root / test_file
-                
-                if not test_path.exists():
-                    print(f"\nSkipping {test_file} (not found)")
-                    continue
-                
-                print(f"\nTesting {category_name}...")
-                
-                # Track timing
-                import time
-                start_time = time.time()
-                
-                result = self.run_pytest(test_path)
-                suite = self.parse_pytest_output(result, test_file, category_name)
-                
-                # Calculate total duration and store it
-                total_duration = time.time() - start_time
-                suite.total_duration = total_duration
-                
+                suite = self.run_single_test(test_file, category_name)
                 self.test_suites[category_name] = suite
-                duration_str = self._format_duration(total_duration)
                 
-                if suite.failed_tests > 0:
+                duration_str = self._format_duration(suite.total_duration)
+                
+                if suite.total_tests == 0:
+                    print(f"\nSkipping {test_file} (not found)")
+                elif suite.failed_tests > 0:
                     print(f"✗ {category_name} [{duration_str}]: {suite.failed_tests} failures")
                 else:
                     print(f"✓ {category_name} [{duration_str}]: All tests passed")
+        
+        return self.test_suites
+    
+    def _run_tests_parallel(self, test_categories: List[Tuple[str, str]], show_progress: bool, max_workers: int) -> Dict[str, TestSuite]:
+        """Run tests in parallel using ThreadPoolExecutor."""
+        import signal
+        import shutil
+        
+        lock = threading.Lock()
+        interrupted = threading.Event()
+        
+        def signal_handler(signum, frame):
+            """Handle Ctrl+C gracefully."""
+            interrupted.set()
+            if show_progress and RICH_AVAILABLE:
+                console.print("\n[yellow]Interrupt received. Cleaning up...[/yellow]")
+        
+        # Set up signal handler
+        old_handler = signal.signal(signal.SIGINT, signal_handler)
+        
+        try:
+            if show_progress and RICH_AVAILABLE:
+                from rich.layout import Layout
+                from rich.live import Live
+                from rich.panel import Panel
+                from rich.text import Text
+                
+                console.print(f"\n[bold]Running {self.__class__.__name__} tests in parallel (workers: {max_workers})...[/bold]")
+                console.rule()
+                
+                # Initialize data structures
+                completed_count = 0
+                running_tests = {}  # slot_id -> test_name
+                completed_tests = []  # list of completed test results
+                test_queue = list(test_categories)
+                futures_to_slot = {}  # future -> slot_id
+                slot_to_future = {}  # slot_id -> future
+                futures_to_test = {}  # future -> (test_file, category_name)
+                
+                def create_display():
+                    """Create the display layout with running and completed tests."""
+                    from rich.table import Table
+                    from rich.spinner import Spinner
+                    
+                    # Running tests panel with spinners
+                    running_table = Table.grid(padding=0)
+                    running_table.add_column(width=3)  # For spinner
+                    running_table.add_column()  # For test name
+                    
+                    for i in range(max_workers):
+                        if i in running_tests:
+                            spinner = Spinner("dots", style="cyan")
+                            running_table.add_row(spinner, f" {running_tests[i]}")
+                        else:
+                            running_table.add_row("", f"[dim]Worker {i+1}: idle[/dim]")
+                    
+                    running_panel = Panel(
+                        running_table,
+                        title=f"[bold cyan]Running ({len(running_tests)}/{max_workers} workers)[/bold cyan]",
+                        border_style="cyan"
+                    )
+                    
+                    # Completed tests panel - show ALL tests
+                    completed_text = "\n".join(completed_tests) if completed_tests else "[dim]No tests completed yet[/dim]"
+                    completed_panel = Panel(
+                        completed_text,
+                        title=f"[bold green]Completed ({completed_count}/{len(test_categories)})[/bold green]",
+                        border_style="green"
+                    )
+                    
+                    # Create layout
+                    layout = Layout()
+                    layout.split_row(
+                        Layout(running_panel, name="running"),
+                        Layout(completed_panel, name="completed")
+                    )
+                    
+                    # Add overall progress at the top
+                    progress_text = Text(f"Progress: {completed_count}/{len(test_categories)} tests", 
+                                       style="bold", justify="center")
+                    
+                    final_layout = Layout()
+                    final_layout.split_column(
+                        Layout(Panel(progress_text, border_style="blue"), size=3),
+                        layout
+                    )
+                    
+                    return final_layout
+                
+                # Run tests with live display
+                with Live(create_display(), refresh_per_second=10, console=console) as live:
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        # Submit initial batch
+                        for slot_id in range(min(max_workers, len(test_queue))):
+                            if test_queue:
+                                test_file, category_name = test_queue.pop(0)
+                                future = executor.submit(self.run_single_test, test_file, category_name)
+                                futures_to_slot[future] = slot_id
+                                slot_to_future[slot_id] = future
+                                futures_to_test[future] = (test_file, category_name)
+                                running_tests[slot_id] = category_name
+                                live.update(create_display())
+                        
+                        # Process completions and submit new tests
+                        while futures_to_slot and not interrupted.is_set():
+                            # Wait for any test to complete
+                            done, pending = concurrent.futures.wait(
+                                futures_to_slot.keys(), 
+                                return_when=concurrent.futures.FIRST_COMPLETED,
+                                timeout=0.1  # Check for interrupts every 100ms
+                            )
+                            
+                            if not done:
+                                continue  # Timeout, check interrupted flag
+                            
+                            for future in done:
+                                slot_id = futures_to_slot[future]
+                                test_file, category_name = futures_to_test[future]
+                                
+                                try:
+                                    suite = future.result()
+                                    
+                                    with lock:
+                                        self.test_suites[category_name] = suite
+                                        completed_count += 1
+                                    
+                                    # Format result
+                                    duration_str = self._format_duration(suite.total_duration)
+                                    if suite.total_duration >= 60:
+                                        duration_display = f"[yellow][{duration_str}][/yellow]"
+                                    else:
+                                        duration_display = f"[{duration_str}]"
+                                    
+                                    if suite.total_tests == 0:
+                                        result_msg = f"[yellow]⊘[/yellow] {category_name} (not found)"
+                                    elif suite.failed_tests > 0:
+                                        result_msg = f"[red]✗[/red] {category_name} {duration_display} ({suite.failed_tests} failures)"
+                                    else:
+                                        result_msg = f"[green]✓[/green] {category_name} {duration_display}"
+                                    
+                                except Exception as e:
+                                    with lock:
+                                        completed_count += 1
+                                    result_msg = f"[red]✗[/red] {category_name} (error: {str(e)})"
+                                
+                                # Add to completed list
+                                completed_tests.append(result_msg)
+                                
+                                # Remove from tracking
+                                del futures_to_slot[future]
+                                del slot_to_future[slot_id]
+                                del futures_to_test[future]
+                                del running_tests[slot_id]
+                                
+                                # Submit next test if available
+                                if test_queue:
+                                    test_file, category_name = test_queue.pop(0)
+                                    new_future = executor.submit(self.run_single_test, test_file, category_name)
+                                    futures_to_slot[new_future] = slot_id
+                                    slot_to_future[slot_id] = new_future
+                                    futures_to_test[new_future] = (test_file, category_name)
+                                    running_tests[slot_id] = category_name
+                                
+                                # Update display
+                                live.update(create_display())
+                        
+                        # If interrupted, cancel remaining futures
+                        if interrupted.is_set():
+                            for future in futures_to_slot:
+                                future.cancel()
+                            
+                            # Wait for running tests to complete
+                            if futures_to_slot:
+                                console.print("[yellow]Waiting for running tests to complete...[/yellow]")
+                                concurrent.futures.wait(futures_to_slot.keys(), timeout=5)
+                
+                # Show final summary
+                if not interrupted.is_set():
+                    console.print("\n[bold]All Tests Completed![/bold]")
+                else:
+                    console.print("\n[yellow]Testing interrupted by user.[/yellow]")
+                console.rule()
+            else:
+                # Non-rich parallel output
+                print(f"Running {self.__class__.__name__} tests in parallel (workers: {max_workers})...")
+                print("=" * 80)
+                
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    # Submit all tests
+                    futures = {
+                        executor.submit(self.run_single_test, test_file, category_name): (test_file, category_name)
+                        for test_file, category_name in test_categories
+                    }
+                    
+                    # Process completed tests
+                    try:
+                        for future in as_completed(futures):
+                            if interrupted.is_set():
+                                print("\nInterrupted by user. Cancelling remaining tests...")
+                                for f in futures:
+                                    f.cancel()
+                                break
+                                
+                            test_file, category_name = futures[future]
+                            try:
+                                suite = future.result()
+                                
+                                with lock:
+                                    self.test_suites[category_name] = suite
+                                
+                                duration_str = self._format_duration(suite.total_duration)
+                                
+                                if suite.total_tests == 0:
+                                    print(f"\nSkipping {test_file} (not found)")
+                                elif suite.failed_tests > 0:
+                                    print(f"✗ {category_name} [{duration_str}]: {suite.failed_tests} failures")
+                                else:
+                                    print(f"✓ {category_name} [{duration_str}]: All tests passed")
+                            except Exception as e:
+                                print(f"✗ {category_name}: Error - {str(e)}")
+                    except KeyboardInterrupt:
+                        interrupted.set()
+                        print("\nKeyboard interrupt received...")
+        
+        finally:
+            # Restore original signal handler
+            signal.signal(signal.SIGINT, old_handler)
+            
+            # Clean up temp directories
+            if interrupted.is_set():
+                import glob
+                import os
+                # Clean up MDM test temp directories
+                for temp_dir in glob.glob("/tmp/mdm_test_*"):
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except:
+                        pass
+                
+                if show_progress and RICH_AVAILABLE:
+                    console.print("[green]Cleanup completed.[/green]")
         
         return self.test_suites
     
