@@ -115,37 +115,23 @@ class ManagementClient(BaseClient):
             raise DatasetError(f"Dataset '{name}' not found")
 
         # Return cached statistics if available and not requesting full
+        # But only if they have the full structure (not just initial stats)
         if not full and dataset.metadata.get("statistics"):
-            return dataset.metadata["statistics"]
+            cached_stats = dataset.metadata["statistics"]
+            # Check if this is a full statistics structure
+            if 'tables' in cached_stats and 'dataset_name' in cached_stats:
+                return cached_stats
+            # Otherwise, these are just initial stats from registration, need to compute
 
         # Otherwise compute statistics
         from mdm.dataset.statistics import compute_dataset_statistics
-        from mdm.storage.factory import BackendFactory
 
-        backend = BackendFactory.create(
-            dataset.database["backend"],
-            dataset.database
-        )
-
-        # Get database path/connection
-        if "path" in dataset.database:
-            db_path = dataset.database["path"]
-        else:
-            # Server-based backend
-            db_info = dataset.database
-            db_path = f"{db_info['backend']}://{db_info['user']}:{db_info['password']}@{db_info['host']}:{db_info['port']}/{db_info['database']}"
-
+        # Call the statistics function with correct signature
         stats = compute_dataset_statistics(
-            backend,
-            db_path,
-            dataset.tables,
-            sample_size=None if full else 10000
+            dataset_name=name,
+            full=full,
+            save=full  # Save if computing full stats
         )
-
-        # Update cached statistics if computing full stats
-        if full and stats:
-            dataset.metadata["statistics"] = stats
-            self.manager.update_dataset(dataset)
 
         return stats
     
