@@ -116,7 +116,7 @@ def create_github_issues(
     failures: List[TestResult],
     github_manager: GitHubIssueManager,
     dry_run: bool = True,
-    limit: int = 50
+    limit: int = 100
 ) -> Dict[str, int]:
     """Create GitHub issues for test failures."""
     stats = {
@@ -206,7 +206,7 @@ def main():
                '  %(prog)s                                    # Analyze all tests\n'
                '  %(prog)s --scope unit                       # Analyze only unit tests\n'
                '  %(prog)s --scope e2e --github               # Analyze E2E tests and create issues (dry run)\n'
-               '  %(prog)s --github --no-dry-run --limit 50   # Create up to 5 GitHub issues\n'
+               '  %(prog)s --github --no-dry-run --limit 50   # Create up to X GitHub issues\n'
                '  %(prog)s --category "CLI*"                  # Analyze only CLI-related tests\n',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
