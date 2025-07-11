@@ -27,6 +27,14 @@ from mdm.models.enums import ColumnType
 from mdm.storage.factory import BackendFactory
 from mdm.utils.serialization import serialize_for_yaml
 from mdm.monitoring import SimpleMonitor, MetricType
+from mdm.dataset.loaders import (
+    FileLoaderRegistry,
+    CSVLoader,
+    ParquetLoader,
+    JSONLoader,
+    CompressedCSVLoader,
+    ExcelLoader,
+)
 
 
 class DatasetRegistrar:
@@ -45,6 +53,10 @@ class DatasetRegistrar:
         self.feature_generator = FeatureGenerator()
         self._detected_datetime_columns = []
         self.monitor = SimpleMonitor()
+        
+        # Initialize file loader registry
+        self._loader_registry = FileLoaderRegistry()
+        self._setup_loaders()
 
     def register(
         self,
@@ -331,6 +343,17 @@ class DatasetRegistrar:
 
         except Exception as e:
             raise DatasetError(f"Failed to create PostgreSQL database: {e}")
+    
+    def _setup_loaders(self) -> None:
+        """Set up file loaders in the registry."""
+        batch_size = self.config.performance.batch_size
+        
+        # Register all loaders
+        self._loader_registry.register(CSVLoader(batch_size))
+        self._loader_registry.register(ParquetLoader(batch_size))
+        self._loader_registry.register(JSONLoader(batch_size))
+        self._loader_registry.register(CompressedCSVLoader(batch_size))
+        self._loader_registry.register(ExcelLoader(batch_size))
 
     def _load_data_files(
         self,
@@ -338,15 +361,10 @@ class DatasetRegistrar:
         db_info: Dict[str, Any],
         progress: Optional[Progress] = None
     ) -> Dict[str, str]:
-        """Step 7: Load data files into database with true batch processing.
+        """Step 7: Load data files into database using file loaders.
         
-        This implementation loads data in chunks to save memory. Each chunk is:
-        1. Loaded from file
-        2. Saved to database
-        3. Released from memory
-        
-        Column type detection happens on the first chunk only.
-        Feature generation happens later on the complete dataset in the database.
+        This implementation uses the Strategy pattern to handle different file types.
+        Each loader handles its specific format and loads data in chunks.
         """
         backend = BackendFactory.create(db_info['backend'], db_info)
         table_mappings = {}
@@ -355,6 +373,21 @@ class DatasetRegistrar:
         self._detected_column_types = {}
         # Store detected datetime columns for parsing
         self._detected_datetime_columns = []
+
+        # Use passed progress or create new one
+        if progress is None:
+            progress_ctx = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                console=None,
+            )
+            progress = progress_ctx.__enter__()
+            own_progress = True
+        else:
+            own_progress = False
 
         try:
             # Get database path/connection string
@@ -371,299 +404,59 @@ class DatasetRegistrar:
             # Get engine
             engine = backend.get_engine(db_path)
 
+            # Determine which tables to detect types for
+            detect_types_for = ['train', 'data']  # Focus on main training data
+
             for file_key, file_path in files.items():
                 table_name = file_key
-                logger.info(f"Loading {file_path} as table '{table_name}'")
-
-                # Read and load based on file type with batch processing
-                batch_size = self.config.performance.batch_size
                 
-                # Use passed progress or create new one
-                if progress is None:
-                    progress_ctx = Progress(
-                        SpinnerColumn(),
-                        TextColumn("[progress.description]{task.description}"),
-                        BarColumn(),
-                        TaskProgressColumn(),
-                        TimeRemainingColumn(),
-                        console=None,
+                # Get appropriate loader for this file
+                loader = self._loader_registry.get_loader(file_path)
+                if loader is None:
+                    logger.warning(f"No loader found for file type: {file_path}")
+                    continue
+                
+                # Load the file using the appropriate loader
+                loader.load_file(
+                    file_path=file_path,
+                    table_name=table_name,
+                    backend=backend,
+                    engine=engine,
+                    progress=progress,
+                    detect_types_for=detect_types_for
+                )
+                
+                table_mappings[file_key] = table_name
+                
+                # Store detected column types and datetime columns
+                if loader.detected_column_types:
+                    self._detected_column_types.update(loader.detected_column_types)
+                if loader.detected_datetime_columns:
+                    self._detected_datetime_columns.extend(
+                        col for col in loader.detected_datetime_columns 
+                        if col not in self._detected_datetime_columns
                     )
-                    progress = progress_ctx.__enter__()
-                    own_progress = True
-                else:
-                    own_progress = False
                 
+                # Get final row count from database
                 try:
-                    if file_path.suffix.lower() in ['.csv', '.tsv']:
-                        delimiter = detect_delimiter(file_path)
-                        
-                        # First, detect datetime columns on a small sample
-                        # Check on first table or 'train' table
-                        if (table_name in ['train', 'data'] or not self._detected_datetime_columns) and not self._detected_datetime_columns:
-                            sample_df = pd.read_csv(file_path, delimiter=delimiter, nrows=100)
-                            self._detect_datetime_columns_from_sample(sample_df)
-                            logger.info(f"Detected datetime columns: {self._detected_datetime_columns}")
-                        
-                        # First, get total row count for progress bar
-                        total_rows = sum(1 for _ in open(file_path)) - 1  # Subtract header
-                        
-                        # Create progress task
-                        task = progress.add_task(
-                            f"Loading {file_path.name} into {table_name}",
-                            total=total_rows
-                        )
-                        
-                        # Read in chunks
-                        first_chunk = True
-                        chunk_count = 0
-                        
-                        # Prepare parse_dates parameter
-                        parse_dates_param = None  # Don't parse dates on initial load to avoid missing column errors
-                        
-                        for chunk_df in pd.read_csv(
-                            file_path, 
-                            delimiter=delimiter, 
-                            parse_dates=parse_dates_param,
-                            chunksize=batch_size
-                        ):
-                            chunk_count += 1
-                            logger.debug(f"Processing chunk {chunk_count} with {len(chunk_df)} rows")
-                            
-                            if first_chunk:
-                                # Log column information from first chunk
-                                logger.debug(f"Columns in {table_name}: {list(chunk_df.columns)}")
-                                logger.debug(f"Data types: {chunk_df.dtypes.to_dict()}")
-                                
-                                # Detect column types on first chunk (for later feature generation)
-                                if table_name == 'train':  # Focus on train table for type detection
-                                    self._detect_and_store_column_types(chunk_df, table_name)
-                                
-                                # Create table with first chunk
-                                backend.create_table_from_dataframe(
-                                    chunk_df, table_name, engine, if_exists='replace'
-                                )
-                                first_chunk = False
-                            else:
-                                # Append subsequent chunks
-                                backend.create_table_from_dataframe(
-                                    chunk_df, table_name, engine, if_exists='append'
-                                )
-                            
-                            # Update progress
-                            progress.update(task, advance=len(chunk_df))
-                            
-                            # Explicitly free memory
-                            del chunk_df
-                            
-                    elif file_path.suffix.lower() == '.parquet':
-                        # Parquet files can be read in batches too
-                        df = pd.read_parquet(file_path)
-                        total_rows = len(df)
-                        
-                        task = progress.add_task(
-                            f"Loading {file_path.name} into {table_name}",
-                            total=total_rows
-                        )
-                        
-                        # Detect column types on first batch
-                        if table_name == 'train' and len(df) > 0:
-                            first_batch = df.iloc[:min(batch_size, len(df))]
-                            self._detect_and_store_column_types(first_batch, table_name)
-                        
-                        # Process in batches
-                        for i in range(0, total_rows, batch_size):
-                            batch_df = df.iloc[i:i + batch_size]
-                            batch_num = (i // batch_size) + 1
-                            logger.debug(f"Processing batch {batch_num} (rows {i}:{i+len(batch_df)}) for Parquet file")
-                            
-                            if i == 0:
-                                logger.debug(f"Columns in {table_name}: {list(batch_df.columns)}")
-                                logger.debug(f"Data types: {batch_df.dtypes.to_dict()}")
-                                backend.create_table_from_dataframe(
-                                    batch_df, table_name, engine, if_exists='replace'
-                                )
-                            else:
-                                backend.create_table_from_dataframe(
-                                    batch_df, table_name, engine, if_exists='append'
-                                )
-                            
-                            progress.update(task, advance=len(batch_df))
-                            
-                    elif file_path.suffix.lower() == '.json':
-                        # JSON files typically need to be loaded fully
-                        df = pd.read_json(file_path)
-                        total_rows = len(df)
-                        
-                        task = progress.add_task(
-                            f"Loading {file_path.name} into {table_name}",
-                            total=total_rows
-                        )
-                        
-                        logger.debug(f"Columns in {table_name}: {list(df.columns)}")
-                        logger.debug(f"Data types: {df.dtypes.to_dict()}")
-                        
-                        # Detect column types on first batch
-                        if table_name == 'train' and len(df) > 0:
-                            first_batch = df.iloc[:min(batch_size, len(df))]
-                            self._detect_and_store_column_types(first_batch, table_name)
-                        
-                        # Process in batches
-                        for i in range(0, total_rows, batch_size):
-                            batch_df = df.iloc[i:i + batch_size]
-                            
-                            if i == 0:
-                                backend.create_table_from_dataframe(
-                                    batch_df, table_name, engine, if_exists='replace'
-                                )
-                            else:
-                                backend.create_table_from_dataframe(
-                                    batch_df, table_name, engine, if_exists='append'
-                                )
-                            
-                            progress.update(task, advance=len(batch_df))
-                            
-                    elif file_path.suffix.lower() == '.gz' and '.csv' in file_path.suffixes:
-                        # Compressed CSV file
-                        delimiter = ','  # Default to comma for .csv.gz
-                        if '.tsv' in file_path.suffixes:
-                            delimiter = '\t'
-                        
-                        # First, detect datetime columns on a small sample
-                        # Check on first table or 'train' table
-                        if (table_name in ['train', 'data'] or not self._detected_datetime_columns) and not self._detected_datetime_columns:
-                            sample_df = pd.read_csv(file_path, delimiter=delimiter, compression='gzip', nrows=100)
-                            self._detect_datetime_columns_from_sample(sample_df)
-                            logger.info(f"Detected datetime columns: {self._detected_datetime_columns}")
-                        
-                        # Count lines in compressed file for progress bar
-                        import gzip
-                        with gzip.open(file_path, 'rt') as f:
-                            total_rows = sum(1 for _ in f) - 1
-                        
-                        task = progress.add_task(
-                            f"Loading {file_path.name} into {table_name}",
-                            total=total_rows
-                        )
-                        
-                        # Read compressed file in chunks
-                        first_chunk = True
-                        chunk_count = 0
-                        
-                        # Prepare parse_dates parameter
-                        parse_dates_param = None  # Don't parse dates on initial load to avoid missing column errors
-                        
-                        for chunk_df in pd.read_csv(
-                            file_path, 
-                            delimiter=delimiter, 
-                            compression='gzip',
-                            parse_dates=parse_dates_param,
-                            chunksize=batch_size
-                        ):
-                            chunk_count += 1
-                            logger.debug(f"Processing chunk {chunk_count} with {len(chunk_df)} rows from compressed file")
-                            
-                            if first_chunk:
-                                # Log column information from first chunk
-                                logger.debug(f"Columns in {table_name}: {list(chunk_df.columns)}")
-                                logger.debug(f"Data types: {chunk_df.dtypes.to_dict()}")
-                                
-                                # Detect column types on first chunk
-                                if table_name == 'train':
-                                    self._detect_and_store_column_types(chunk_df, table_name)
-                                
-                                # Create table with first chunk
-                                backend.create_table_from_dataframe(
-                                    chunk_df, table_name, engine, if_exists='replace'
-                                )
-                                first_chunk = False
-                            else:
-                                # Append subsequent chunks
-                                backend.create_table_from_dataframe(
-                                    chunk_df, table_name, engine, if_exists='append'
-                                )
-                            
-                            # Update progress
-                            progress.update(task, advance=len(chunk_df))
-                            
-                            # Explicitly free memory
-                            del chunk_df
-                            
-                    elif file_path.suffix.lower() in ['.xlsx', '.xls']:
-                        # Excel file
-                        df = pd.read_excel(file_path)
-                        total_rows = len(df)
-                        
-                        # Detect datetime columns if this is the first table
-                        if (table_name in ['train', 'data'] or not self._detected_datetime_columns) and not self._detected_datetime_columns:
-                            sample_df = df.head(100)
-                            self._detect_datetime_columns_from_sample(sample_df)
-                            logger.info(f"Detected datetime columns: {self._detected_datetime_columns}")
-                            
-                            # Convert datetime columns in the full dataframe
-                            for col in self._detected_datetime_columns:
-                                import warnings
-                                with warnings.catch_warnings():
-                                    warnings.simplefilter("ignore")
-                                    df[col] = pd.to_datetime(df[col], errors='coerce')
-                        
-                        task = progress.add_task(
-                            f"Loading {file_path.name} into {table_name}",
-                            total=total_rows
-                        )
-                        
-                        logger.debug(f"Columns in {table_name}: {list(df.columns)}")
-                        logger.debug(f"Data types: {df.dtypes.to_dict()}")
-                        
-                        # Detect column types
-                        if table_name == 'train' and len(df) > 0:
-                            first_batch = df.iloc[:min(batch_size, len(df))]
-                            self._detect_and_store_column_types(first_batch, table_name)
-                        
-                        # Process in batches
-                        for i in range(0, total_rows, batch_size):
-                            batch_df = df.iloc[i:i + batch_size]
-                            batch_num = (i // batch_size) + 1
-                            logger.debug(f"Processing batch {batch_num} (rows {i}:{i+len(batch_df)}) for Excel file")
-                            
-                            if i == 0:
-                                backend.create_table_from_dataframe(
-                                    batch_df, table_name, engine, if_exists='replace'
-                                )
-                            else:
-                                backend.create_table_from_dataframe(
-                                    batch_df, table_name, engine, if_exists='append'
-                                )
-                            
-                            progress.update(task, advance=len(batch_df))
-                            
-                    else:
-                        logger.warning(f"Unsupported file type: {file_path}")
-                        continue
-                    
-                    table_mappings[file_key] = table_name
-                    
-                    # Get final row count from database
-                    try:
-                        if hasattr(backend, 'query'):
-                            row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
-                            if row_count_result is not None and not row_count_result.empty:
-                                row_count = int(row_count_result.iloc[0]['count'])
-                                logger.info(f"Loaded {row_count} rows into '{table_name}'")
-                        else:
-                            # Alternative: use pandas to read and count
-                            count_df = pd.read_sql_query(f"SELECT COUNT(*) as count FROM {table_name}", engine)
-                            row_count = int(count_df.iloc[0]['count'])
+                    if hasattr(backend, 'query'):
+                        row_count_result = backend.query(f"SELECT COUNT(*) as count FROM {table_name}")
+                        if row_count_result is not None and not row_count_result.empty:
+                            row_count = int(row_count_result.iloc[0]['count'])
                             logger.info(f"Loaded {row_count} rows into '{table_name}'")
-                    except Exception as e:
-                        logger.info(f"Loaded data into '{table_name}'")
-                
-                finally:
-                    if own_progress:
-                        progress_ctx.__exit__(None, None, None)
+                    else:
+                        # Alternative: use pandas to read and count
+                        count_df = pd.read_sql_query(f"SELECT COUNT(*) as count FROM {table_name}", engine)
+                        row_count = int(count_df.iloc[0]['count'])
+                        logger.info(f"Loaded {row_count} rows into '{table_name}'")
+                except Exception as e:
+                    logger.info(f"Loaded data into '{table_name}'")
 
         except Exception as e:
             raise DatasetError(f"Failed to load data files: {e}")
         finally:
+            if own_progress:
+                progress_ctx.__exit__(None, None, None)
             backend.close_connections()
 
         return table_mappings
