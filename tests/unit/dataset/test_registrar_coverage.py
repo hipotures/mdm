@@ -201,7 +201,23 @@ class TestDatasetRegistrarCoverage:
         with patch('mdm.dataset.registrar.logger') as mock_logger:
             # Mock the rest of the registration to continue
             with patch('mdm.dataset.registrar.discover_data_files', return_value={'data': data_path}):
-                with patch('mdm.dataset.registrar.BackendFactory'):
+                with patch('mdm.dataset.registrar.BackendFactory') as mock_factory:
+                    mock_backend = Mock()
+                    mock_backend.create_table_from_dataframe = Mock()
+                    mock_backend.get_table_info.return_value = {
+                        'columns': [
+                            {'name': 'id', 'type': 'INTEGER'},
+                            {'name': 'value', 'type': 'INTEGER'}
+                        ],
+                        'row_count': 1
+                    }
+                    mock_backend.read_table_to_dataframe.return_value = pd.DataFrame({
+                        'id': [1], 'value': [100]
+                    })
+                    mock_backend.close_connections = Mock()
+                    mock_backend.get_engine.return_value = Mock()
+                    mock_factory.create.return_value = mock_backend
+                    
                     # Mock _compute_initial_statistics directly on the registrar instance
                     registrar._compute_initial_statistics = Mock(return_value={})
                     with patch('pathlib.Path.mkdir'):
