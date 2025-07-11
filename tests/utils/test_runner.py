@@ -44,6 +44,7 @@ class TestSuite:
     """Collection of test results."""
     name: str
     results: List[TestResult] = field(default_factory=list)
+    total_duration: float = 0.0
     
     @property
     def total_tests(self) -> int:
@@ -87,7 +88,8 @@ class BaseTestRunner(ABC):
             sys.executable, "-m", "pytest",
             str(test_path),
             "-v", "--tb=short",
-            "--no-header"
+            "--no-header",
+            "--durations=0"  # Show all test durations
         ]
         
         # Only add json report if plugin is available
@@ -264,6 +266,17 @@ class BaseTestRunner(ABC):
                 return line[:200]  # Truncate long messages
         return error_info[:200] if error_info else "No error message"
     
+    def _format_duration(self, duration: float) -> str:
+        """Format duration in seconds to human readable format."""
+        if duration < 1:
+            return f"{duration:.1f}s"
+        elif duration < 60:
+            return f"{duration:.0f}s"
+        else:
+            minutes = int(duration // 60)
+            seconds = int(duration % 60)
+            return f"{minutes}m{seconds}s"
+    
     def run_all_tests(self, show_progress: bool = True) -> Dict[str, TestSuite]:
         """Run all test categories and return results."""
         test_categories = self.get_test_categories()
@@ -290,8 +303,17 @@ class BaseTestRunner(ABC):
                     
                     task = progress.add_task(f"Testing {category_name}...", total=1)
                     
+                    # Track timing
+                    import time
+                    start_time = time.time()
+                    
                     result = self.run_pytest(test_path)
                     suite = self.parse_pytest_output(result, test_file, category_name)
+                    
+                    # Calculate total duration and store it
+                    total_duration = time.time() - start_time
+                    suite.total_duration = total_duration
+                    
                     self.test_suites[category_name] = suite
                     
                     # Debug: print if no tests found
@@ -307,17 +329,24 @@ class BaseTestRunner(ABC):
                             output=result.stdout + "\n" + result.stderr
                         ))
                     
+                    # Format duration with coloring
+                    duration_str = self._format_duration(total_duration)
+                    if total_duration >= 60:
+                        duration_display = f"[yellow][{duration_str}][/yellow]"
+                    else:
+                        duration_display = f"[{duration_str}]"
+                    
                     # Update progress with result
                     if suite.failed_tests > 0:
                         progress.update(
                             task, 
-                            description=f"[red]✗[/red] {category_name} ({suite.failed_tests} failures)",
+                            description=f"[red]✗[/red] {category_name} {duration_display} ({suite.failed_tests} failures)",
                             completed=1
                         )
                     else:
                         progress.update(
                             task,
-                            description=f"[green]✓[/green] {category_name}",
+                            description=f"[green]✓[/green] {category_name} {duration_display}",
                             completed=1
                         )
         else:
@@ -334,14 +363,24 @@ class BaseTestRunner(ABC):
                 
                 print(f"\nTesting {category_name}...")
                 
+                # Track timing
+                import time
+                start_time = time.time()
+                
                 result = self.run_pytest(test_path)
                 suite = self.parse_pytest_output(result, test_file, category_name)
+                
+                # Calculate total duration and store it
+                total_duration = time.time() - start_time
+                suite.total_duration = total_duration
+                
                 self.test_suites[category_name] = suite
+                duration_str = self._format_duration(total_duration)
                 
                 if suite.failed_tests > 0:
-                    print(f"✗ {category_name}: {suite.failed_tests} failures")
+                    print(f"✗ {category_name} [{duration_str}]: {suite.failed_tests} failures")
                 else:
-                    print(f"✓ {category_name}: All tests passed")
+                    print(f"✓ {category_name} [{duration_str}]: All tests passed")
         
         return self.test_suites
     
@@ -380,14 +419,23 @@ class BaseTestRunner(ABC):
             table.add_column("Passed", justify="right", style="green")
             table.add_column("Failed", justify="right", style="red")
             table.add_column("Pass Rate", justify="right")
+            table.add_column("Duration", justify="right")
             
             for category, suite in self.test_suites.items():
+                duration_str = self._format_duration(suite.total_duration)
+                # Color duration if > 60 seconds
+                if suite.total_duration >= 60:
+                    duration_display = f"[yellow]{duration_str}[/yellow]"
+                else:
+                    duration_display = duration_str
+                    
                 table.add_row(
                     category,
                     str(suite.total_tests),
                     str(suite.passed_tests),
                     str(suite.failed_tests),
-                    f"{suite.pass_rate:.1f}%"
+                    f"{suite.pass_rate:.1f}%",
+                    duration_display
                 )
             
             console.print(table)
@@ -407,7 +455,8 @@ class BaseTestRunner(ABC):
             
             print(f"\nTest Results by Category:")
             for category, suite in self.test_suites.items():
-                print(f"{category}: {suite.passed_tests}/{suite.total_tests} passed ({suite.pass_rate:.1f}%)")
+                duration_str = self._format_duration(suite.total_duration)
+                print(f"{category}: {suite.passed_tests}/{suite.total_tests} passed ({suite.pass_rate:.1f}%) [{duration_str}]")
             
             print(f"\nOverall pass rate: {stats['pass_rate']:.1f}%")
     
@@ -424,12 +473,15 @@ class BaseTestRunner(ABC):
                 "total": suite.total_tests,
                 "passed": suite.passed_tests,
                 "failed": suite.failed_tests,
+                "duration": suite.total_duration,
+                "duration_formatted": self._format_duration(suite.total_duration),
                 "failures": [
                     {
                         "test": result.test_name,
                         "file": result.file_path,
                         "error_type": result.error_type,
-                        "error_message": result.error_message
+                        "error_message": result.error_message,
+                        "duration": result.duration
                     }
                     for result in suite.get_failures()
                 ]
