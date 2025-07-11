@@ -69,20 +69,16 @@ class TestPostgreSQLBackend:
         """Test getting engine."""
         backend = PostgreSQLBackend(config)
         
-        with patch.object(backend, 'create_engine') as mock_create_engine:
-            mock_engine = Mock()
-            mock_create_engine.return_value = mock_engine
-            
-            # First call should create engine
-            engine1 = backend.get_engine('test_db')
-            assert engine1 == mock_engine
-            mock_create_engine.assert_called_once_with('test_db')
-            
-            # Second call should return cached engine
-            engine2 = backend.get_engine('test_db')
-            assert engine2 == mock_engine
-            # Still only called once
-            mock_create_engine.assert_called_once()
+        # First call should create engine
+        engine1 = backend.get_engine('test_db')
+        assert engine1 is not None
+        # Check that the URL was constructed correctly
+        assert 'postgresql://test_user' in str(engine1.url)
+        assert 'localhost:5432/test_db' in str(engine1.url)
+        
+        # Second call should return cached engine (same instance)
+        engine2 = backend.get_engine('test_db')
+        assert engine2 is engine1
     
     def test_close_connections(self, config):
         """Test closing database connections."""
@@ -149,7 +145,9 @@ class TestPostgreSQLBackend:
                 'test_table',
                 mock_engine,
                 if_exists='fail',
-                index=False
+                index=False,
+                method='multi',
+                chunksize=10000
             )
     
     def test_table_exists(self, config):
@@ -222,7 +220,7 @@ class TestPostgreSQLBackend:
         backend = PostgreSQLBackend(config)
         mock_engine = Mock()
         
-        with patch('mdm.storage.base.inspect') as mock_inspect:
+        with patch('mdm.storage.backends.compatibility_mixin.inspect') as mock_inspect:
             mock_inspector = Mock()
             mock_inspect.return_value = mock_inspector
             mock_inspector.get_columns.return_value = [

@@ -3,7 +3,7 @@
 This module provides tools for comparing the behavior and performance of
 legacy vs new storage backend implementations.
 """
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, Tuple
 from pathlib import Path
 import tempfile
 import time

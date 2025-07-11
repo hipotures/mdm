@@ -278,7 +278,9 @@ class TestPostgreSQLBackendTableOperations:
                 'test_table',
                 backend_with_engine._engine,
                 if_exists='fail',
-                index=False
+                index=False,
+                method='multi',
+                chunksize=10000
             )
     
     @patch('pandas.DataFrame.to_sql')
@@ -296,7 +298,9 @@ class TestPostgreSQLBackendTableOperations:
             'test_table',
             backend_with_engine._engine,
             if_exists='replace',
-            index=False
+            index=False,
+            method='multi',
+            chunksize=10000
         )
     
     @patch('pandas.DataFrame.to_sql')
@@ -321,7 +325,7 @@ class TestPostgreSQLBackendTableOperations:
         
         with pytest.raises(StorageError) as exc_info:
             backend_with_engine.create_table_from_dataframe(df, 'test_table', backend_with_engine._engine)
-        assert "Failed to create table test_table" in str(exc_info.value)
+        assert "Failed to create table 'test_table'" in str(exc_info.value)
     
     def test_table_exists_true(self, backend_with_engine):
         """Test checking if table exists - returns true."""
@@ -400,7 +404,7 @@ class TestPostgreSQLBackendDataOperations:
         
         with pytest.raises(StorageError) as exc_info:
             backend_with_engine.read_table_to_dataframe('test_table', backend_with_engine._engine)
-        assert "Failed to read table test_table" in str(exc_info.value)
+        assert "Failed to read table 'test_table'" in str(exc_info.value)
     
     @patch('pandas.read_sql_query')
     def test_query_success(self, mock_read_sql_query, backend_with_engine):
@@ -494,7 +498,7 @@ class TestPostgreSQLBackendTableInfo:
     
     def test_get_table_info_success(self, backend_with_engine):
         """Test getting table info successfully."""
-        with patch('mdm.storage.base.inspect') as mock_inspect:
+        with patch('mdm.storage.backends.compatibility_mixin.inspect') as mock_inspect:
             mock_inspector = Mock()
             mock_inspect.return_value = mock_inspector
             

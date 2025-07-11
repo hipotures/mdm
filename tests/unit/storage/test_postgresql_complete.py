@@ -336,7 +336,7 @@ class TestPostgreSQLBackendComplete:
             result = backend.query("SELECT * FROM table")
             
             assert result.equals(expected_df)
-            mock_read.assert_called_once_with("SELECT * FROM table", mock_engine)
+            mock_read.assert_called_once_with("SELECT * FROM table", mock_engine, params=None)
 
     def test_query_no_engine(self, backend):
         """Test query without engine."""
@@ -378,7 +378,9 @@ class TestPostgreSQLBackendComplete:
                 'test_table',
                 mock_engine,
                 if_exists='fail',
-                index=False
+                index=False,
+                method='multi',
+                chunksize=10000
             )
 
     def test_read_table_to_dataframe(self, backend, mock_engine):
@@ -416,8 +418,8 @@ class TestPostgreSQLBackendComplete:
         """Test getting table info."""
         mock_engine.connect.return_value = mock_connection
         
-        # Need to patch the inspect function in the base module
-        with patch('mdm.storage.base.inspect') as mock_inspect:
+        # Need to patch the inspect function in the compatibility mixin module
+        with patch('mdm.storage.backends.compatibility_mixin.inspect') as mock_inspect:
             mock_inspector = Mock()
             mock_columns = [
                 {'name': 'id', 'type': 'INTEGER'},
