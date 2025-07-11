@@ -57,7 +57,9 @@ class TestDatasetUpdateIntegration:
         import os
         os.environ["MDM_HOME_DIR"] = str(temp_mdm_home)
         from mdm.config import get_config
+        from mdm.core import configure_services
         config = get_config()
+        configure_services(config.model_dump())
         client = MDMClient(config=config)
         
         dataset_name = "test_update_dataset"

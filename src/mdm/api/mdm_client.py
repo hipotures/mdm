@@ -98,6 +98,14 @@ class MDMClient:
         """Create submission file. See MLIntegrationClient.create_submission."""
         return self.ml.create_submission(name, predictions, submission_file, **kwargs)
     
+    def compute_statistics(self, name: str, full: bool = False):
+        """Compute dataset statistics. See ManagementClient.compute_statistics."""
+        return self.management.compute_statistics(name, full)
+    
+    def get_statistics(self, name: str, full: bool = False):
+        """Get pre-computed statistics for a dataset. See ManagementClient.get_statistics."""
+        return self.management.get_statistics(name, full)
+    
     @property
     def performance_monitor(self) -> PerformanceMonitor:
         """Get performance monitor instance."""

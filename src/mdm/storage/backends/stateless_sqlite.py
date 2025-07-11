@@ -8,7 +8,7 @@ This implementation shows how new backends should be structured with:
 """
 from typing import Any, Dict, Optional, List, Generator
 import pandas as pd
-from sqlalchemy import create_engine, text, MetaData, Table, Engine, event
+from sqlalchemy import create_engine, text, MetaData, Table, Engine, event, inspect
 from sqlalchemy.orm import Session, sessionmaker
 from contextlib import contextmanager
 import logging

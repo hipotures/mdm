@@ -62,16 +62,27 @@ class StatelessDuckDBBackend(StorageBackend):
             SQLAlchemy Engine instance
         """
         # Get DuckDB config from settings
-        duckdb_config = getattr(self.config.database, 'duckdb', {})
+        duckdb_config = getattr(self.config.database, 'duckdb', None)
         
-        # Build connection arguments
-        connect_args = {
-            "config": {
-                "memory_limit": duckdb_config.get("memory_limit", "2GB"),
-                "threads": duckdb_config.get("threads", 4),
-                "temp_directory": duckdb_config.get("temp_directory", "/tmp/mdm_duckdb"),
+        # Build connection arguments  
+        if duckdb_config:
+            # If it's a Pydantic model, access attributes directly
+            connect_args = {
+                "config": {
+                    "memory_limit": getattr(duckdb_config, "memory_limit", "2GB"),
+                    "threads": getattr(duckdb_config, "threads", 4),
+                    "temp_directory": getattr(duckdb_config, "temp_directory", "/tmp/mdm_duckdb"),
+                }
             }
-        }
+        else:
+            # Default config
+            connect_args = {
+                "config": {
+                    "memory_limit": "2GB",
+                    "threads": 4,
+                    "temp_directory": "/tmp/mdm_duckdb",
+                }
+            }
         
         # Create engine
         engine = create_engine(
@@ -323,7 +334,7 @@ class StatelessDuckDBBackend(StorageBackend):
                 SELECT table_name 
                 FROM information_schema.tables 
                 WHERE table_schema = 'main'
-                AND table_name NOT LIKE '\\_%' ESCAPE '\\\\'
+                AND table_name NOT LIKE '\\_%' ESCAPE '\\'
             """))
             return [row[0] for row in result]
     
