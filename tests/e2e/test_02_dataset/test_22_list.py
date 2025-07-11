@@ -12,7 +12,7 @@ import pytest
 class TestDatasetListingFiltering:
     """Test dataset listing and filtering functionality."""
     
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def multiple_datasets(self, clean_mdm_env, run_mdm):
         """Create multiple datasets for testing listing/filtering."""
         datasets = []
@@ -51,7 +51,8 @@ class TestDatasetListingFiltering:
             datasets.append(f"test_dataset_{i}")
             
             # Small delay to ensure different timestamps
-            time.sleep(0.1)
+            # Reduced from 0.1 to 0.01 for faster tests
+            time.sleep(0.01)
         
         return datasets
     

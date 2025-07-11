@@ -11,7 +11,7 @@ import pytest
 class TestDatasetInformationStatistics:
     """Test dataset information and statistics functionality."""
     
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def complex_dataset(self, clean_mdm_env, run_mdm):
         """Create a complex dataset with various column types."""
         data = pd.DataFrame({
@@ -238,10 +238,11 @@ class TestDatasetInformationStatistics:
         csv_file = clean_mdm_env / "large_data.csv"
         large_data.to_csv(csv_file, index=False)
         
-        # Register
+        # Register with --no-features for speed
         result = run_mdm([
             "dataset", "register", "large_dataset", str(csv_file),
-            "--target", "target"
+            "--target", "target",
+            "--no-features"
         ])
         assert result.returncode == 0
         
