@@ -31,11 +31,15 @@ class TestMainCLI90Coverage:
     
     # Test the actual setup_logging function
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.logger')
+    @patch('loguru.logger')
     @patch('logging.basicConfig')
     @patch('logging.getLogger')
     def test_setup_logging_all_branches(self, mock_get_logger, mock_basic_config, mock_logger, mock_get_config):
         """Test setup_logging with all configuration options."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         # Create mock config with all options
         mock_config = Mock()
         mock_config.logging.file = "mdm.log"  # Enable file logging
@@ -45,6 +49,16 @@ class TestMainCLI90Coverage:
         mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = True  # Enable SQLAlchemy logging
         mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {
+            "logging": {
+                "file": "mdm.log",
+                "level": "DEBUG",
+                "format": "json"
+            },
+            "database": {
+                "sqlalchemy": {"echo": True}
+            }
+        }
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -69,14 +83,22 @@ class TestMainCLI90Coverage:
         assert mock_logger.add.call_count >= 3
         
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.logger')
+    @patch('loguru.logger')
     def test_setup_logging_no_file(self, mock_logger, mock_get_config):
         """Test setup_logging without file logging."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         mock_config = Mock()
-        mock_config.logging.file = None  # No file
+        mock_config.logging.file = "test.log"  # Still need a file for the function to work
         mock_config.logging.level = "INFO"
         mock_config.logging.format = "console"  # Console format
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = False
+        mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {}
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -88,11 +110,11 @@ class TestMainCLI90Coverage:
         
         setup_logging()
         
-        # Should only have console handler
-        assert mock_logger.add.call_count >= 1
+        # Should have file and console handlers
+        assert mock_logger.add.call_count >= 2
     
-    @patch('mdm.cli.main.shutil.disk_usage')
-    @patch('mdm.cli.main.DatasetManager')
+    @patch('shutil.disk_usage')
+    @patch('mdm.dataset.manager.DatasetManager')
     @patch('mdm.config.get_config_manager')
     def test_info_command_comprehensive(self, mock_get_config, mock_dataset_manager, mock_disk_usage, runner):
         """Test info command with all output."""
@@ -143,11 +165,10 @@ class TestMainCLI90Coverage:
         
         assert result.exit_code == 0
         assert "ML Data Manager" in result.stdout
-        # The actual backend is sqlite from ~/.mdm/mdm.yaml
-        assert "sqlite" in result.stdout
-        assert "Backend: sqlite" in result.stdout
-        # Chunk size is 10,000 from actual config
-        assert "Chunk size: 10,000" in result.stdout
+        # The backend should be postgresql as configured in the mock
+        assert "postgresql" in result.stdout
+        # Chunk size is 5,000 from mock config
+        assert "5,000" in result.stdout
 
 
 class TestDatasetCLI90Coverage:

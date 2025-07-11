@@ -91,7 +91,8 @@ class TestCrossBackendCompatibility:
                     sample_data, table_name, mock_engine
                 )
                 mock_to_sql.assert_called_once_with(
-                    table_name, mock_engine, if_exists='fail', index=False
+                    table_name, mock_engine, if_exists='fail', index=False,
+                    method='multi', chunksize=10000
                 )
         
         # DuckDB backend
@@ -111,7 +112,8 @@ class TestCrossBackendCompatibility:
                         sample_data, table_name, mock_engine
                     )
                     mock_to_sql.assert_called_once_with(
-                        table_name, mock_engine, if_exists='fail', index=False
+                        table_name, mock_engine, if_exists='fail', index=False,
+                        method='multi', chunksize=10000
                     )
 
     def test_query_result_format(self):
@@ -192,14 +194,21 @@ class TestCrossBackendCompatibility:
             mock_conn = MagicMock()
             mock_result = MagicMock()
             
-            # Mock the connection context manager
-            mock_engine.connect.return_value.__enter__.return_value = mock_conn
+            # Mock the connection context manager using begin() instead of connect()
+            mock_begin = MagicMock()
+            mock_begin.__enter__.return_value = mock_conn
+            mock_begin.__exit__.return_value = None
+            mock_engine.begin.return_value = mock_begin
             mock_conn.execute.return_value = mock_result
             
-            # Test execute_query
-            result = backend.execute_query("SELECT 1", mock_engine)
-            
-            # Verify the query was executed
-            mock_engine.connect.assert_called_once()
-            mock_conn.execute.assert_called_once()
-            assert result == mock_result
+            # Import text for SQL query
+            with patch('mdm.storage.backends.compatibility_mixin.text') as mock_text:
+                mock_text.return_value = "SELECT 1"
+                
+                # Test execute_query
+                result = backend.execute_query("SELECT 1", mock_engine)
+                
+                # Verify the query was executed
+                mock_engine.begin.assert_called_once()
+                mock_conn.execute.assert_called_once()
+                assert result == mock_result

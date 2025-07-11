@@ -207,12 +207,15 @@ class TestPostgreSQLBackend:
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_conn
         mock_context.__exit__.return_value = None
-        mock_engine.connect.return_value = mock_context
+        mock_engine.begin.return_value = mock_context
         
-        result = backend.execute_query("UPDATE test_table SET col1 = 1", mock_engine)
-        
-        mock_conn.execute.assert_called_once()
-        assert result == mock_result
+        with patch('mdm.storage.backends.compatibility_mixin.text') as mock_text:
+            mock_text.return_value = "UPDATE test_table SET col1 = 1"
+            
+            result = backend.execute_query("UPDATE test_table SET col1 = 1", mock_engine)
+            
+            mock_conn.execute.assert_called_once()
+            assert result == mock_result
     
     def test_get_table_info(self, config):
         """Test getting table information."""

@@ -153,8 +153,22 @@ class StorageBackend(ABC):
             # Use connection pool if available
             if self._connection_pool is None and self.config.get('use_connection_pool', True):
                 pool_config = self.config.get('pool', {})
+                # For SQLite and DuckDB, convert file path to proper URL
+                # For PostgreSQL, let the backend build the connection string
+                connection_string = database_path
+                if self.backend_type == "sqlite" and not database_path.startswith("sqlite:"):
+                    connection_string = f"sqlite:///{database_path}"
+                elif self.backend_type == "duckdb" and not database_path.startswith("duckdb:"):
+                    connection_string = f"duckdb:///{database_path}"
+                elif self.backend_type == "postgresql" and not database_path.startswith("postgresql:"):
+                    # PostgreSQL backend needs to build the connection string
+                    from mdm.storage.postgresql import PostgreSQLBackend
+                    pg_backend = self if isinstance(self, PostgreSQLBackend) else None
+                    if pg_backend:
+                        connection_string = pg_backend._build_connection_string(database_path)
+                
                 self._connection_pool = ConnectionPool(
-                    database_path,
+                    connection_string,
                     PoolConfig(
                         pool_size=pool_config.get('pool_size', 5),
                         max_overflow=pool_config.get('max_overflow', 10),

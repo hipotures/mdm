@@ -210,10 +210,11 @@ class TestBackendBehaviorCompatibility:
 class TestCompatibilityMixinBehavior:
     """Test specific behaviors of the compatibility mixin."""
     
-    def test_mixin_logs_deprecation(self, caplog, temp_db_path):
+    def test_mixin_logs_deprecation(self, caplog, tmp_path):
         """Test that mixin methods log usage for migration tracking."""
         backend = StatelessSQLiteBackend()
-        engine = backend.get_engine(temp_db_path)
+        db_path = str(tmp_path / "test.db")
+        engine = backend.get_engine(db_path)
         
         # Create a simple table
         df = pd.DataFrame({'x': [1, 2, 3]})

@@ -91,7 +91,8 @@ class ConnectionPool:
         }
         
         # Track active connections
-        self._active_connections = weakref.WeakSet()
+        # Note: Use regular set for SQLite connections as they don't support weakrefs
+        self._active_connections = set()
         
         self._initialize_engine()
     
@@ -150,14 +151,15 @@ class ConnectionPool:
             """Handle connection checkout."""
             with self._lock:
                 self._pool_stats['total_checkouts'] += 1
-                self._active_connections.add(dbapi_conn)
+                # Use id() to track connections as SQLite connections don't support weakrefs
+                self._active_connections.add(id(dbapi_conn))
         
         @event.listens_for(self._engine, "checkin")
         def on_checkin(dbapi_conn, connection_record):
             """Handle connection checkin."""
             with self._lock:
                 self._pool_stats['total_checkins'] += 1
-                self._active_connections.discard(dbapi_conn)
+                self._active_connections.discard(id(dbapi_conn))
     
     @contextmanager
     def get_connection(self):

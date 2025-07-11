@@ -9,9 +9,10 @@ from sqlalchemy import Engine, create_engine, event
 from mdm.core.exceptions import StorageError
 from mdm.models.base import Base
 from mdm.storage.base import StorageBackend
+from mdm.storage.backends.compatibility_mixin import BackendCompatibilityMixin
 
 
-class SQLiteBackend(StorageBackend):
+class SQLiteBackend(BackendCompatibilityMixin, StorageBackend):
     """SQLite storage backend."""
 
     @property

@@ -11,9 +11,10 @@ from sqlalchemy import Engine, create_engine, text
 from mdm.core.exceptions import StorageError
 from mdm.models.base import Base
 from mdm.storage.base import StorageBackend
+from mdm.storage.backends.compatibility_mixin import BackendCompatibilityMixin
 
 
-class PostgreSQLBackend(StorageBackend):
+class PostgreSQLBackend(BackendCompatibilityMixin, StorageBackend):
     """PostgreSQL storage backend."""
 
     @property

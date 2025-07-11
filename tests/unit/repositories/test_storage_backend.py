@@ -195,16 +195,10 @@ class TestSQLiteBackend:
         })
         backend_helper.create_table("test_table", df)
         
-        # Execute query
-        result = backend_helper.execute_query(
+        # Use the query method which returns DataFrame
+        result = backend_helper.backend.query(
             "SELECT * FROM test_table WHERE value > 15"
         )
-        
-        # Convert result to DataFrame if it's not already
-        if hasattr(result, 'fetchall'):
-            # It's a cursor, fetch all rows
-            rows = result.fetchall()
-            result = pd.DataFrame(rows, columns=['id', 'value'])
         
         # Assert
         assert len(result) == 2

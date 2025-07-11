@@ -380,8 +380,11 @@ features:
                 main()
                 assert '--help' in sys.argv
         
-        # With args
+        # With version args - fast path
         with patch.object(sys, 'argv', ['mdm', 'version']):
-            with patch('mdm.cli.main.app') as mock_app:
-                main()
-                assert sys.argv == ['mdm', 'version']
+            with patch('mdm.cli.main.console') as mock_console:
+                try:
+                    main()
+                except SystemExit as e:
+                    assert e.code == 0
+                    assert mock_console.print.called

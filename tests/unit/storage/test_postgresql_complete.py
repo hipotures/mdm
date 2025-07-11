@@ -307,13 +307,20 @@ class TestPostgreSQLBackendComplete:
             with pytest.raises(StorageError, match="Failed to drop PostgreSQL database"):
                 backend.drop_database("test_db")
 
-    def test_get_engine_caching(self, backend, mock_engine):
+    def test_get_engine_caching(self, config):
         """Test engine caching."""
-        with patch.object(backend, 'create_engine', return_value=mock_engine) as mock_create:
+        # Disable connection pooling for this test
+        config['use_connection_pool'] = False
+        backend = PostgreSQLBackend(config)
+        
+        with patch.object(backend, 'create_engine') as mock_create:
+            mock_engine = Mock()
+            mock_create.return_value = mock_engine
+            
             # First call
             engine1 = backend.get_engine("test_db")
             assert engine1 == mock_engine
-            mock_create.assert_called_once()
+            mock_create.assert_called_once_with("test_db")
             
             # Second call - should use cached engine
             engine2 = backend.get_engine("test_db")
@@ -384,16 +391,26 @@ class TestPostgreSQLBackendComplete:
             assert result.equals(expected_df)
             mock_read.assert_called_once_with('SELECT * FROM test_table', mock_engine)
 
-    def test_execute_query(self, backend, mock_engine, mock_connection):
+    def test_execute_query(self, backend, mock_engine):
         """Test executing query."""
-        mock_engine.connect.return_value = mock_connection
+        mock_connection = Mock()
         expected_result = Mock()
         mock_connection.execute.return_value = expected_result
         
-        result = backend.execute_query("SELECT 1", mock_engine)
+        # Mock the begin context manager
+        mock_begin = MagicMock()
+        mock_begin.__enter__.return_value = mock_connection
+        mock_begin.__exit__.return_value = None
+        mock_engine.begin.return_value = mock_begin
         
-        assert result == expected_result
-        mock_connection.execute.assert_called_once()
+        with patch('mdm.storage.backends.compatibility_mixin.text') as mock_text:
+            mock_text.return_value = "SELECT 1"
+            
+            result = backend.execute_query("SELECT 1", mock_engine)
+            
+            # Backend mixin returns the result proxy, not the fetched result
+            assert result == expected_result
+            mock_connection.execute.assert_called_once()
 
     def test_get_table_info(self, backend, mock_engine, mock_connection):
         """Test getting table info."""

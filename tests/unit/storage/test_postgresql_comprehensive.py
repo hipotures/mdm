@@ -441,12 +441,15 @@ class TestPostgreSQLBackendDataOperations:
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_conn
         mock_context.__exit__.return_value = None
-        backend_with_engine._engine.connect.return_value = mock_context
+        backend_with_engine._engine.begin.return_value = mock_context
         
-        result = backend_with_engine.execute_query("UPDATE test_table SET value = 1", backend_with_engine._engine)
-        
-        mock_conn.execute.assert_called_once()
-        assert result == mock_result
+        with patch('mdm.storage.backends.compatibility_mixin.text') as mock_text:
+            mock_text.return_value = "UPDATE test_table SET value = 1"
+            
+            result = backend_with_engine.execute_query("UPDATE test_table SET value = 1", backend_with_engine._engine)
+            
+            mock_conn.execute.assert_called_once()
+            assert result == mock_result
     
     def test_execute_query_error(self, backend_with_engine):
         """Test executing statement error handling."""
@@ -457,11 +460,14 @@ class TestPostgreSQLBackendDataOperations:
         mock_context = MagicMock()
         mock_context.__enter__.return_value = mock_conn
         mock_context.__exit__.return_value = None
-        backend_with_engine._engine.connect.return_value = mock_context
+        backend_with_engine._engine.begin.return_value = mock_context
         
-        with pytest.raises(StorageError) as exc_info:
-            backend_with_engine.execute_query("INVALID SQL", backend_with_engine._engine)
-        assert "Failed to execute query" in str(exc_info.value)
+        with patch('mdm.storage.backends.compatibility_mixin.text') as mock_text:
+            mock_text.return_value = "INVALID SQL"
+            
+            with pytest.raises(StorageError) as exc_info:
+                backend_with_engine.execute_query("INVALID SQL", backend_with_engine._engine)
+            assert "Failed to execute query" in str(exc_info.value)
 
 
 class TestPostgreSQLBackendTableInfo:

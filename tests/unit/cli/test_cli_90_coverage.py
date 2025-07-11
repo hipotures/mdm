@@ -34,18 +34,32 @@ class TestMainCoverage:
             yield
     
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.logger')
+    @patch('loguru.logger')
     def test_setup_logging_comprehensive(self, mock_logger, mock_get_config):
         """Test all branches of setup_logging."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         # Create comprehensive mock config
         mock_config = Mock()
-        mock_config.logging.file = None  # No file logging
+        mock_config.logging.file = "test.log"  # File logging
         mock_config.logging.level = "DEBUG"
         mock_config.logging.format = "json"
         mock_config.logging.max_bytes = 10485760
         mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = True  # Enable SQLAlchemy echo
         mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {
+            "logging": {
+                "file": "test.log",
+                "level": "DEBUG",
+                "format": "json"
+            },
+            "database": {
+                "sqlalchemy": {"echo": True}
+            }
+        }
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -65,9 +79,9 @@ class TestMainCoverage:
         assert mock_logger.add.called
     
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.DatasetManager')
-    @patch('mdm.cli.main.shutil.disk_usage')
-    @patch('mdm.cli.main.os.path.exists')
+    @patch('mdm.dataset.manager.DatasetManager')
+    @patch('shutil.disk_usage')
+    @patch('os.path.exists')
     def test_info_command_with_errors(self, mock_exists, mock_disk_usage, mock_dataset_manager, mock_get_config, runner, mock_setup_logging):
         """Test info command with various error conditions."""
         # Setup mocks

@@ -32,11 +32,15 @@ class TestMainCLIFinal:
     
     # Test setup_logging directly without mocking it
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.logger')
+    @patch('loguru.logger')
     @patch('logging.basicConfig')
     @patch('logging.getLogger')
     def test_setup_logging_real_function(self, mock_get_logger, mock_basic_config, mock_logger, mock_get_config):
         """Test the real setup_logging function."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         from mdm.cli.main import setup_logging
         
         # Create comprehensive mock config
@@ -48,6 +52,16 @@ class TestMainCLIFinal:
         mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = True
         mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {
+            "logging": {
+                "file": "test.log",
+                "level": "DEBUG",
+                "format": "json"
+            },
+            "database": {
+                "sqlalchemy": {"echo": True}
+            }
+        }
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -72,17 +86,24 @@ class TestMainCLIFinal:
         assert mock_logger.add.call_count >= 3
         
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.logger')
+    @patch('loguru.logger')
     def test_setup_logging_absolute_path(self, mock_logger, mock_get_config):
         """Test setup_logging with absolute log file path."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         from mdm.cli.main import setup_logging
         
         mock_config = Mock()
         mock_config.logging.file = "/var/log/mdm.log"  # Absolute path
         mock_config.logging.level = "INFO"
         mock_config.logging.format = "console"
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = False
         mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {}
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -94,26 +115,34 @@ class TestMainCLIFinal:
         
         setup_logging()
         
-        # Check that logger.add was called with an absolute path
-        file_add_call = mock_logger.add.call_args_list[0]
-        log_path = str(file_add_call[0][0])
-        # The test verifies that the code handles absolute paths - 
-        # the actual path used will depend on the Path.is_absolute() check
-        assert "mdm.log" in log_path
+        # Check that logger.add was called
+        assert mock_logger.add.called
+        # Check that the first call used the absolute path
+        if mock_logger.add.call_args_list:
+            file_add_call = mock_logger.add.call_args_list[0]
+            log_path = file_add_call[0][0]
+            assert str(log_path) == "/var/log/mdm.log" 
     
     @patch.dict(os.environ, {'MDM_LOGGING_LEVEL': 'ERROR'})
     @patch('mdm.config.get_config_manager')
-    @patch('mdm.cli.main.logger')
+    @patch('loguru.logger')
     def test_setup_logging_env_override(self, mock_logger, mock_get_config):
         """Test setup_logging with environment override."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         from mdm.cli.main import setup_logging
         
         mock_config = Mock()
         mock_config.logging.file = "mdm.log"
         mock_config.logging.level = "INFO"  # Will be overridden by env
         mock_config.logging.format = "console"
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = False
         mock_config.paths.logs_path = "logs"
+        mock_config.model_dump.return_value = {}
         
         mock_manager = Mock()
         mock_manager.config = mock_config
@@ -126,8 +155,10 @@ class TestMainCLIFinal:
         setup_logging()
         
         # Check that ERROR level from env was used
-        file_add_call = mock_logger.add.call_args_list[0]
-        assert file_add_call[1]['level'] == 'ERROR'
+        assert mock_logger.add.called
+        if mock_logger.add.call_args_list:
+            file_add_call = mock_logger.add.call_args_list[0]
+            assert file_add_call[1]['level'] == 'ERROR'
     
     def test_format_size_helper(self):
         """Test _format_size helper function."""
