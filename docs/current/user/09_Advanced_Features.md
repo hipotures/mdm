@@ -233,7 +233,19 @@ During registration, detailed logs show the feature generation process:
   - Feature table size: 145.3 MB
 ```
 
-## 2. Performance Optimization
+## 2. CLI Performance Optimization
+
+### Fast Startup (v0.2.0+)
+
+MDM's CLI has been optimized for fast startup, reducing initialization time from 6.5 seconds to ~0.1 seconds through lazy loading:
+
+- **Lazy imports**: Modules are loaded only when needed
+- **Fast path for simple commands**: `mdm version` bypasses heavy imports
+- **Optimized subcommand loading**: Commands load on-demand
+
+This makes MDM responsive for interactive use and scripting.
+
+## 3. Performance Optimization
 
 MDM provides several optimization strategies for different use cases.
 
@@ -589,8 +601,97 @@ def merge_datasets(dataset_names, join_key):
     return merged
 ```
 
+## 5. Feature Flags for Migration
+
+MDM includes a feature flag system for gradual migration from legacy implementations to the new refactored architecture. This allows safe, controlled rollout of new features.
+
+### Available Feature Flags
+
+```python
+from mdm.core import feature_flags
+
+# Available flags
+feature_flags.FEATURE_FLAGS = {
+    "use_new_storage": False,    # New storage backend implementations
+    "use_new_features": False,   # New feature engineering system
+    "use_new_dataset": False,    # New dataset management
+    "use_new_config": False,     # New configuration system
+    "use_new_cli": False         # New CLI implementation
+}
+```
+
+### Using Feature Flags
+
+```python
+# Enable specific features
+feature_flags.set("use_new_storage", True)
+feature_flags.set("use_new_features", True)
+
+# Check flag status
+if feature_flags.get("use_new_storage"):
+    print("Using new storage backend")
+
+# Enable all new features at once
+feature_flags.enable_all_new_features()
+
+# Reset to defaults
+feature_flags.reset_all()
+```
+
+### Migration Strategy
+
+1. **Test individually**: Enable one flag at a time and test
+2. **Monitor performance**: Compare metrics before/after
+3. **Gradual rollout**: Enable for subset of operations first
+4. **Full migration**: Enable all flags when confident
+
+### Environment Variable Control
+
+Feature flags can also be controlled via environment variables:
+
+```bash
+# Enable new storage backend
+export MDM_FEATURE_USE_NEW_STORAGE=true
+
+# Enable multiple features
+export MDM_FEATURE_USE_NEW_STORAGE=true
+export MDM_FEATURE_USE_NEW_FEATURES=true
+```
+
+## 6. Monitoring and Observability
+
+MDM includes built-in monitoring capabilities through the `SimpleMonitor` class:
+
+### Basic Monitoring
+
+```python
+from mdm.monitoring import SimpleMonitor
+
+monitor = SimpleMonitor()
+
+# Track metrics
+monitor.record_metric("dataset_registration_time", 2.5)
+monitor.record_metric("query_execution_time", 0.05)
+
+# Get current metrics
+metrics = monitor.get_metrics()
+```
+
+### Dashboard View
+
+MDM can display monitoring information in the CLI:
+
+```bash
+# View system metrics
+mdm stats --system
+
+# Monitor operations in real-time
+mdm monitor
+```
+
 ## Next Steps
 
 - Review [Best Practices](10_Best_Practices.md) for optimal MDM usage
 - Check [Troubleshooting](11_Troubleshooting.md) for solutions to common issues
 - See the [Summary](12_Summary.md) for key takeaways
+- Explore [Environment Variables](16_Environment_Variables.md) for advanced configuration

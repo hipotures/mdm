@@ -9,6 +9,8 @@ The configuration system consists of:
 2. **Dataset configuration files** - Individual dataset settings
 3. **Environment variables** - Runtime overrides
 
+For a complete reference of all available environment variables, see [Environment Variables Reference](16_Environment_Variables.md).
+
 ## MDM Home Directory Structure
 
 The `~/.mdm/` directory contains all MDM data and configuration:
@@ -186,7 +188,9 @@ These defaults can be overridden per export operation using CLI flags.
 - File logging captures all messages at the configured level and above
 - Console output is filtered separately - only WARNING and ERROR shown by default
 - Operational messages (dataset not found, already exists) are logged as INFO, not ERROR
-- Use environment variables to override: `export MDM_LOG_LEVEL=DEBUG`
+- Use environment variables to override: `export MDM_LOGGING_LEVEL=DEBUG`
+
+For complete logging configuration options via environment variables, see [Environment Variables - Logging Configuration](16_Environment_Variables.md#logging-configuration).
 
 ### Performance Configuration
 
@@ -226,9 +230,11 @@ Importing data: ━━━━━━━━━━━━━━━━━━━━ 75%
 
 **Environment Variable Override:**
 ```bash
-export MDM_BATCH_SIZE=25000  # Use larger batches for better performance
+export MDM_PERFORMANCE_BATCH_SIZE=25000  # Use larger batches for better performance
 mdm dataset register large_data /path/to/data.csv
 ```
+
+For all performance-related environment variables, see [Environment Variables - Performance Settings](16_Environment_Variables.md#performance-settings).
 
 **Current Limitations:**
 - SQLite backend currently uses a hardcoded batch size of 1,000 rows
@@ -303,6 +309,8 @@ validation:
 export MDM_VALIDATION_BEFORE_FEATURES_CHECK_DUPLICATES=false
 export MDM_VALIDATION_AFTER_FEATURES_SIGNAL_DETECTION=true
 ```
+
+For all available validation environment variables, see [Environment Variables - Validation Settings](16_Environment_Variables.md#validation-settings).
 
 ## Directory Structure as Registry
 
@@ -439,18 +447,36 @@ problem_type: regression
 
 ## Environment Variables
 
-Override configuration settings using environment variables:
+MDM supports extensive configuration through environment variables following the pattern `MDM_<SECTION>_<KEY>`. Environment variables have the highest precedence and override values from mdm.yaml.
+
+### Common Examples
 
 ```bash
-# Override log level
-export MDM_LOG_LEVEL=DEBUG
+# Database settings
+export MDM_DATABASE_DEFAULT_BACKEND=duckdb
+export MDM_DATABASE_SQLITE_TIMEOUT=60
 
-# Override datasets path
-export MDM_DATASETS_PATH=/data/ml/datasets
+# Performance tuning
+export MDM_PERFORMANCE_BATCH_SIZE=50000
+export MDM_PERFORMANCE_MAX_CONCURRENT_OPERATIONS=10
 
-# Override default backend
-export MDM_DEFAULT_BACKEND=postgresql
+# Logging configuration
+export MDM_LOGGING_LEVEL=DEBUG
+export MDM_LOGGING_FILE=/var/log/mdm/debug.log
+
+# Path overrides
+export MDM_PATHS_DATASETS_PATH=/data/ml/datasets
+export MDM_PATHS_CONFIG_PATH=/etc/mdm/configs
 ```
+
+### Environment Variable Mapping
+
+Environment variables map to YAML configuration using underscores for nesting:
+- `MDM_DATABASE_DEFAULT_BACKEND` → `database.default_backend`
+- `MDM_PERFORMANCE_BATCH_SIZE` → `performance.batch_size`
+- `MDM_DATABASE_DUCKDB_MEMORY_LIMIT` → `database.duckdb.memory_limit`
+
+**Important**: For the complete list of all available environment variables with descriptions and examples, see [Environment Variables Reference](16_Environment_Variables.md).
 
 ## Configuration Loading
 
@@ -478,10 +504,10 @@ To see which configuration values MDM has loaded, use debug mode:
 
 ```bash
 # Enable debug mode via environment variable
-export MDM_LOG_LEVEL=DEBUG
+export MDM_LOGGING_LEVEL=DEBUG
 mdm info
 
-# Or use the --debug flag
+# Or use the --debug flag (if available)
 mdm info --debug
 ```
 
@@ -497,9 +523,9 @@ In debug mode, MDM shows:
 [DEBUG] Configuration values:
 [DEBUG]   database.default_backend: sqlite (from mdm.yaml)
 [DEBUG]   database.connection_timeout: 30 (default)
-[DEBUG]   performance.batch_size: 10000 (overridden by MDM_BATCH_SIZE)
+[DEBUG]   performance.batch_size: 10000 (overridden by MDM_PERFORMANCE_BATCH_SIZE)
 [DEBUG]   performance.max_concurrent_operations: 5 (from mdm.yaml)
-[DEBUG]   logging.level: DEBUG (overridden by MDM_LOG_LEVEL)
+[DEBUG]   logging.level: DEBUG (overridden by MDM_LOGGING_LEVEL)
 [DEBUG]   logging.format: json (default)
 [DEBUG]   export.default_format: csv (from mdm.yaml)
 [DEBUG]   export.compression: zip (default)
@@ -570,12 +596,17 @@ database:
     pool_pre_ping: true  # Verify connections
     
   postgresql:
-    host: ${MDM_DB_HOST}          # Use env vars for secrets
-    port: ${MDM_DB_PORT:-5432}
-    user: ${MDM_DB_USER}
-    password: ${MDM_DB_PASSWORD}
+    host: localhost      # Override with MDM_DATABASE_POSTGRESQL_HOST
+    port: 5432          # Override with MDM_DATABASE_POSTGRESQL_PORT
+    user: mdm_user      # Override with MDM_DATABASE_POSTGRESQL_USER
+    password: ''        # Set via MDM_DATABASE_POSTGRESQL_PASSWORD
     database_prefix: prod_mdm_
     sslmode: require
+
+# Note: Use environment variables for sensitive data:
+# export MDM_DATABASE_POSTGRESQL_HOST=db.example.com
+# export MDM_DATABASE_POSTGRESQL_USER=prod_user
+# export MDM_DATABASE_POSTGRESQL_PASSWORD=secure_password
     
 performance:
   batch_size: 50000
@@ -616,3 +647,4 @@ feature_engineering:
 - Learn about the [Database Architecture](03_Database_Architecture.md)
 - Start [Registering Datasets](04_Dataset_Registration.md)
 - Explore [Database Backends](06_Database_Backends.md) options
+- See [Environment Variables Reference](16_Environment_Variables.md) for all configuration options

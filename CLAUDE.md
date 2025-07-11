@@ -106,6 +106,8 @@ MDM uses a two-tier database system:
 - `src/mdm/cli/`: Typer-based CLI implementation with Rich formatting
 - `src/mdm/config/`: Configuration management using Pydantic Settings
 - `src/mdm/api/`: Programmatic API (MDMClient)
+- `src/mdm/monitoring/`: Simple monitoring and dashboard capabilities
+- `src/mdm/core/`: Core implementations including feature flags, logging, and exceptions
 
 ### Important Classes
 - `StorageBackend` (base.py): Abstract base for all storage backends
@@ -113,6 +115,7 @@ MDM uses a two-tier database system:
 - `DatasetManager`: Core dataset operations
 - `FeatureGenerator`: Two-tier feature engineering system
 - `MDMClient`: High-level programmatic API
+- `SimpleMonitor`: Basic monitoring and metrics collection
 
 ### Dataset Registration Process
 1. Validates dataset name
@@ -149,8 +152,44 @@ MDM uses a two-tier database system:
 - Log level: DEBUG shows all operations including batch processing
 - Console output: WARNING and above only (clean CLI experience)
 - Interceptor pattern used to unify standard logging with loguru
+- Default format changed to 'console' (was 'json') for better readability
+
+## Migration and Feature Flags
+
+### Feature Flag System
+MDM uses feature flags for gradual migration from legacy to new implementation:
+```python
+from mdm.core import feature_flags
+
+# Available flags
+use_new_storage = False    # New storage backends
+use_new_features = False   # New feature engineering
+use_new_dataset = False    # New dataset management
+use_new_config = False     # New configuration system
+use_new_cli = False        # New CLI implementation
+
+# Enable gradually
+feature_flags.set("use_new_storage", True)
+
+# Or enable all at once
+feature_flags.enable_all_new_features()
+```
+
+### Migration Strategy
+1. Always backup `~/.mdm/` before migration
+2. Test in development environment first
+3. Use phased approach with feature flags
+4. Monitor performance during migration
+5. Have rollback plan ready
 
 ## Recent Improvements
+
+### Performance Optimizations (2025-07)
+- CLI startup time reduced from 6.5s to 0.1s using lazy loading
+- Special fast path for `mdm version` command
+- Lazy imports with `__getattr__` in modules
+- Batch loading with Rich progress bars during registration
+- Memory-efficient chunk processing (10k rows default)
 
 ### Progress Bar and Output Management
 - Batch loading with Rich progress bars during registration
@@ -158,11 +197,6 @@ MDM uses a two-tier database system:
 - Missing column warnings changed to debug level
 - Clean, unified progress tracking from data loading to feature generation
 - Enhanced configuration display with Rich panels after registration
-
-### Memory Efficiency
-- Data loaded in configurable chunks (default: 10,000 rows)
-- Feature generation processes data in batches
-- Prevents memory exhaustion on large datasets
 
 ### Update Command Improvements (2025-07-08)
 - Fixed exit code behavior (returns 0 when no updates specified)
@@ -195,9 +229,10 @@ All code, documentation, and communication must be in English.
 
 ### Testing Approach
 - Use MANUAL_TEST_CHECKLIST.md for comprehensive testing (617 test items)
-- Document issues in ISSUES.md
+- Document issues in ISSUES.md (if exists)
 - Track progress in test_progress.md
 - Pre-commit hook checks test import paths
+- E2E tests run in isolated `/tmp` directories for safety
 
 ### Common Patterns
 - Use SQLAlchemy ORM for all database operations
@@ -220,11 +255,14 @@ When fixing tests:
 - _load_data_files returns Dict[str, str] not nested dicts
 - Backend initialization must handle errors properly
 - Use appropriate timeouts for performance tests (10s default)
+- E2E tests may be slow due to ydata-profiling - use --no-features flag for speed
 
 ## Useful Files for Context
 - `docs/03_Database_Architecture.md`: Authoritative backend selection explanation
+- `docs/Architecture_Decisions.md`: ADRs for key design choices
+- `docs/Migration_Guide.md`: Detailed migration instructions
 - `docs/MANUAL_TEST_CHECKLIST.md`: 617-item comprehensive test checklist
-- `ISSUES.md`: Documented bugs and limitations
+- `ISSUES.md`: Documented bugs and limitations (if exists)
 - `test_progress.md`: Testing status and findings
 - `pyproject.toml`: Dependencies and project metadata
 - `scripts/check_test_imports.py`: Pre-commit hook for test imports

@@ -9,7 +9,12 @@ This documentation provides comprehensive information about the ML Data Manager 
 1. **[00_Table_of_Contents.md](00_Table_of_Contents.md)** - This file
    - Complete documentation guide and navigation
 
-2. **[01_Project_Overview.md](01_Project_Overview.md)** - Introduction and Overview
+2. **[00_Quick_Start.md](00_Quick_Start.md)** - 5-Minute Quick Start Guide 🚀
+   - Installation and basic usage
+   - Common commands
+   - Python API basics
+
+3. **[01_Project_Overview.md](01_Project_Overview.md)** - Introduction and Overview
    - Project description
    - Language requirement (English only)
    - Key benefits
@@ -109,12 +114,25 @@ This documentation provides comprehensive information about the ML Data Manager 
     - Error scenarios and messages
     - Priority and override behavior
 
+16. **[15_FAQ.md](15_FAQ.md)** - Frequently Asked Questions
+    - General questions
+    - Installation and setup
+    - Common issues and solutions
+    - Best practices
+
+17. **[16_Environment_Variables.md](16_Environment_Variables.md)** - Environment Variables Reference
+    - Complete list of all MDM_* variables
+    - Configuration hierarchy
+    - Usage examples
+    - Common patterns
+
 ### Quick Start
 
 For a quick introduction to MDM, start with:
-1. [01_Project_Overview.md](01_Project_Overview.md) - Understand what MDM is
-2. [04_Dataset_Registration.md](04_Dataset_Registration.md) - Learn how to register your first dataset
-3. [07_Command_Line_Interface.md](07_Command_Line_Interface.md) - See available commands
+1. **[00_Quick_Start.md](00_Quick_Start.md)** - Get started in 5 minutes! 🚀
+2. [01_Project_Overview.md](01_Project_Overview.md) - Understand what MDM is
+3. [04_Dataset_Registration.md](04_Dataset_Registration.md) - Learn dataset registration details
+4. [15_FAQ.md](15_FAQ.md) - Find answers to common questions
 
 ### Navigation Tips
 
