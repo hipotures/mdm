@@ -36,6 +36,7 @@ class TestResult:
     error_message: Optional[str] = None
     output: str = ""
     duration: float = 0.0
+    subtests: Dict[str, float] = field(default_factory=dict)  # subtest_name -> duration
     
     @property
     def full_test_path(self) -> str:
@@ -86,7 +87,7 @@ class BaseTestRunner(ABC):
         """Return list of (test_path, category_name) tuples."""
         pass
     
-    def run_pytest(self, test_path: Path, extra_args: List[str] = None) -> subprocess.CompletedProcess:
+    def run_pytest(self, test_path: Path, extra_args: List[str] = None, show_timing: bool = False) -> subprocess.CompletedProcess:
         """Run pytest on specified path."""
         cmd = [
             sys.executable, "-m", "pytest",
@@ -95,6 +96,10 @@ class BaseTestRunner(ABC):
             "--no-header",
             "--durations=0"  # Show all test durations
         ]
+        
+        if show_timing:
+            # Add verbose timing output
+            cmd.extend(["-vv", "--durations=0", "--durations-min=0.001"])
         
         # For E2E tests, ensure proper isolation
         env = None
@@ -154,12 +159,21 @@ class BaseTestRunner(ABC):
                         error_message=error_message,
                         duration=test.get('duration', 0.0)
                     )
+                    
+                    # Add subtest durations if available
+                    if hasattr(self, 'show_timing') and self.show_timing:
+                        # duration_map will be populated later
+                        pass
+                    
                     suite.results.append(result)
                 
                 return suite
                 
             except (json.JSONDecodeError, KeyError):
                 pass  # Fall back to text parsing
+        
+        # Parse durations from pytest output
+        duration_map = self._parse_durations(result.stdout)
         
         # Fall back to parsing text output
         lines = (result.stdout + result.stderr).split('\n')
@@ -211,6 +225,18 @@ class BaseTestRunner(ABC):
                             error_message=error_message,
                             output=result.stdout if not passed else ""
                         )
+                        
+                        # Add timing information from duration_map
+                        if hasattr(self, 'show_timing') and self.show_timing and duration_map:
+                            # Look for exact match first
+                            if test_name in duration_map:
+                                test_result.duration = duration_map[test_name]
+                            # Also check for class::method format
+                            for duration_key, duration_value in duration_map.items():
+                                if duration_key.endswith(f"::{test_name}"):
+                                    test_result.duration = duration_value
+                                    break
+                        
                         suite.results.append(test_result)
                         break
         
@@ -233,6 +259,41 @@ class BaseTestRunner(ABC):
                         suite.results.append(test_result)
         
         return suite
+    
+    def _parse_durations(self, output: str) -> Dict[str, float]:
+        """Parse test durations from pytest output."""
+        durations = {}
+        lines = output.split('\n')
+        
+        # Look for duration section in pytest output
+        in_durations = False
+        for line in lines:
+            if "slowest durations" in line:
+                in_durations = True
+                continue
+            
+            if in_durations:
+                # Match lines like "1.23s call     tests/test_file.py::TestClass::test_method"
+                match = re.match(r'(\d+\.\d+)s\s+call\s+(.+?)::(.+?)::(.+?)(?:\[|$)', line)
+                if match:
+                    duration = float(match.group(1))
+                    test_class = match.group(3)
+                    test_method = match.group(4)
+                    full_name = f"{test_class}::{test_method}"
+                    durations[full_name] = duration
+                # Also match simpler format "1.23s call     tests/test_file.py::test_function"
+                else:
+                    match = re.match(r'(\d+\.\d+)s\s+call\s+(.+?)::(.+?)(?:\[|$)', line)
+                    if match:
+                        duration = float(match.group(1))
+                        test_name = match.group(3)
+                        durations[test_name] = duration
+                
+                # Stop when we hit the summary section
+                if "=" in line and "passed" in line:
+                    break
+        
+        return durations
     
     def _extract_error_info(self, lines: List[str], start_index: int) -> str:
         """Extract error information from pytest output."""
@@ -304,7 +365,7 @@ class BaseTestRunner(ABC):
             suite.total_duration = 0.0
             return suite
         
-        result = self.run_pytest(test_path)
+        result = self.run_pytest(test_path, show_timing=getattr(self, 'show_timing', False))
         suite = self.parse_pytest_output(result, test_file, category_name)
         
         # Calculate total duration
@@ -325,14 +386,16 @@ class BaseTestRunner(ABC):
         
         return suite
     
-    def run_all_tests(self, show_progress: bool = True, max_workers: int = 1) -> Dict[str, TestSuite]:
+    def run_all_tests(self, show_progress: bool = True, max_workers: int = 1, show_timing: bool = False) -> Dict[str, TestSuite]:
         """Run all test categories and return results.
         
         Args:
             show_progress: Whether to show progress
             max_workers: Maximum number of parallel workers (default 1 for sequential)
+            show_timing: Whether to collect detailed timing information
         """
         test_categories = self.get_test_categories()
+        self.show_timing = show_timing
         
         # Sequential execution (original behavior)
         if max_workers == 1:

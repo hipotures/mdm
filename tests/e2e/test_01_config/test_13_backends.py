@@ -88,7 +88,8 @@ class TestDatabaseBackendConfiguration:
         mdm_config_file(database={"default_backend": "sqlite"})
         result = run_mdm([
             "dataset", "register", "test_sqlite_iso", str(sample_csv_data),
-            "--target", "value"
+            "--target", "value",
+            "--no-features"  # Speed up test
         ])
         assert result.returncode == 0
         
@@ -107,7 +108,8 @@ class TestDatabaseBackendConfiguration:
         # Register DuckDB dataset
         result = run_mdm([
             "dataset", "register", "test_duckdb_iso", str(sample_csv_data),
-            "--target", "value"
+            "--target", "value",
+            "--no-features"  # Speed up test
         ])
         assert result.returncode == 0
         

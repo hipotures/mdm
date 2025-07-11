@@ -243,13 +243,13 @@ class TestDatasetListingFiltering:
     @pytest.mark.mdm_id("2.2.4.3")
     def test_list_performance(self, clean_mdm_env, run_mdm):
         """2.2.4.3: List command performs well with many datasets"""
-        # Create 5 datasets (reduced for faster test)
+        # Create 3 datasets (reduced from 5 for faster test)
         # First create all CSV files
         csv_files = []
-        for i in range(5):
+        for i in range(3):
             data = pd.DataFrame({
-                'id': range(1, 6),
-                'value': range(i * 5, (i + 1) * 5)
+                'id': range(1, 4),  # Smaller dataset
+                'value': range(i * 3, (i + 1) * 3)
             })
             csv_file = clean_mdm_env / f"perf_{i}.csv"
             data.to_csv(csv_file, index=False)

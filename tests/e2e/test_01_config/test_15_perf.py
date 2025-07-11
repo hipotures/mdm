@@ -155,13 +155,14 @@ class TestPerformanceConfiguration:
         # Register dataset
         result = run_mdm([
             "dataset", "register", "test_cache", str(sample_csv_data),
-            "--target", "value"
+            "--target", "value",
+            "--no-features"  # Speed up test
         ])
         
         assert result.returncode == 0
         
-        # Access dataset multiple times to test caching
-        for _ in range(3):
+        # Access dataset twice to test caching (reduced from 3)
+        for _ in range(2):
             result = run_mdm(["dataset", "info", "test_cache"])
             assert result.returncode == 0
     

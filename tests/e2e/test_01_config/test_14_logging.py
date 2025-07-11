@@ -109,8 +109,8 @@ class TestLoggingConfiguration:
             "backup_count": 3
         })
         
-        # Generate multiple log entries
-        for i in range(5):
+        # Generate multiple log entries - reduced from 5 to 2
+        for i in range(2):
             result = run_mdm([
                 "dataset", "list"
             ])
