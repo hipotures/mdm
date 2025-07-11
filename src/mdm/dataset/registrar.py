@@ -84,42 +84,91 @@ class DatasetRegistrar:
             DatasetError: If registration fails
         """
         logger.info(f"Starting registration for dataset '{name}'")
-        
-        # Record start of registration
         start_time = pd.Timestamp.now()
         
+        # Steps 1-3: Validation and preparation
+        normalized_name = self._prepare_registration(name, path, kwargs.get('force', False))
+        
+        # Steps 4-5: Detection and discovery
+        detected_info, files = self._detect_and_discover(path, auto_detect)
+        
+        # Step 6: Create database
+        db_info = self._create_database(normalized_name)
+        
+        # Steps 7-10.5: Load data and generate features
+        table_mappings, column_info, id_columns, target_column, problem_type, feature_tables = \
+            self._process_data(
+                normalized_name, files, db_info, detected_info, 
+                auto_detect, kwargs
+            )
+        
+        # Steps 11-12: Create info and save
+        dataset_info = self._finalize_registration(
+            normalized_name, name, path, description, tags,
+            db_info, table_mappings, column_info,
+            id_columns, target_column, problem_type,
+            feature_tables, detected_info, kwargs
+        )
+        
+        # Record metrics
+        self._record_registration_metrics(
+            normalized_name, start_time, dataset_info,
+            files, feature_tables
+        )
+        
+        logger.info(f"Dataset '{normalized_name}' registered successfully")
+        return dataset_info
+    
+    def _prepare_registration(self, name: str, path: Path, force: bool) -> str:
+        """Steps 1-3: Validate name, check existence, validate path."""
         # Step 1: Validate dataset name
         normalized_name = self._validate_name(name)
-
+        
         # Step 2: Check if dataset already exists
         if self.manager.dataset_exists(normalized_name):
-            if kwargs.get('force', False):
-                logger.info(f"Dataset '{normalized_name}' exists, removing due to --force flag")
-                # Remove existing dataset
-                from mdm.dataset.operations import RemoveOperation
-                remove_op = RemoveOperation()
-                try:
-                    remove_op.execute(normalized_name, force=True, dry_run=False)
-                except Exception as e:
-                    logger.warning(f"Failed to remove existing dataset: {e}")
+            if force:
+                self._remove_existing_dataset(normalized_name)
             else:
                 raise DatasetError(f"Dataset '{normalized_name}' already exists")
-
+        
         # Step 3: Validate path
-        path = self._validate_path(path)
-
+        self._validate_path(path)
+        
+        return normalized_name
+    
+    def _remove_existing_dataset(self, normalized_name: str) -> None:
+        """Remove existing dataset when --force is used."""
+        logger.info(f"Dataset '{normalized_name}' exists, removing due to --force flag")
+        from mdm.dataset.operations import RemoveOperation
+        remove_op = RemoveOperation()
+        try:
+            remove_op.execute(normalized_name, force=True, dry_run=False)
+        except Exception as e:
+            logger.warning(f"Failed to remove existing dataset: {e}")
+    
+    def _detect_and_discover(self, path: Path, auto_detect: bool) -> tuple[Dict[str, Any], Dict[str, Path]]:
+        """Steps 4-5: Auto-detect structure and discover files."""
         # Step 4: Auto-detect or manual mode
         if auto_detect:
             detected_info = self._auto_detect(path)
         else:
             detected_info = {}
-
+        
         # Step 5: Discover data files
         files = self._discover_files(path, detected_info)
-
-        # Step 6: Create database
-        db_info = self._create_database(normalized_name)
-
+        
+        return detected_info, files
+    
+    def _process_data(
+        self,
+        normalized_name: str,
+        files: Dict[str, Path],
+        db_info: Dict[str, Any],
+        detected_info: Dict[str, Any],
+        auto_detect: bool,
+        kwargs: Dict[str, Any]
+    ) -> tuple:
+        """Steps 7-10.5: Load data, analyze, and generate features."""
         # Create a single progress context for all operations
         with Progress(
             SpinnerColumn(),
@@ -131,43 +180,156 @@ class DatasetRegistrar:
         ) as progress:
             # Step 7: Load data files
             table_mappings = self._load_data_files(files, db_info, progress)
-
+            
             # Step 8: Detect columns and types
-            task = progress.add_task("Analyzing columns and data types...", total=None)
-            column_info = self._analyze_columns(db_info, table_mappings)
-            progress.update(task, completed=True, visible=False)
-
+            column_info = self._analyze_columns_with_progress(db_info, table_mappings, progress)
+            
             # Step 9: Detect ID columns
-            id_columns = detected_info.get('id_columns', [])
-            if not id_columns and auto_detect:
-                id_columns = self._detect_id_columns(column_info)
-
+            id_columns = self._determine_id_columns(detected_info, column_info, auto_detect)
+            
             # Step 10: Determine problem type and target
-            target_column = detected_info.get('target_column') or kwargs.get('target_column')
-            problem_type = detected_info.get('problem_type') or kwargs.get('problem_type')
-
-            if auto_detect and not problem_type and target_column:
-                problem_type = self._infer_problem_type(column_info, target_column)
-
+            target_column, problem_type = self._determine_target_and_type(
+                detected_info, column_info, auto_detect, kwargs
+            )
+            
             # Step 10.5: Generate feature tables
-            feature_tables = {}
-            # Check configuration first, then kwargs override
-            generate_features = self.config.feature_engineering.enabled
-            if 'generate_features' in kwargs:
-                generate_features = kwargs['generate_features']
+            feature_tables = self._generate_features_if_enabled(
+                normalized_name, db_info, table_mappings, column_info,
+                target_column, id_columns, kwargs, progress
+            )
             
-            logger.debug(f"Feature generation config: enabled={self.config.feature_engineering.enabled}, kwargs override={kwargs.get('generate_features')}, final={generate_features}")
-            
-            if generate_features:
-                feature_tables = self._generate_features(
-                    normalized_name, db_info, table_mappings, column_info,
-                    target_column, id_columns, kwargs.get('type_schema'),
-                    progress
-                )
+            if feature_tables:
                 table_mappings.update(feature_tables)
-
+        
+        return table_mappings, column_info, id_columns, target_column, problem_type, feature_tables
+    
+    def _analyze_columns_with_progress(
+        self,
+        db_info: Dict[str, Any],
+        table_mappings: Dict[str, str],
+        progress: Progress
+    ) -> Dict[str, Any]:
+        """Analyze columns with progress tracking."""
+        task = progress.add_task("Analyzing columns and data types...", total=None)
+        column_info = self._analyze_columns(db_info, table_mappings)
+        progress.update(task, completed=True, visible=False)
+        return column_info
+    
+    def _determine_id_columns(
+        self,
+        detected_info: Dict[str, Any],
+        column_info: Dict[str, Any],
+        auto_detect: bool
+    ) -> List[str]:
+        """Determine ID columns from detection or auto-detection."""
+        id_columns = detected_info.get('id_columns', [])
+        if not id_columns and auto_detect:
+            id_columns = self._detect_id_columns(column_info)
+        return id_columns
+    
+    def _determine_target_and_type(
+        self,
+        detected_info: Dict[str, Any],
+        column_info: Dict[str, Any],
+        auto_detect: bool,
+        kwargs: Dict[str, Any]
+    ) -> tuple[Optional[str], Optional[str]]:
+        """Determine target column and problem type."""
+        target_column = detected_info.get('target_column') or kwargs.get('target_column')
+        problem_type = detected_info.get('problem_type') or kwargs.get('problem_type')
+        
+        if auto_detect and not problem_type and target_column:
+            problem_type = self._infer_problem_type(column_info, target_column)
+        
+        return target_column, problem_type
+    
+    def _generate_features_if_enabled(
+        self,
+        normalized_name: str,
+        db_info: Dict[str, Any],
+        table_mappings: Dict[str, str],
+        column_info: Dict[str, Any],
+        target_column: Optional[str],
+        id_columns: List[str],
+        kwargs: Dict[str, Any],
+        progress: Progress
+    ) -> Dict[str, str]:
+        """Generate features if enabled."""
+        # Check configuration first, then kwargs override
+        generate_features = self.config.feature_engineering.enabled
+        if 'generate_features' in kwargs:
+            generate_features = kwargs['generate_features']
+        
+        logger.debug(f"Feature generation config: enabled={self.config.feature_engineering.enabled}, "
+                    f"kwargs override={kwargs.get('generate_features')}, final={generate_features}")
+        
+        if generate_features:
+            return self._generate_features(
+                normalized_name, db_info, table_mappings, column_info,
+                target_column, id_columns, kwargs.get('type_schema'),
+                progress
+            )
+        return {}
+    
+    def _finalize_registration(
+        self,
+        normalized_name: str,
+        name: str,
+        path: Path,
+        description: Optional[str],
+        tags: Optional[List[str]],
+        db_info: Dict[str, Any],
+        table_mappings: Dict[str, str],
+        column_info: Dict[str, Any],
+        id_columns: List[str],
+        target_column: Optional[str],
+        problem_type: Optional[str],
+        feature_tables: Dict[str, str],
+        detected_info: Dict[str, Any],
+        kwargs: Dict[str, Any]
+    ) -> DatasetInfo:
+        """Steps 11-12: Create dataset info and save registration."""
         # Step 11: Create dataset info
-        dataset_info = DatasetInfo(
+        dataset_info = self._create_dataset_info(
+            normalized_name, name, path, description, tags,
+            db_info, table_mappings, id_columns,
+            target_column, problem_type, feature_tables,
+            detected_info, kwargs
+        )
+        
+        # Step 11.5: Add datetime columns to metadata
+        if self._detected_datetime_columns:
+            dataset_info.metadata['datetime_columns'] = self._detected_datetime_columns
+            logger.info(f"Saved datetime columns in metadata: {self._detected_datetime_columns}")
+        
+        # Step 11.6: Compute and add statistics
+        statistics = self._compute_initial_statistics(normalized_name, db_info, table_mappings)
+        if statistics:
+            dataset_info.metadata['statistics'] = statistics
+        
+        # Step 12: Save registration
+        self.manager.register_dataset(dataset_info)
+        
+        return dataset_info
+    
+    def _create_dataset_info(
+        self,
+        normalized_name: str,
+        name: str,
+        path: Path,
+        description: Optional[str],
+        tags: Optional[List[str]],
+        db_info: Dict[str, Any],
+        table_mappings: Dict[str, str],
+        id_columns: List[str],
+        target_column: Optional[str],
+        problem_type: Optional[str],
+        feature_tables: Dict[str, str],
+        detected_info: Dict[str, Any],
+        kwargs: Dict[str, Any]
+    ) -> DatasetInfo:
+        """Create DatasetInfo object."""
+        return DatasetInfo(
             name=normalized_name,
             display_name=kwargs.get('display_name', name),
             description=description or detected_info.get('description', ''),
@@ -185,26 +347,21 @@ class DatasetRegistrar:
                if k not in ['display_name', 'target_column', 'problem_type', 
                            'id_columns', 'time_column', 'group_column']}
         )
-
-        # Step 11.5: Save detected datetime columns in metadata
-        if self._detected_datetime_columns:
-            dataset_info.metadata['datetime_columns'] = self._detected_datetime_columns
-            logger.info(f"Saved datetime columns in metadata: {self._detected_datetime_columns}")
-        
-        # Step 11.6: Compute initial statistics including memory size
-        statistics = self._compute_initial_statistics(normalized_name, db_info, table_mappings)
-        if statistics:
-            dataset_info.metadata['statistics'] = statistics
-
-        # Step 12: Save registration
-        self.manager.register_dataset(dataset_info)
-
-        # Record successful registration
+    
+    def _record_registration_metrics(
+        self,
+        normalized_name: str,
+        start_time: pd.Timestamp,
+        dataset_info: DatasetInfo,
+        files: Dict[str, Path],
+        feature_tables: Dict[str, str]
+    ) -> None:
+        """Record registration metrics."""
         duration_ms = (pd.Timestamp.now() - start_time).total_seconds() * 1000
-        # table_mappings contains table names, get row count from dataset_info
         total_rows = 0
         if hasattr(dataset_info, 'statistics') and dataset_info.statistics:
             total_rows = dataset_info.statistics.get('row_count', 0)
+        
         self.monitor.record_metric(
             MetricType.DATASET_REGISTER,
             f"register_{normalized_name}",
@@ -218,10 +375,6 @@ class DatasetRegistrar:
                 'backend': self.config.database.default_backend
             }
         )
-
-        # Log dataset registration
-        logger.info(f"Dataset '{normalized_name}' registered successfully")
-        return dataset_info
 
     def _validate_name(self, name: str) -> str:
         """Step 1: Validate dataset name."""
