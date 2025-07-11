@@ -414,13 +414,6 @@ class NewStatsCommands(IStatsCommands):
                 'mdm_home': str(Path.home() / '.mdm'),
                 'config_file': str(self.config._config_file),
                 'backend': self.config.get('database.default_backend'),
-                'feature_flags': {
-                    'use_new_config': self.config.get('feature_flags.use_new_config', False),
-                    'use_new_storage': self.config.get('feature_flags.use_new_storage', False),
-                    'use_new_features': self.config.get('feature_flags.use_new_features', False),
-                    'use_new_dataset_registration': self.config.get('feature_flags.use_new_dataset_registration', False),
-                    'use_new_cli': self.config.get('feature_flags.use_new_cli', False),
-                }
             },
             'datasets': {
                 'total': 0,
@@ -479,16 +472,6 @@ class NewStatsCommands(IStatsCommands):
         system_table.add_row("Config File:", stats['system']['config_file'])
         system_table.add_row("MDM Home:", stats['system']['mdm_home'])
         console.print(system_table)
-        
-        # Feature flags
-        flags_table = Table(title="Feature Flags")
-        flags_table.add_column("Flag", style="cyan")
-        flags_table.add_column("Status", style="yellow")
-        
-        for flag, enabled in stats['system']['feature_flags'].items():
-            status = "[green]Enabled[/green]" if enabled else "[dim]Disabled[/dim]"
-            flags_table.add_row(flag, status)
-        console.print(flags_table)
         
         # Dataset stats
         dataset_table = Table(title="Dataset Statistics", show_header=False)

@@ -9,16 +9,6 @@ from .container import (
     has_service,
     ServiceNotFoundError,
 )
-from .feature_flags import (
-    FeatureFlags,
-    feature_flags,
-    feature_flag,
-    is_new_backend_enabled,
-    is_new_registrar_enabled,
-    is_new_features_enabled,
-    enable_new_backend,
-    disable_new_backend,
-)
 from .metrics import (
     MetricsCollector,
     metrics_collector,
@@ -43,15 +33,6 @@ __all__ = [
     'get_service',
     'has_service',
     'ServiceNotFoundError',
-    # Feature Flags
-    'FeatureFlags',
-    'feature_flags',
-    'feature_flag',
-    'is_new_backend_enabled',
-    'is_new_registrar_enabled',
-    'is_new_features_enabled',
-    'enable_new_backend',
-    'disable_new_backend',
     # Metrics
     'MetricsCollector',
     'metrics_collector',

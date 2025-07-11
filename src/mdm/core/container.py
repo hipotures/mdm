@@ -183,52 +183,38 @@ def configure_container(config: Dict[str, Any]) -> None:
     This function sets up all the service registrations based on
     configuration and feature flags.
     """
-    from ..adapters.storage_adapters import SQLiteAdapter, DuckDBAdapter, PostgreSQLAdapter
-    from ..adapters.feature_adapters import FeatureGeneratorAdapter
-    from ..adapters.dataset_adapters import DatasetRegistrarAdapter, DatasetManagerAdapter
     from ..storage.backends.stateless_sqlite import StatelessSQLiteBackend
     from ..storage.backends.stateless_duckdb import StatelessDuckDBBackend
-    from ..core.feature_flags import is_new_backend_enabled
+    from ..storage.postgresql import PostgreSQLBackend
+    from ..features.generator import FeatureGenerator
+    from ..dataset.registrar import DatasetRegistrar
+    from ..dataset.manager import DatasetManager
     
     # Store configuration
     container.configure(config)
     
     # Get backend configuration
     backend_type = config.get("database", {}).get("default_backend", "sqlite")
-    use_new_backend = is_new_backend_enabled()
     
-    logger.info(f"Configuring container - Backend: {backend_type}, "
-               f"Use new: {use_new_backend}")
+    logger.info(f"Configuring container - Backend: {backend_type}")
     
-    # Register storage backend based on feature flag
-    if use_new_backend:
-        # Use new stateless implementations
-        if backend_type == "sqlite":
-            container.register(IStorageBackend, StatelessSQLiteBackend, singleton=False)
-        elif backend_type == "duckdb":
-            container.register(IStorageBackend, StatelessDuckDBBackend, singleton=False)
-        elif backend_type == "postgresql":
-            # PostgreSQL stateless not implemented yet, use adapter
-            container.register(IStorageBackend, PostgreSQLAdapter, singleton=True)
-        else:
-            raise ValueError(f"Unknown backend type: {backend_type}")
+    # Register storage backend
+    if backend_type == "sqlite":
+        container.register(IStorageBackend, StatelessSQLiteBackend, singleton=False)
+    elif backend_type == "duckdb":
+        container.register(IStorageBackend, StatelessDuckDBBackend, singleton=False)
+    elif backend_type == "postgresql":
+        # TODO: Create stateless PostgreSQL backend
+        container.register(IStorageBackend, PostgreSQLBackend, singleton=True)
     else:
-        # Use adapters for existing implementations
-        if backend_type == "sqlite":
-            container.register(IStorageBackend, SQLiteAdapter, singleton=True)
-        elif backend_type == "duckdb":
-            container.register(IStorageBackend, DuckDBAdapter, singleton=True)
-        elif backend_type == "postgresql":
-            container.register(IStorageBackend, PostgreSQLAdapter, singleton=True)
-        else:
-            raise ValueError(f"Unknown backend type: {backend_type}")
+        raise ValueError(f"Unknown backend type: {backend_type}")
     
-    # Register feature generator (always use adapter for now)
-    container.register(IFeatureGenerator, FeatureGeneratorAdapter, singleton=True)
+    # Register feature generator
+    container.register(IFeatureGenerator, FeatureGenerator, singleton=True)
     
     # Register dataset services
-    container.register(IDatasetRegistrar, DatasetRegistrarAdapter, singleton=False)
-    container.register(IDatasetManager, DatasetManagerAdapter, singleton=True)
+    container.register(IDatasetRegistrar, DatasetRegistrar, singleton=False)
+    container.register(IDatasetManager, DatasetManager, singleton=True)
     
     logger.info(f"Container configured with {len(container.get_registered_services())} services")
 

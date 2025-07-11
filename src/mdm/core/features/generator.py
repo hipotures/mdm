@@ -15,7 +15,6 @@ import logging
 from datetime import datetime
 
 from mdm.interfaces.features import IFeatureGenerator
-from mdm.core import feature_flags
 from .base import transformer_registry, FeatureTransformer
 
 logger = logging.getLogger(__name__)

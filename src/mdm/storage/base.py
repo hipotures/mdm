@@ -346,22 +346,6 @@ class StorageBackend(ABC):
             with engine.connect() as conn:
                 result = conn.execute(text(query))
                 return result.fetchall()
-    
-    def execute_query_original(self, query: str, engine: Engine) -> Any:
-        """Execute arbitrary SQL query (original implementation).
-
-        Args:
-            query: SQL query string
-            engine: SQLAlchemy engine
-
-        Returns:
-            Query result
-        """
-        try:
-            with engine.connect() as conn:
-                return conn.execute(text(query))
-        except Exception as e:
-            raise StorageError(f"Failed to execute query: {e}") from e
 
     def query(self, query: str) -> pd.DataFrame:
         """Execute SQL query and return results as DataFrame.
