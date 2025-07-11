@@ -1,38 +1,23 @@
-"""Main CLI entry point for MDM - Optimized for fast startup."""
+"""Main CLI entry point for MDM."""
 
 import os
 import sys
+import shutil
+import logging
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from loguru import logger
 
-# Create console for output
-console = Console()
-
-# Create main app
-app = typer.Typer(
-    name="mdm",
-    help="ML Data Manager - Streamline your ML data pipeline",
-    pretty_exceptions_enable=False,
-)
-
-# Global flag to track if logging has been set up
-_logging_initialized = False
+# Lazy imports to speed up CLI startup
+# These will be imported only when needed
 
 
 def setup_logging():
     """Setup logging configuration for both standard logging and loguru."""
-    global _logging_initialized
-    if _logging_initialized:
-        return
-    _logging_initialized = True
-    
-    # Import heavy modules only when logging is needed
-    import logging
-    from loguru import logger
+    # Get configuration
     from mdm.config import get_config_manager
-    
     config_manager = get_config_manager()
     config = config_manager.config
     base_path = config_manager.base_path
@@ -42,6 +27,7 @@ def setup_logging():
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     # Get log file path from config or use default
+    # If the file path is absolute, use it as is, otherwise relative to logs_dir
     if Path(config.logging.file).is_absolute():
         log_file = Path(config.logging.file)
     else:
@@ -160,6 +146,16 @@ def setup_logging():
                 logger.debug(f"  {section}: {data}")
 
 
+# Don't setup logging on import - let it be called when needed
+
+# Create main app
+app = typer.Typer(
+    name="mdm",
+    help="ML Data Manager - Streamline your ML data pipeline",
+    pretty_exceptions_enable=False,
+)
+
+
 @app.callback(invoke_without_command=True)
 def main_callback(ctx: typer.Context):
     """Setup logging before running any command."""
@@ -168,8 +164,33 @@ def main_callback(ctx: typer.Context):
         return
     setup_logging()
 
+# Lazy load subcommands
+def get_dataset_app():
+    from mdm.cli.dataset import dataset_app
+    return dataset_app
 
-# Main commands - these are lightweight and don't need lazy loading
+def get_batch_app():
+    from mdm.cli.batch import batch_app
+    return batch_app
+
+def get_timeseries_app():
+    from mdm.cli.timeseries import app as timeseries_app
+    return timeseries_app
+
+def get_stats_app():
+    from mdm.cli.stats import app as stats_app
+    return stats_app
+
+# Add subcommands with lazy loading
+app.add_typer(get_dataset_app(), name="dataset", help="Dataset management commands")
+app.add_typer(get_batch_app(), name="batch", help="Batch operations for multiple datasets")
+app.add_typer(get_timeseries_app(), name="timeseries", help="Time series operations")
+app.add_typer(get_stats_app(), name="stats", help="View statistics and monitoring data")
+
+# Create console for output
+console = Console()
+
+
 @app.command()
 def version():
     """Show MDM version."""
@@ -180,8 +201,6 @@ def version():
 @app.command()
 def info():
     """Display system configuration and status."""
-    import shutil
-    from mdm import __version__
     from mdm.config import get_config_manager
     from mdm.dataset.manager import DatasetManager
     
@@ -191,6 +210,7 @@ def info():
     manager = DatasetManager()
 
     # Header
+    from mdm import __version__
     console.print(f"\n[bold cyan]ML Data Manager[/bold cyan] v{__version__}\n")
 
     # Configuration
@@ -235,8 +255,8 @@ def info():
 
     # Environment
     console.print("\n[bold]Environment:[/bold]")
-    console.print(f"  Python: {sys.version.split()[0]}")
-    console.print(f"  Platform: {sys.platform}")
+    console.print(f"  Python: {os.sys.version.split()[0]}")
+    console.print(f"  Platform: {os.sys.platform}")
     console.print(f"  MDM home: {base_path}")
 
 
@@ -251,50 +271,12 @@ def _format_size(size_bytes: int) -> str:
 
 def main():
     """Main entry point."""
-    # Special fast path for version command
-    if len(sys.argv) == 2 and sys.argv[1] == 'version':
-        from mdm import __version__
-        console.print(f"[bold green]MDM[/bold green] version {__version__}")
-        sys.exit(0)
+    import sys
     
     # If no arguments provided (just 'mdm'), show help
     if len(sys.argv) == 1:
         sys.argv.append("--help")
     
-    # Only import and add subcommands when actually needed
-    # This is the key optimization - we check which subcommand is being called
-    # before importing the heavy modules
-    if len(sys.argv) > 1:
-        cmd = sys.argv[1]
-        
-        # Add the appropriate subcommand based on what's being called
-        if cmd == 'dataset' or (cmd == '--help' and 'dataset' in ' '.join(sys.argv)):
-            from mdm.cli.dataset import dataset_app
-            app.add_typer(dataset_app, name="dataset", help="Dataset management commands")
-        elif cmd == 'batch' or (cmd == '--help' and 'batch' in ' '.join(sys.argv)):
-            from mdm.cli.batch import batch_app
-            app.add_typer(batch_app, name="batch", help="Batch operations for multiple datasets")
-        elif cmd == 'timeseries' or (cmd == '--help' and 'timeseries' in ' '.join(sys.argv)):
-            from mdm.cli.timeseries import app as timeseries_app
-            app.add_typer(timeseries_app, name="timeseries", help="Time series operations")
-        elif cmd == 'stats' or (cmd == '--help' and 'stats' in ' '.join(sys.argv)):
-            from mdm.cli.stats import app as stats_app
-            app.add_typer(stats_app, name="stats", help="View statistics and monitoring data")
-        elif cmd == '--help' or cmd == '-h':
-            # For general help, we need to show all subcommands
-            # But we can add them without importing the actual implementations
-            # by creating placeholder Typer instances
-            dataset_placeholder = typer.Typer()
-            batch_placeholder = typer.Typer()
-            timeseries_placeholder = typer.Typer()
-            stats_placeholder = typer.Typer()
-            
-            app.add_typer(dataset_placeholder, name="dataset", help="Dataset management commands")
-            app.add_typer(batch_placeholder, name="batch", help="Batch operations for multiple datasets")
-            app.add_typer(timeseries_placeholder, name="timeseries", help="Time series operations")
-            app.add_typer(stats_placeholder, name="stats", help="View statistics and monitoring data")
-    
-    # Now run the app
     app()
 
 

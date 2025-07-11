@@ -1,4 +1,4 @@
-"""Main CLI entry point for MDM - Optimized for fast startup."""
+"""Optimized main CLI entry point for MDM with true lazy loading."""
 
 import os
 import sys
@@ -15,20 +15,27 @@ app = typer.Typer(
     name="mdm",
     help="ML Data Manager - Streamline your ML data pipeline",
     pretty_exceptions_enable=False,
+    no_args_is_help=True,  # Show help when no args provided
 )
 
-# Global flag to track if logging has been set up
-_logging_initialized = False
 
-
-def setup_logging():
-    """Setup logging configuration for both standard logging and loguru."""
-    global _logging_initialized
-    if _logging_initialized:
-        return
-    _logging_initialized = True
+def _setup_logging_if_needed(ctx: typer.Context) -> None:
+    """Setup logging only when needed - skip for simple commands."""
+    # Commands that don't need logging setup
+    simple_commands = {'version', 'help', None}
     
-    # Import heavy modules only when logging is needed
+    # Skip if simple command or help flag
+    if ctx.invoked_subcommand in simple_commands:
+        return
+    if '--help' in sys.argv or '-h' in sys.argv:
+        return
+    
+    # Setup logging for other commands
+    _setup_logging()
+
+
+def _setup_logging():
+    """Setup logging configuration - imported only when needed."""
     import logging
     from loguru import logger
     from mdm.config import get_config_manager
@@ -85,12 +92,11 @@ def setup_logging():
         level="WARNING",
         format=console_format,
         colorize=True,
-        filter=lambda record: "sqlalchemy" not in record["name"]  # Filter out SQLAlchemy by default
+        filter=lambda record: "sqlalchemy" not in record["name"]
     )
     
     # Configure SQLAlchemy logging
     if sqlalchemy_echo and log_level.upper() in ['DEBUG', 'INFO']:
-        # Add special console handler for SQLAlchemy
         logger.add(
             sys.stderr,
             level="INFO",
@@ -102,13 +108,11 @@ def setup_logging():
     # Intercept standard logging and redirect to loguru
     class InterceptHandler(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:
-            # Get corresponding Loguru level if it exists
             try:
                 level = logger.level(record.levelname).name
             except ValueError:
                 level = record.levelno
 
-            # Find caller from where originated the logged message
             frame, depth = logging.currentframe(), 2
             while frame and frame.f_code.co_filename == logging.__file__:
                 frame = frame.f_back
@@ -132,47 +136,87 @@ def setup_logging():
     
     # Log startup
     logger.info(f"MDM logging initialized - Level: {log_level}, File: {log_file}")
-    
-    # In debug mode, log full configuration
-    if log_level.upper() == "DEBUG":
-        logger.debug("MDM Configuration:")
-        logger.debug(f"  Base path: {base_path}")
-        logger.debug(f"  Config file: {base_path / 'mdm.yaml'}")
-        
-        # Dynamically log all configuration sections
-        config_dict = config.model_dump()
-        
-        def log_config_section(section_name: str, section_data: dict, indent: int = 2):
-            """Recursively log configuration sections."""
-            prefix = "  " * indent
-            for key, value in section_data.items():
-                if isinstance(value, dict):
-                    logger.debug(f"{prefix}{key}:")
-                    log_config_section(key, value, indent + 1)
-                else:
-                    logger.debug(f"{prefix}{key}: {value}")
-        
-        for section, data in config_dict.items():
-            if isinstance(data, dict):
-                logger.debug(f"  {section}:")
-                log_config_section(section, data)
-            else:
-                logger.debug(f"  {section}: {data}")
 
 
 @app.callback(invoke_without_command=True)
 def main_callback(ctx: typer.Context):
-    """Setup logging before running any command."""
-    # Skip setup for simple commands that don't need it
-    if ctx.invoked_subcommand in ['version', None]:
-        return
-    setup_logging()
+    """Main callback - sets up logging when needed."""
+    _setup_logging_if_needed(ctx)
 
 
-# Main commands - these are lightweight and don't need lazy loading
+# Add subcommands using factory functions to enable lazy loading
+@app.command()
+def dataset(ctx: typer.Context):
+    """Dataset management commands."""
+    # Setup logging before importing heavy modules
+    _setup_logging()
+    
+    # Import only when command is actually used
+    from mdm.cli.dataset import dataset_app
+    
+    # Get the remaining args after 'dataset'
+    import sys
+    args = sys.argv[2:]  # Skip 'mdm' and 'dataset'
+    
+    # Invoke the dataset app directly
+    try:
+        dataset_app(args, standalone_mode=False)
+    except SystemExit as e:
+        ctx.exit(e.code)
+
+
+@app.command()
+def batch(ctx: typer.Context):
+    """Batch operations for multiple datasets."""
+    _setup_logging()
+    
+    from mdm.cli.batch import batch_app
+    
+    import sys
+    args = sys.argv[2:]
+    
+    try:
+        batch_app(args, standalone_mode=False)
+    except SystemExit as e:
+        ctx.exit(e.code)
+
+
+@app.command()
+def timeseries(ctx: typer.Context):
+    """Time series operations."""
+    _setup_logging()
+    
+    from mdm.cli.timeseries import app as timeseries_app
+    
+    import sys
+    args = sys.argv[2:]
+    
+    try:
+        timeseries_app(args, standalone_mode=False)
+    except SystemExit as e:
+        ctx.exit(e.code)
+
+
+@app.command()
+def stats(ctx: typer.Context):
+    """View statistics and monitoring data."""
+    _setup_logging()
+    
+    from mdm.cli.stats import app as stats_app
+    
+    import sys
+    args = sys.argv[2:]
+    
+    try:
+        stats_app(args, standalone_mode=False)
+    except SystemExit as e:
+        ctx.exit(e.code)
+
+
 @app.command()
 def version():
     """Show MDM version."""
+    # Only import version when needed - no other imports!
     from mdm import __version__
     console.print(f"[bold green]MDM[/bold green] version {__version__}")
 
@@ -180,6 +224,10 @@ def version():
 @app.command()
 def info():
     """Display system configuration and status."""
+    # Setup logging for this command
+    _setup_logging()
+    
+    # Heavy imports only when needed
     import shutil
     from mdm import __version__
     from mdm.config import get_config_manager
@@ -251,50 +299,6 @@ def _format_size(size_bytes: int) -> str:
 
 def main():
     """Main entry point."""
-    # Special fast path for version command
-    if len(sys.argv) == 2 and sys.argv[1] == 'version':
-        from mdm import __version__
-        console.print(f"[bold green]MDM[/bold green] version {__version__}")
-        sys.exit(0)
-    
-    # If no arguments provided (just 'mdm'), show help
-    if len(sys.argv) == 1:
-        sys.argv.append("--help")
-    
-    # Only import and add subcommands when actually needed
-    # This is the key optimization - we check which subcommand is being called
-    # before importing the heavy modules
-    if len(sys.argv) > 1:
-        cmd = sys.argv[1]
-        
-        # Add the appropriate subcommand based on what's being called
-        if cmd == 'dataset' or (cmd == '--help' and 'dataset' in ' '.join(sys.argv)):
-            from mdm.cli.dataset import dataset_app
-            app.add_typer(dataset_app, name="dataset", help="Dataset management commands")
-        elif cmd == 'batch' or (cmd == '--help' and 'batch' in ' '.join(sys.argv)):
-            from mdm.cli.batch import batch_app
-            app.add_typer(batch_app, name="batch", help="Batch operations for multiple datasets")
-        elif cmd == 'timeseries' or (cmd == '--help' and 'timeseries' in ' '.join(sys.argv)):
-            from mdm.cli.timeseries import app as timeseries_app
-            app.add_typer(timeseries_app, name="timeseries", help="Time series operations")
-        elif cmd == 'stats' or (cmd == '--help' and 'stats' in ' '.join(sys.argv)):
-            from mdm.cli.stats import app as stats_app
-            app.add_typer(stats_app, name="stats", help="View statistics and monitoring data")
-        elif cmd == '--help' or cmd == '-h':
-            # For general help, we need to show all subcommands
-            # But we can add them without importing the actual implementations
-            # by creating placeholder Typer instances
-            dataset_placeholder = typer.Typer()
-            batch_placeholder = typer.Typer()
-            timeseries_placeholder = typer.Typer()
-            stats_placeholder = typer.Typer()
-            
-            app.add_typer(dataset_placeholder, name="dataset", help="Dataset management commands")
-            app.add_typer(batch_placeholder, name="batch", help="Batch operations for multiple datasets")
-            app.add_typer(timeseries_placeholder, name="timeseries", help="Time series operations")
-            app.add_typer(stats_placeholder, name="stats", help="View statistics and monitoring data")
-    
-    # Now run the app
     app()
 
 
