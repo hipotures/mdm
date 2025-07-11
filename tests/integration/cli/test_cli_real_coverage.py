@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
+from mdm import __version__
 from mdm.cli.main import app
 
 
@@ -73,7 +74,7 @@ features:
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
         assert "MDM" in result.stdout
-        assert "0.3.1" in result.stdout
+        assert __version__ in result.stdout
     
     def test_cli_info(self, runner, test_env):
         """Test info command."""

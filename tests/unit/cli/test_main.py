@@ -11,6 +11,7 @@ import pytest
 from typer.testing import CliRunner
 from loguru import logger
 
+from mdm import __version__
 from mdm.cli.main import app, setup_logging, _format_size, main
 
 
@@ -208,7 +209,7 @@ class TestCLICommands:
         
         assert result.exit_code == 0
         assert "MDM" in result.stdout
-        assert "0.3.0" in result.stdout
+        assert __version__ in result.stdout
     
     @patch('mdm.config.get_config_manager')
     @patch('mdm.dataset.manager.DatasetManager')

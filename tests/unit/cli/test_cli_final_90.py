@@ -11,6 +11,7 @@ import pandas as pd
 from typer.testing import CliRunner
 
 # Import CLI modules directly
+from mdm import __version__
 from mdm.cli.main import app, setup_logging, _format_size
 from mdm.cli.dataset import dataset_app, _display_column_summary, _format_size as ds_format_size
 from mdm.cli.batch import batch_app
@@ -69,7 +70,7 @@ features:
         # Version
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
-        assert "0.3.0" in result.stdout
+        assert __version__ in result.stdout
         
         # Info
         result = runner.invoke(app, ["info"])
