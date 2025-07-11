@@ -101,13 +101,30 @@ features:
         mock_config.database.sqlalchemy.echo = False
         mock_config.paths.logs_path = "logs"
         
+        # Add model_dump method that returns a proper dict
+        mock_config.model_dump.return_value = {
+            "logging": {
+                "file": None,
+                "level": "INFO",
+                "format": "console",
+                "max_bytes": 10485760,
+                "backup_count": 5
+            },
+            "database": {
+                "sqlalchemy": {"echo": False},
+                "default_backend": "sqlite"
+            },
+            "paths": {"logs_path": "logs"}
+        }
+        
         mock_manager = Mock()
         mock_manager.config = mock_config
         mock_manager.base_path = Path("/tmp")
         mock_get_config.return_value = mock_manager
         
         with patch('loguru.logger'):
-            setup_logging()
+            with patch('mdm.core.di.configure_services'):
+                setup_logging()
         
         # Test 2: JSON format with file
         mdm.cli.main._logging_initialized = False  # Reset flag
@@ -115,16 +132,26 @@ features:
         mock_config.logging.format = "json"
         mock_config.database.sqlalchemy.echo = True
         
+        # Update model_dump for JSON format
+        mock_config.model_dump.return_value["logging"]["file"] = "app.log"
+        mock_config.model_dump.return_value["logging"]["format"] = "json"
+        mock_config.model_dump.return_value["database"]["sqlalchemy"]["echo"] = True
+        
         with patch('loguru.logger'):
             with patch('logging.getLogger'):
-                setup_logging()
+                with patch('mdm.core.di.configure_services'):
+                    setup_logging()
         
         # Test 3: Absolute path
         mdm.cli.main._logging_initialized = False  # Reset flag
         mock_config.logging.file = "/var/log/mdm.log"
         
+        # Update model_dump for absolute path
+        mock_config.model_dump.return_value["logging"]["file"] = "/var/log/mdm.log"
+        
         with patch('loguru.logger'):
-            setup_logging()
+            with patch('mdm.core.di.configure_services'):
+                setup_logging()
     
     def test_format_size_exhaustive(self):
         """Test all format_size branches."""
