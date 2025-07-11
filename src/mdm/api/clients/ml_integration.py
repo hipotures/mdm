@@ -40,7 +40,7 @@ class MLIntegrationClient(BaseClient):
             DatasetError: If dataset not found or has no time column
         """
         from .query import QueryClient
-        query_client = QueryClient(self.config, self.manager)
+        query_client = QueryClient(self.manager, self.config)
         
         dataset = query_client.get_dataset(name)
         if not dataset:
@@ -94,7 +94,7 @@ class MLIntegrationClient(BaseClient):
             DatasetError: If dataset not found
         """
         from .query import QueryClient
-        query_client = QueryClient(self.config, self.manager)
+        query_client = QueryClient(self.manager, self.config)
         
         # Load dataset
         X, y, ids = query_client.load_dataset(
@@ -129,7 +129,7 @@ class MLIntegrationClient(BaseClient):
             DatasetError: If dataset not found
         """
         from .query import QueryClient
-        query_client = QueryClient(self.config, self.manager)
+        query_client = QueryClient(self.manager, self.config)
         
         dataset = query_client.get_dataset(name)
         if not dataset:
@@ -254,7 +254,7 @@ class MLIntegrationClient(BaseClient):
             DatasetError: If dataset not found
         """
         from .query import QueryClient
-        query_client = QueryClient(self.config, self.manager)
+        query_client = QueryClient(self.manager, self.config)
         
         # Get dataset info
         dataset = self.manager.get_dataset(name)

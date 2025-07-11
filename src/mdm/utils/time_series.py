@@ -2,7 +2,7 @@
 
 from loguru import logger
 from datetime import timedelta
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import pandas as pd
 from scipy import stats
@@ -145,6 +145,103 @@ class TimeSeriesSplitter:
                 })
 
         return folds
+    
+    def split(
+        self,
+        df: pd.DataFrame,
+        n_splits: int = 5,
+        test_size: Union[float, int] = 0.2,
+        gap: int = 0,
+        strategy: str = "expanding"
+    ) -> List[tuple[pd.DataFrame, pd.DataFrame]]:
+        """Split time series data for cross-validation.
+        
+        Args:
+            df: DataFrame to split
+            n_splits: Number of splits
+            test_size: Test set size (fraction if float, days if int)
+            gap: Gap between train and test in days
+            strategy: Split strategy ('expanding' or 'sliding')
+            
+        Returns:
+            List of (train, test) DataFrame tuples
+        """
+        # Ensure time column is datetime
+        df = df.copy()
+        df[self.time_column] = pd.to_datetime(df[self.time_column])
+        df = df.sort_values(self.time_column)
+        
+        # Get time range
+        time_min = df[self.time_column].min()
+        time_max = df[self.time_column].max()
+        time_range = time_max - time_min
+        
+        # Convert test_size to timedelta if needed
+        if isinstance(test_size, float):
+            test_duration = time_range * test_size / n_splits
+        else:
+            test_duration = timedelta(days=test_size)
+            
+        gap_duration = timedelta(days=gap)
+        
+        splits = []
+        
+        if strategy == "expanding":
+            # Expanding window: train set grows, test set moves forward
+            total_duration = time_range
+            step_size = total_duration / n_splits
+            
+            for i in range(n_splits):
+                # Test window end time
+                test_end = time_min + step_size * (i + 1)
+                test_start = test_end - test_duration
+                
+                # Train window (expanding)
+                train_end = test_start - gap_duration
+                train_start = time_min
+                
+                # Create split
+                train_df = df[(df[self.time_column] >= train_start) & 
+                              (df[self.time_column] < train_end)]
+                test_df = df[(df[self.time_column] >= test_start) & 
+                             (df[self.time_column] < test_end)]
+                
+                if len(train_df) > 0 and len(test_df) > 0:
+                    splits.append((train_df, test_df))
+                    
+        elif strategy == "sliding":
+            # Sliding window: both train and test windows move forward
+            total_duration = time_range
+            step_size = total_duration / n_splits
+            
+            # Fixed train window size (use remaining data after test and gap)
+            train_duration = (total_duration - test_duration - gap_duration) / 2
+            
+            for i in range(n_splits):
+                # Calculate window positions
+                window_end = time_min + step_size * (i + 1)
+                test_end = window_end
+                test_start = test_end - test_duration
+                train_end = test_start - gap_duration
+                train_start = train_end - train_duration
+                
+                # Ensure train_start is not before data start
+                if train_start < time_min:
+                    train_start = time_min
+                
+                # Create split
+                train_df = df[(df[self.time_column] >= train_start) & 
+                              (df[self.time_column] < train_end)]
+                test_df = df[(df[self.time_column] >= test_start) & 
+                             (df[self.time_column] < test_end)]
+                
+                if len(train_df) > 0 and len(test_df) > 0:
+                    splits.append((train_df, test_df))
+                    
+        else:
+            raise ValueError(f"Unknown strategy: {strategy}. Use 'expanding' or 'sliding'")
+            
+        return splits
 
     def create_sliding_window(
         self,
