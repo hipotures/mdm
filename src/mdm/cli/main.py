@@ -70,10 +70,13 @@ def setup_logging():
     logs_dir.mkdir(parents=True, exist_ok=True)
     
     # Get log file path from config or use default
-    if Path(config.logging.file).is_absolute():
-        log_file = Path(config.logging.file)
+    if config.logging.file:
+        if Path(config.logging.file).is_absolute():
+            log_file = Path(config.logging.file)
+        else:
+            log_file = logs_dir / config.logging.file
     else:
-        log_file = logs_dir / config.logging.file
+        log_file = logs_dir / "mdm.log"  # Default if no file specified
     
     # Get log level from environment or config
     log_level = os.environ.get('MDM_LOGGING_LEVEL', config.logging.level)

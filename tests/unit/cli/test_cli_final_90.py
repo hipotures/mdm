@@ -87,11 +87,17 @@ features:
     @patch('mdm.config.get_config_manager')
     def test_setup_logging_all_paths(self, mock_get_config):
         """Test setup_logging with all code paths."""
+        # Reset the global flag
+        import mdm.cli.main
+        mdm.cli.main._logging_initialized = False
+        
         # Test 1: Console format, no file
         mock_config = Mock()
         mock_config.logging.file = None
         mock_config.logging.level = "INFO"
         mock_config.logging.format = "console"
+        mock_config.logging.max_bytes = 10485760
+        mock_config.logging.backup_count = 5
         mock_config.database.sqlalchemy.echo = False
         mock_config.paths.logs_path = "logs"
         
@@ -104,6 +110,7 @@ features:
             setup_logging()
         
         # Test 2: JSON format with file
+        mdm.cli.main._logging_initialized = False  # Reset flag
         mock_config.logging.file = "app.log"
         mock_config.logging.format = "json"
         mock_config.database.sqlalchemy.echo = True
@@ -113,6 +120,7 @@ features:
                 setup_logging()
         
         # Test 3: Absolute path
+        mdm.cli.main._logging_initialized = False  # Reset flag
         mock_config.logging.file = "/var/log/mdm.log"
         
         with patch('loguru.logger'):
