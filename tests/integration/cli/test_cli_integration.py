@@ -380,7 +380,7 @@ class TestCLIWorkflows:
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
         assert "MDM" in result.stdout
-        assert "0.3.0" in result.stdout
+        assert "0.3.1" in result.stdout
         
         # Test info command
         result = runner.invoke(app, ["info"])
