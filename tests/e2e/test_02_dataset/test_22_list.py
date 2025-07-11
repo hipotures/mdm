@@ -253,12 +253,12 @@ class TestDatasetListingFiltering:
             data.to_csv(csv_file, index=False)
             csv_files.append(csv_file)
         
-        # Register datasets
+        # Register datasets with --no-features for speed
         registered_count = 0
         for i, csv_file in enumerate(csv_files):
             result = run_mdm([
                 "dataset", "register", f"perf_test_{i}", str(csv_file),
-                "--target", "value"
+                "--target", "value", "--no-features"
             ])
             if result.returncode == 0:
                 registered_count += 1
