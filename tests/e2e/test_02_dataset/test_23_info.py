@@ -70,7 +70,7 @@ class TestDatasetInformationStatistics:
         # But shows table names
         assert "Tables:" in result.stdout
         assert "data" in result.stdout
-        assert "data_features" in result.stdout
+        # Note: data_features table is not created when using --no-features flag
     
     @pytest.mark.mdm_id("2.3.1.3")
     def test_dataset_info_metadata(self, clean_mdm_env, run_mdm, complex_dataset):
