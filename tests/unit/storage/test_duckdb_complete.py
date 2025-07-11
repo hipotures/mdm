@@ -12,7 +12,10 @@ import pytest
 from sqlalchemy import text
 
 from mdm.core.exceptions import StorageError
-from mdm.storage.duckdb import DuckDBBackend
+# Legacy import - backend moved to new location
+# from mdm.storage.duckdb import DuckDBBackend
+# Using mock for skipped tests
+DuckDBBackend = object
 
 
 @pytest.mark.skip(reason="Tests for legacy DuckDB backend API - see test_stateless_backends.py")
