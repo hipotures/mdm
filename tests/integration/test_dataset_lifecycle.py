@@ -64,8 +64,10 @@ class TestDatasetLifecycle:
         # Get statistics
         stats = client.get_statistics("test_lifecycle")
         assert stats is not None
-        assert "row_count" in stats
-        assert stats["row_count"] > 0
+        assert "tables" in stats
+        assert "train" in stats["tables"]
+        assert "row_count" in stats["tables"]["train"]
+        assert stats["tables"]["train"]["row_count"] > 0
         
         # Export dataset
         export_paths = client.export_dataset(
