@@ -11,7 +11,7 @@ import pytest
 class TestDatasetInformationStatistics:
     """Test dataset information and statistics functionality."""
     
-    @pytest.fixture(scope="class")
+    @pytest.fixture
     def complex_dataset(self, clean_mdm_env, run_mdm):
         """Create a complex dataset with various column types."""
         data = pd.DataFrame({

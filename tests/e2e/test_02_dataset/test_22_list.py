@@ -12,7 +12,7 @@ import pytest
 class TestDatasetListingFiltering:
     """Test dataset listing and filtering functionality."""
     
-    @pytest.fixture(scope="class")
+    @pytest.fixture
     def multiple_datasets(self, clean_mdm_env, run_mdm):
         """Create multiple datasets for testing listing/filtering."""
         datasets = []
