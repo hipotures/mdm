@@ -87,10 +87,18 @@ class BaseTestRunner(ABC):
             sys.executable, "-m", "pytest",
             str(test_path),
             "-v", "--tb=short",
-            "--no-header",
-            "--json-report",
-            "--json-report-file=/tmp/pytest_report.json"
+            "--no-header"
         ]
+        
+        # Only add json report if plugin is available
+        try:
+            import pytest_json_report
+            cmd.extend([
+                "--json-report",
+                "--json-report-file=/tmp/pytest_report.json"
+            ])
+        except ImportError:
+            pass
         
         if extra_args:
             cmd.extend(extra_args)
@@ -140,32 +148,73 @@ class BaseTestRunner(ABC):
         # Fall back to parsing text output
         lines = (result.stdout + result.stderr).split('\n')
         
+        # First check if any tests were collected
+        for line in lines:
+            if "collected 0 items" in line:
+                # No tests found in this file
+                return suite
+            
+        # Parse test results
         for i, line in enumerate(lines):
-            if "FAILED" in line or "PASSED" in line:
-                match = re.search(r'(test_\w+\.py)::([\w:]+)\s+(PASSED|FAILED)', line)
-                if match:
-                    test_name = match.group(2)
-                    passed = match.group(3) == "PASSED"
-                    
-                    error_type = None
-                    error_message = None
-                    
-                    if not passed:
-                        # Look for error details
-                        error_info = self._extract_error_info(lines, i)
-                        error_type = self._extract_error_type(error_info)
-                        error_message = self._extract_error_message(error_info)
-                    
-                    result = TestResult(
-                        test_name=test_name,
-                        file_path=test_file,
-                        category=category,
-                        passed=passed,
-                        error_type=error_type,
-                        error_message=error_message,
-                        output=result.stdout if not passed else ""
-                    )
-                    suite.results.append(result)
+            # Match both file::test format and just test format
+            if " FAILED" in line or " PASSED" in line or " ERROR" in line:
+                # Try different patterns
+                patterns = [
+                    r'(\S+\.py)::(\S+)\s+(PASSED|FAILED|ERROR)',  # Full path
+                    r'(\S+)::(\S+)\s+(PASSED|FAILED|ERROR)',      # Module::test
+                    r'(\S+)\s+(PASSED|FAILED|ERROR)'               # Just test name
+                ]
+                
+                for pattern in patterns:
+                    match = re.search(pattern, line)
+                    if match:
+                        if len(match.groups()) == 3:
+                            test_name = match.group(2)
+                            status = match.group(3)
+                        else:
+                            test_name = match.group(1)
+                            status = match.group(2)
+                        
+                        passed = status == "PASSED"
+                        
+                        error_type = None
+                        error_message = None
+                        
+                        if not passed:
+                            # Look for error details
+                            error_info = self._extract_error_info(lines, i)
+                            error_type = self._extract_error_type(error_info)
+                            error_message = self._extract_error_message(error_info)
+                        
+                        test_result = TestResult(
+                            test_name=test_name,
+                            file_path=test_file,
+                            category=category,
+                            passed=passed,
+                            error_type=error_type,
+                            error_message=error_message,
+                            output=result.stdout if not passed else ""
+                        )
+                        suite.results.append(test_result)
+                        break
+        
+        # If still no results found, check for summary line
+        if len(suite.results) == 0:
+            for line in lines:
+                # Look for pytest summary
+                if "passed" in line or "failed" in line or "error" in line:
+                    match = re.search(r'(\d+)\s+passed', line)
+                    if match and int(match.group(1)) > 0:
+                        # Tests passed but we couldn't parse individual results
+                        # Add a placeholder
+                        test_result = TestResult(
+                            test_name="All tests",
+                            file_path=test_file,
+                            category=category,
+                            passed=True,
+                            output=""
+                        )
+                        suite.results.append(test_result)
         
         return suite
     
@@ -244,6 +293,19 @@ class BaseTestRunner(ABC):
                     result = self.run_pytest(test_path)
                     suite = self.parse_pytest_output(result, test_file, category_name)
                     self.test_suites[category_name] = suite
+                    
+                    # Debug: print if no tests found
+                    if suite.total_tests == 0 and result.returncode != 0:
+                        # There was an error running tests
+                        suite.results.append(TestResult(
+                            test_name="pytest_error",
+                            file_path=test_file,
+                            category=category,
+                            passed=False,
+                            error_type="Test Execution Error",
+                            error_message=result.stderr[:200] if result.stderr else "Unknown error",
+                            output=result.stdout + "\n" + result.stderr
+                        ))
                     
                     # Update progress with result
                     if suite.failed_tests > 0:
