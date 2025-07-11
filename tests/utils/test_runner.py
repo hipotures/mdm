@@ -300,7 +300,7 @@ class BaseTestRunner(ABC):
                         suite.results.append(TestResult(
                             test_name="pytest_error",
                             file_path=test_file,
-                            category=category,
+                            category=category_name,
                             passed=False,
                             error_type="Test Execution Error",
                             error_message=result.stderr[:200] if result.stderr else "Unknown error",
