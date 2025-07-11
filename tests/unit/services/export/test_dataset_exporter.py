@@ -186,9 +186,11 @@ class TestDatasetExporter:
             # Create exporter with mocked config
             exporter = DatasetExporter()
             
-            # Arrange
-            sample_dataset_info['database']['backend'] = 'duckdb'
-            yaml_content = yaml.dump(sample_dataset_info)
+            # Arrange - create a copy to avoid mutating the fixture
+            dataset_info_copy = sample_dataset_info.copy()
+            dataset_info_copy['database'] = sample_dataset_info['database'].copy()
+            dataset_info_copy['database']['backend'] = 'duckdb'
+            yaml_content = yaml.dump(dataset_info_copy)
             
             with patch('pathlib.Path.exists', return_value=True):
                 with patch('builtins.open', mock_open(read_data=yaml_content)):
