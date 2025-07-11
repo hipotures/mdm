@@ -65,6 +65,10 @@ def setup_logging():
     config = config_manager.config
     base_path = config_manager.base_path
     
+    # Configure DI container
+    from mdm.core.di import configure_services
+    configure_services(config.model_dump())
+    
     # Create logs directory
     logs_dir = base_path / config.paths.logs_path
     logs_dir.mkdir(parents=True, exist_ok=True)
