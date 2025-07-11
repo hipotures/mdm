@@ -68,6 +68,10 @@ class MDMClient:
         """Get dataset information. See QueryClient.get_dataset."""
         return self.query.get_dataset(name)
     
+    def dataset_exists(self, name: str) -> bool:
+        """Check if dataset exists. See QueryClient.dataset_exists."""
+        return self.query.dataset_exists(name)
+    
     def list_datasets(self, **kwargs):
         """List all datasets. See QueryClient.list_datasets."""
         return self.query.list_datasets(**kwargs)

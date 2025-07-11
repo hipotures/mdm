@@ -59,7 +59,7 @@ class QueryClient(BaseClient):
         if sort_by == "name":
             datasets.sort(key=lambda d: d.name, reverse=not ascending)
         elif sort_by == "registration_date":
-            datasets.sort(key=lambda d: d.registration_date, reverse=not ascending)
+            datasets.sort(key=lambda d: d.registered_at, reverse=not ascending)
         elif sort_by == "size":
             # Get sizes if available
             datasets.sort(

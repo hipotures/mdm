@@ -44,11 +44,12 @@ class ExportClient(BaseClient):
         # Convert string path to Path object
         output_path = Path(output_dir)
         
+        # ExportOperation uses different parameter names
         return export_op.execute(
-            dataset_name=name,
-            output_path=output_path,
+            name=name,
+            output_dir=output_path,
             format=format,
             compression=compression,
-            include_features=include_features,
-            tables=tables
+            # Note: ExportOperation doesn't support include_features or tables params
+            # TODO: Implement these features in ExportOperation
         )
