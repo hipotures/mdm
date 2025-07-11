@@ -37,7 +37,8 @@ class TestDatasetInformationStatistics:
             "--id-columns", "id,user_id",
             "--datetime-columns", "join_date",
             "--tags", "test,complex,multiclass",
-            "--description", "Complex dataset for testing info and stats"
+            "--description", "Complex dataset for testing info and stats",
+            "--no-features"  # Speed up tests by skipping feature generation
         ])
         
         assert result.returncode == 0

@@ -43,7 +43,8 @@ class TestDatasetListingFiltering:
                 "dataset", "register", f"test_dataset_{i}", str(csv_file),
                 "--target", "target",
                 "--tags", ",".join(tags),
-                "--description", f"Test dataset number {i}"
+                "--description", f"Test dataset number {i}",
+                "--no-features"  # Speed up tests by skipping feature generation
             ])
             
             assert result.returncode == 0
