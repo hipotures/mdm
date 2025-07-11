@@ -164,7 +164,7 @@ class StatelessDuckDBBackend(StorageBackend):
                             VALUES (:key, :value)
                             ON CONFLICT (key) DO UPDATE SET 
                                 value = EXCLUDED.value,
-                                updated_at = CURRENT_TIMESTAMP
+                                updated_at = NOW()
                         """),
                         {"key": key, "value": str(value)}
                     )
@@ -272,7 +272,7 @@ class StatelessDuckDBBackend(StorageBackend):
                             VALUES (:key, :value)
                             ON CONFLICT (key) DO UPDATE SET 
                                 value = EXCLUDED.value,
-                                updated_at = CURRENT_TIMESTAMP
+                                updated_at = NOW()
                         """),
                         {"key": key, "value": str(value)}
                     )
