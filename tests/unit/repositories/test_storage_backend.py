@@ -7,8 +7,8 @@ from sqlalchemy import create_engine
 from pathlib import Path
 
 from mdm.storage.base import StorageBackend
-from mdm.storage.sqlite import SQLiteBackend
-from mdm.storage.duckdb import DuckDBBackend
+from mdm.storage.backends.stateless_sqlite import StatelessSQLiteBackend as SQLiteBackend
+from mdm.storage.backends.stateless_duckdb import StatelessDuckDBBackend as DuckDBBackend
 from mdm.storage.factory import BackendFactory
 from mdm.core.exceptions import StorageError, BackendError
 
