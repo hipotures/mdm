@@ -229,3 +229,52 @@ class MLIntegrationClient(BaseClient):
             gap=gap,
             strategy=strategy
         )
+    
+    def split_time_series(
+        self,
+        name: str,
+        n_splits: int = 5,
+        test_size: float = 0.2,
+        gap: int = 0,
+        strategy: str = "expanding"
+    ) -> List[tuple[pd.DataFrame, pd.DataFrame]]:
+        """Split time series dataset for cross-validation.
+        
+        Args:
+            name: Dataset name
+            n_splits: Number of splits
+            test_size: Test set size (fraction)
+            gap: Gap between train and test sets
+            strategy: Split strategy ('expanding' or 'sliding')
+            
+        Returns:
+            List of (train, test) DataFrame tuples
+            
+        Raises:
+            DatasetError: If dataset not found
+        """
+        from .query import QueryClient
+        query_client = QueryClient(self.config, self.manager)
+        
+        # Get dataset info
+        dataset = self.manager.get_dataset(name)
+        if not dataset:
+            raise DatasetError(f"Dataset '{name}' not found")
+            
+        if not dataset.time_column:
+            raise DatasetError(f"Dataset '{name}' has no time column configured")
+        
+        # Load dataset files
+        files = query_client.load_dataset_files(name)
+        data = files.get('train', files.get('data'))
+        if data is None:
+            raise DatasetError(f"No train data found in dataset '{name}'")
+            
+        return self.create_time_series_splits(
+            data,
+            dataset.time_column,
+            n_splits,
+            test_size,
+            gap,
+            strategy
+        )

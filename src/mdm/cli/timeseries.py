@@ -128,11 +128,18 @@ def split(
         # Save splits if output directory specified
         if output_dir:
             output_dir.mkdir(parents=True, exist_ok=True)
+            console.print(f"\nSaving splits to {output_dir}...")
 
-            for split_name, df in splits.items():
-                output_path = output_dir / f"{dataset}_{split_name}.csv"
-                df.to_csv(output_path, index=False)
-                console.print(f"  Saved {split_name} to {output_path}")
+            for i, (train_df, test_df) in enumerate(splits):
+                # Save train
+                train_path = output_dir / f"{dataset}_split{i+1}_train.csv"
+                train_df.to_csv(train_path, index=False)
+                console.print(f"  Saved split {i+1} train to {train_path}")
+                
+                # Save test
+                test_path = output_dir / f"{dataset}_split{i+1}_test.csv"
+                test_df.to_csv(test_path, index=False)
+                console.print(f"  Saved split {i+1} test to {test_path}")
 
         console.print("\n[green]✓[/green] Time series split completed!")
 

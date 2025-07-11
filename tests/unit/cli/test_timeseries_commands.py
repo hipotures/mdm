@@ -40,7 +40,7 @@ class TestTimeseriesAnalyzeCommand:
             'date': pd.date_range('2023-01-01', periods=100, freq='D'),
             'value': range(100)
         })
-        mock_client.load_dataset_files.return_value = (train_df, None)
+        mock_client.load_dataset_files.return_value = {'train': train_df}
         mock_client_class.return_value = mock_client
         
         # Setup analyzer mock
@@ -74,6 +74,13 @@ class TestTimeseriesAnalyzeCommand:
         mock_analyzer_class.return_value = mock_analyzer
         
         result = runner.invoke(app, ["analyze", "test_dataset"])
+        
+        # Print output for debugging
+        if result.exit_code != 0:
+            print(f"Exit code: {result.exit_code}")
+            print(f"Output: {result.output}")
+            if result.exception:
+                print(f"Exception: {result.exception}")
         
         assert result.exit_code == 0
         assert "Time Series Analysis: test_dataset" in result.stdout
@@ -119,7 +126,7 @@ class TestTimeseriesAnalyzeCommand:
         mock_dataset_info.time_column = "date"
         mock_dataset_info.target_column = "value"
         mock_client.get_dataset.return_value = mock_dataset_info
-        mock_client.load_dataset_files.return_value = (pd.DataFrame(), None)
+        mock_client.load_dataset_files.return_value = {'train': pd.DataFrame()}
         mock_client_class.return_value = mock_client
         
         mock_analyzer = Mock()
@@ -158,61 +165,59 @@ class TestTimeseriesSplitCommand:
             'value': range(70, 100)
         })
         
-        mock_client.split_time_series.return_value = {
-            'train': train_df,
-            'test': test_df
-        }
+        mock_client.split_time_series.return_value = [
+            (train_df, test_df)
+        ]
         mock_client_class.return_value = mock_client
         
         result = runner.invoke(app, ["split", "test_dataset"])
         
         assert result.exit_code == 0
-        assert "Splitting dataset 'test_dataset' by time" in result.stdout
-        assert "Split Results:" in result.stdout
+        assert "Splitting dataset 'test_dataset' for cross-validation" in result.stdout
+        assert "Cross-Validation Splits" in result.stdout
         assert "train: 70 rows" in result.stdout
-        assert "test: 30 rows" in result.stdout
+        assert "test:  30 rows" in result.stdout
         assert "Time series split completed!" in result.stdout
     
     @patch('mdm.cli.timeseries.MDMClient')
     def test_split_with_validation(self, mock_client_class, runner):
-        """Test time series split with validation set."""
+        """Test time series split with multiple splits."""
         mock_client = Mock()
         mock_dataset_info = Mock()
         mock_dataset_info.time_column = "date"
         mock_client.get_dataset.return_value = mock_dataset_info
         
-        # Create three splits
-        splits = {
-            'train': pd.DataFrame({
-                'date': pd.date_range('2023-01-01', periods=60, freq='D'),
-                'value': range(60)
-            }),
-            'val': pd.DataFrame({
-                'date': pd.date_range('2023-03-02', periods=20, freq='D'),
-                'value': range(60, 80)
-            }),
-            'test': pd.DataFrame({
-                'date': pd.date_range('2023-03-22', periods=20, freq='D'),
+        # Create multiple splits
+        splits = []
+        for i in range(3):
+            train_df = pd.DataFrame({
+                'date': pd.date_range('2023-01-01', periods=80 - i*10, freq='D'),
+                'value': range(80 - i*10)
+            })
+            test_df = pd.DataFrame({
+                'date': pd.date_range(f'2023-03-{22-i*7}', periods=20, freq='D'),
                 'value': range(80, 100)
             })
-        }
+            splits.append((train_df, test_df))
         
         mock_client.split_time_series.return_value = splits
         mock_client_class.return_value = mock_client
         
         result = runner.invoke(app, [
             "split", "test_dataset",
-            "--test-days", "20",
-            "--val-days", "20"
+            "--n-splits", "3",
+            "--test-size", "0.2"
         ])
         
         assert result.exit_code == 0
-        assert "train: 60 rows" in result.stdout
-        assert "val: 20 rows" in result.stdout
-        assert "test: 20 rows" in result.stdout
+        assert "Number of splits: 3" in result.stdout
+        assert "Test size: 0.2" in result.stdout
+        assert "Split 1:" in result.stdout
+        assert "Split 2:" in result.stdout
+        assert "Split 3:" in result.stdout
         
         # Verify split_time_series was called with correct params
-        mock_client.split_time_series.assert_called_with("test_dataset", 20, 20)
+        mock_client.split_time_series.assert_called_with("test_dataset", 3, 0.2, 0, "expanding")
     
     @patch('mdm.cli.timeseries.MDMClient')
     def test_split_with_output(self, mock_client_class, runner):
@@ -222,10 +227,9 @@ class TestTimeseriesSplitCommand:
         mock_dataset_info.time_column = "date"
         mock_client.get_dataset.return_value = mock_dataset_info
         
-        splits = {
-            'train': pd.DataFrame({'date': ['2023-01-01'], 'value': [1]}),
-            'test': pd.DataFrame({'date': ['2023-02-01'], 'value': [2]})
-        }
+        train_df = pd.DataFrame({'date': pd.to_datetime(['2023-01-01']), 'value': [1]})
+        test_df = pd.DataFrame({'date': pd.to_datetime(['2023-02-01']), 'value': [2]})
+        splits = [(train_df, test_df)]
         mock_client.split_time_series.return_value = splits
         mock_client_class.return_value = mock_client
         
@@ -238,10 +242,10 @@ class TestTimeseriesSplitCommand:
             assert result.exit_code == 0
             
             # Check files were created
-            train_file = Path(tmpdir) / "test_dataset_train.csv"
-            test_file = Path(tmpdir) / "test_dataset_test.csv"
-            assert f"Saved train to {train_file}" in result.stdout
-            assert f"Saved test to {test_file}" in result.stdout
+            train_file = Path(tmpdir) / "test_dataset_split1_train.csv"
+            test_file = Path(tmpdir) / "test_dataset_split1_test.csv"
+            assert f"Saved split 1 train to {train_file}" in result.stdout
+            assert f"Saved split 1 test to {test_file}" in result.stdout
     
     @patch('mdm.cli.timeseries.MDMClient')
     def test_split_dataset_not_found(self, mock_client_class, runner):
@@ -292,7 +296,7 @@ class TestTimeseriesValidateCommand:
             'date': pd.date_range('2023-01-01', periods=100, freq='D'),
             'value': range(100)
         })
-        mock_client.load_dataset_files.return_value = (train_df, None)
+        mock_client.load_dataset_files.return_value = {'train': train_df}
         mock_client_class.return_value = mock_client
         
         # Setup splitter mock
@@ -332,7 +336,7 @@ class TestTimeseriesValidateCommand:
         mock_dataset_info.time_column = "date"
         mock_dataset_info.group_column = "group"
         mock_client.get_dataset.return_value = mock_dataset_info
-        mock_client.load_dataset_files.return_value = (pd.DataFrame(), None)
+        mock_client.load_dataset_files.return_value = {'train': pd.DataFrame()}
         mock_client_class.return_value = mock_client
         
         mock_splitter = Mock()
@@ -393,7 +397,7 @@ class TestTimeseriesValidateCommand:
         mock_dataset_info.time_column = "date"
         mock_dataset_info.group_column = None
         mock_client.get_dataset.return_value = mock_dataset_info
-        mock_client.load_dataset_files.return_value = (pd.DataFrame(), None)
+        mock_client.load_dataset_files.return_value = {'train': pd.DataFrame()}
         mock_client_class.return_value = mock_client
         
         mock_splitter = Mock()
