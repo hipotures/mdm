@@ -301,8 +301,25 @@ class StatelessDuckDBBackend(StorageBackend):
         db_path = Path(database_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Create empty DuckDB database
-        conn = duckdb.connect(str(db_path))
+        # Create empty DuckDB database with same configuration as engine
+        # Get DuckDB config from settings
+        duckdb_config = getattr(self.config.database, 'duckdb', None)
+        
+        # Build configuration
+        config_dict = {}
+        if duckdb_config:
+            config_dict['memory_limit'] = getattr(duckdb_config, "memory_limit", "2GB")
+            config_dict['threads'] = getattr(duckdb_config, "threads", 4)
+            config_dict['temp_directory'] = getattr(duckdb_config, "temp_directory", "/tmp/mdm_duckdb")
+        else:
+            config_dict = {
+                'memory_limit': '2GB',
+                'threads': 4,
+                'temp_directory': '/tmp/mdm_duckdb'
+            }
+        
+        # Create database with configuration
+        conn = duckdb.connect(str(db_path), config=config_dict)
         conn.close()
         
         logger.info(f"Created DuckDB database: {db_path}")
@@ -313,7 +330,8 @@ class StatelessDuckDBBackend(StorageBackend):
     
     def create_engine(self, database_path: str) -> Engine:
         """Create SQLAlchemy engine for the database."""
-        return create_engine(f"duckdb:///{database_path}")
+        # Use the same configuration as get_engine to avoid conflicts
+        return self.get_engine(database_path)
     
     def initialize_database(self, engine: Engine) -> None:
         """Initialize database with required tables."""
