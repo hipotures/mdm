@@ -75,7 +75,9 @@ class TestEmptyFiles:
             assert stats['tables']['train']['row_count'] == 1
             
             # Should be able to load it
-            train_df, _ = client.load_dataset_files("single_row")
+            datasets = client.load_dataset_files("single_row")
+            train_df = datasets.get('train')
+            assert train_df is not None
             assert len(train_df) == 1
             assert train_df['id'].iloc[0] == 1
             assert train_df['value'].iloc[0] == 100
@@ -103,7 +105,9 @@ class TestEmptyFiles:
             )
             
             # Load and verify
-            train_df, _ = client.load_dataset_files("empty_columns")
+            datasets = client.load_dataset_files("empty_columns")
+            train_df = datasets.get('train')
+            assert train_df is not None
             assert len(train_df) == 10
             
             # Empty columns should be preserved but recognized as having no signal
@@ -137,7 +141,9 @@ class TestCorruptedData:
                 )
                 
                 # If it succeeds, verify data handling
-                train_df, _ = client.load_dataset_files("corrupted_csv")
+                datasets = client.load_dataset_files("corrupted_csv")
+                train_df = datasets.get('train')
+                assert train_df is not None
                 assert len(train_df) >= 1  # At least some rows loaded
                 
             except Exception as e:
@@ -173,7 +179,9 @@ class TestCorruptedData:
                 )
                 
                 # If successful, should have handled bad encoding
-                train_df, _ = client.load_dataset_files("bad_encoding")
+                datasets = client.load_dataset_files("bad_encoding")
+                train_df = datasets.get('train')
+                assert train_df is not None
                 assert len(train_df) >= 1  # At least some data loaded
                 
             except (UnicodeDecodeError, DatasetError) as e:
@@ -196,9 +204,10 @@ class TestCorruptedData:
                     dataset_path=str(tmpdir),
                 )
                 # If it succeeds, it should have failed to parse properly
-                train_df, _ = client.load_dataset_files("binary_file")
+                datasets = client.load_dataset_files("binary_file")
+                train_df = datasets.get('train')
                 # Should be empty or very small
-                assert len(train_df) <= 1
+                assert train_df is None or len(train_df) <= 1
             except Exception:
                 # Expected - binary file should fail
                 assert True
@@ -272,7 +281,9 @@ class TestCorruptedData:
             )
             
             # Load and verify special characters preserved
-            train_df, _ = client.load_dataset_files("special_chars")
+            datasets = client.load_dataset_files("special_chars")
+            train_df = datasets.get('train')
+            assert train_df is not None
             assert len(train_df) == 5
             assert 'quotes' in train_df['text'].iloc[1]
             assert '中文' in train_df['unicode'].iloc[1]
@@ -340,7 +351,9 @@ class TestUnusualFormats:
             )
             
             # Verify parsing
-            train_df, _ = client.load_dataset_files("quoted_fields")
+            datasets = client.load_dataset_files("quoted_fields")
+            train_df = datasets.get('train')
+            assert train_df is not None
             assert len(train_df) == 4
             assert "comma" in train_df['description'].iloc[0]
             assert '"quotes"' in train_df['description'].iloc[1]
