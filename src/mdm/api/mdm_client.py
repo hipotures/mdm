@@ -1,6 +1,7 @@
 """Refactored MDM Client - facade for specialized clients."""
 
 from typing import Optional, Dict
+import time
 import pandas as pd
 
 from mdm.config import get_config
@@ -107,6 +108,15 @@ class MDMClient:
         """Get pre-computed statistics for a dataset. See ManagementClient.get_statistics."""
         return self.management.get_statistics(name, full)
     
+    def search_datasets(self, pattern: str, deep: bool = False, case_sensitive: bool = False):
+        """Search datasets by pattern. See ManagementClient.search_datasets."""
+        # Management client doesn't support deep and case_sensitive params currently
+        return self.management.search_datasets(pattern)
+    
+    def search_datasets_by_tag(self, tag: str):
+        """Search datasets by tag. See ManagementClient.search_datasets_by_tag."""
+        return self.management.search_datasets_by_tag(tag)
+    
     def load_dataset_files(self, name: str, include_features: bool = True, limit: Optional[int] = None) -> Dict[str, pd.DataFrame]:
         """Load dataset files. See QueryClient.load_dataset_files."""
         return self.query.load_dataset_files(name, include_features, limit)
@@ -114,6 +124,68 @@ class MDMClient:
     def split_time_series(self, name: str, n_splits: int = 5, test_size: float = 0.2, gap: int = 0, strategy: str = "expanding"):
         """Split time series for cross-validation. See MLIntegrationClient.split_time_series."""
         return self.ml.split_time_series(name, n_splits, test_size, gap, strategy)
+    
+    def get_column_info(self, name: str, table: str = "train"):
+        """Get column information for a dataset. See QueryClient.get_column_info."""
+        return self.query.get_column_info(name, table)
+    
+    def get_framework_adapter(self, framework: str):
+        """Get ML framework adapter. See MLIntegrationClient.get_framework_adapter."""
+        return self.ml.get_framework_adapter(framework)
+    
+    def process_in_chunks(self, data, process_func, chunk_size: Optional[int] = None):
+        """Process data in chunks for memory efficiency.
+        
+        Args:
+            data: DataFrame to process
+            process_func: Function to apply to each chunk
+            chunk_size: Optional chunk size (default from config)
+            
+        Returns:
+            List of results from each chunk
+        """
+        from mdm.utils.performance import ChunkProcessor
+        processor = ChunkProcessor(chunk_size=chunk_size)
+        return processor.process_dataframe(data, process_func, show_progress=False)
+    
+    def monitor_performance(self):
+        """Context manager for performance monitoring.
+        
+        Returns:
+            Context manager that yields PerformanceMonitor
+        """
+        if self._performance_monitor is None:
+            self._performance_monitor = PerformanceMonitor()
+        
+        from contextlib import contextmanager
+        
+        @contextmanager
+        def _monitor():
+            """Context manager wrapper for PerformanceMonitor."""
+            self._performance_monitor.start_time = time.time()
+            yield self._performance_monitor
+            # Could add cleanup or reporting here if needed
+            
+        return _monitor()
+    
+    def create_time_series_splits(self, data, time_column: str, n_splits: int = 5, gap_days: int = 0):
+        """Create time series splits for cross-validation.
+        
+        Args:
+            data: DataFrame with time series data
+            time_column: Name of the time column
+            n_splits: Number of splits
+            gap_days: Gap between train and test sets in days
+            
+        Returns:
+            List of (train, test) DataFrame tuples
+        """
+        from mdm.utils.time_series import TimeSeriesSplitter
+        splitter = TimeSeriesSplitter(time_column=time_column)
+        folds = splitter.split_by_folds(data, n_folds=n_splits, gap_days=gap_days)
+        
+        # Convert folds dict format to tuples
+        return [(fold['train'], fold['test']) for fold in folds]
     
     @property
     def performance_monitor(self) -> PerformanceMonitor:

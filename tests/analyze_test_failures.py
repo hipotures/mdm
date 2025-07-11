@@ -116,7 +116,7 @@ def create_github_issues(
     failures: List[TestResult],
     github_manager: GitHubIssueManager,
     dry_run: bool = True,
-    limit: int = 30
+    limit: int = 50
 ) -> Dict[str, int]:
     """Create GitHub issues for test failures."""
     stats = {
@@ -206,7 +206,7 @@ def main():
                '  %(prog)s                                    # Analyze all tests\n'
                '  %(prog)s --scope unit                       # Analyze only unit tests\n'
                '  %(prog)s --scope e2e --github               # Analyze E2E tests and create issues (dry run)\n'
-               '  %(prog)s --github --no-dry-run --limit 5    # Create up to 5 GitHub issues\n'
+               '  %(prog)s --github --no-dry-run --limit 50   # Create up to 5 GitHub issues\n'
                '  %(prog)s --category "CLI*"                  # Analyze only CLI-related tests\n',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -221,8 +221,8 @@ def main():
                        help='Enable GitHub issue creation')
     parser.add_argument('--github-token', help='GitHub token (overrides GITHUB_TOKEN env)')
     parser.add_argument('--github-repo', help='GitHub repository (default: from .env)')
-    parser.add_argument('--github-limit', type=int, default=30,
-                       help='Maximum issues per run (default: 30)')
+    parser.add_argument('--github-limit', type=int, default=50,
+                       help='Maximum issues per run (default: 50)')
     parser.add_argument('--dry-run', action='store_true', default=True,
                        help='Show what would be created without creating (default: True)')
     parser.add_argument('--no-dry-run', dest='dry_run', action='store_false',
