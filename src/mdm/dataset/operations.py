@@ -480,6 +480,7 @@ class UpdateOperation(DatasetOperation):
         target: Optional[str] = None,
         problem_type: Optional[str] = None,
         id_columns: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Update dataset metadata.
 
@@ -489,6 +490,7 @@ class UpdateOperation(DatasetOperation):
             target: New target column
             problem_type: New problem type
             id_columns: New ID columns
+            tags: New tags list
 
         Returns:
             Updated dataset information
@@ -512,6 +514,8 @@ class UpdateOperation(DatasetOperation):
                 data['problem_type'] = problem_type
             if id_columns is not None:
                 data['id_columns'] = id_columns
+            if tags is not None:
+                data['tags'] = tags
 
             # Update timestamp
             data['last_updated_at'] = datetime.utcnow().isoformat()

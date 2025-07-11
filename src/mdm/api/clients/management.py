@@ -40,18 +40,15 @@ class ManagementClient(BaseClient):
             DatasetError: If dataset not found or update fails
         """
         update_op = UpdateOperation()
-        # UpdateOperation uses 'target' not 'target_column' and doesn't support tags
+        # UpdateOperation uses 'target' not 'target_column'
         result = update_op.execute(
             name=name,
             description=description,
             target=target_column,
             id_columns=id_columns,
-            problem_type=problem_type
+            problem_type=problem_type,
+            tags=tags
         )
-        
-        # If tags were provided, we need to update them separately
-        # For now, we'll just return the result as-is
-        # TODO: Implement tag updates in UpdateOperation
         
         # Convert result dict to DatasetInfo
         return self.manager.get_dataset(name)
