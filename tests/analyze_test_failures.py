@@ -237,7 +237,7 @@ def main():
                '  %(prog)s                                    # Analyze all tests\n'
                '  %(prog)s --scope unit                       # Analyze only unit tests\n'
                '  %(prog)s --scope e2e --github               # Analyze E2E tests and create issues (dry run)\n'
-               '  %(prog)s --github --no-dry-run --limit 50   # Create up to X GitHub issues\n'
+               '  %(prog)s --github --no-dry-run --github-limit 50   # Create up to X GitHub issues\n'
                '  %(prog)s --category "CLI*"                  # Analyze only CLI-related tests\n'
                '  %(prog)s --scope e2e --parallel 4           # Run E2E tests with 4 parallel workers\n'
                '  %(prog)s --parallel 8                       # Run all tests with 8 parallel workers\n',
