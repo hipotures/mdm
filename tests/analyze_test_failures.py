@@ -124,7 +124,6 @@ class UnifiedTestRunner(BaseTestRunner):
                 ("tests/integration/test_dataset_update.py", "Dataset Update"),
                 ("tests/integration/test_statistics_computation.py", "Statistics Computation"),
                 ("tests/integration/test_storage_backends.py", "Storage Backends"),
-                ("tests/test_integration_testing.py", "Integration Testing Framework"),
             ])
         
         # E2E tests
@@ -139,7 +138,6 @@ class UnifiedTestRunner(BaseTestRunner):
                 ("tests/e2e/test_02_dataset/test_22_list.py", "Dataset Listing"),
                 ("tests/e2e/test_02_dataset/test_23_info.py", "Dataset Info/Stats"),
                 ("tests/e2e/test_isolation.py", "E2E Isolation"),
-                ("tests/e2e/test_summary.py", "E2E Summary"),
             ])
         
         return categories
