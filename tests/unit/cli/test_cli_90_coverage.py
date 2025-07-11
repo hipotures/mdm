@@ -432,21 +432,16 @@ class TestTimeseriesCoverage:
         mock_dataset_info.time_column = "date"
         mock_client.get_dataset.return_value = mock_dataset_info
         
-        # Create three splits
-        splits = {
-            'train': pd.DataFrame({
-                'date': pd.date_range('2023-01-01', periods=60, freq='D'),
-                'value': range(60)
-            }),
-            'val': pd.DataFrame({
-                'date': pd.date_range('2023-03-02', periods=20, freq='D'),
-                'value': range(60, 80)
-            }),
-            'test': pd.DataFrame({
-                'date': pd.date_range('2023-03-22', periods=20, freq='D'),
-                'value': range(80, 100)
-            })
-        }
+        # Create splits as list of tuples (as per the actual implementation)
+        train_df = pd.DataFrame({
+            'date': pd.date_range('2023-01-01', periods=60, freq='D'),
+            'value': range(60)
+        })
+        test_df = pd.DataFrame({
+            'date': pd.date_range('2023-03-02', periods=40, freq='D'),
+            'value': range(60, 100)
+        })
+        splits = [(train_df, test_df)]
         
         mock_client.split_time_series.return_value = splits
         mock_client_class.return_value = mock_client
@@ -454,8 +449,8 @@ class TestTimeseriesCoverage:
         with tempfile.TemporaryDirectory() as tmpdir:
             result = runner.invoke(timeseries_app, [
                 "split", "test_dataset",
-                "--test-days", "20",
-                "--val-days", "20",
+                "--test-size", "0.4",
+                "--n-splits", "1",
                 "--output", tmpdir
             ])
         

@@ -518,7 +518,7 @@ class TestTimeseriesCLI90Coverage:
             'sales': list(range(100)) * 2,
             'store_id': ['A'] * 100 + ['B'] * 100
         })
-        mock_client.load_dataset_files.return_value = (train_df, None)
+        mock_client.load_dataset_files.return_value = {'train': train_df}
         mock_client_class.return_value = mock_client
         
         # Setup analyzer
