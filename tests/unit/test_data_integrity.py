@@ -69,7 +69,9 @@ class TestExportImportRoundtrip:
             assert len(exported_files) > 0
             
             # Load original dataset
-            original_loaded, _ = client.load_dataset_files("roundtrip_test")
+            datasets = client.load_dataset_files("roundtrip_test")
+            original_loaded = datasets.get('train')
+            assert original_loaded is not None
             
             # Read exported file directly - find the data table export
             exported_csv = None
