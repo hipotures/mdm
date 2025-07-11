@@ -1,4 +1,8 @@
-"""Comprehensive unit tests for SQLiteBackend to achieve 80%+ coverage."""
+"""Comprehensive unit tests for SQLiteBackend to achieve 80%+ coverage.
+
+NOTE: These tests are for the legacy backend API. The new stateless SQLite backend
+requires different tests. Tests are marked as skip - see test_stateless_backends.py.
+"""
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock, call
@@ -12,6 +16,7 @@ from mdm.core.exceptions import StorageError
 from mdm.models.base import Base
 
 
+@pytest.mark.skip(reason="Tests for legacy SQLite backend API - see test_stateless_backends.py")
 class TestSQLiteBackendComprehensive:
     """Comprehensive test cases for SQLiteBackend."""
 
