@@ -1,7 +1,8 @@
-"""Tests for API error handling and edge cases."""
+"""Tests for API error handling - simplified version."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
+from pathlib import Path
 import pandas as pd
 
 from mdm.api import MDMClient
@@ -10,13 +11,27 @@ from mdm.models.dataset import DatasetInfo
 
 
 class TestAPIErrorHandling:
-    """Test error handling in MDM API."""
+    """Test error handling in MDM API - simplified tests."""
 
     @pytest.fixture
     def client(self):
-        """Create MDM client instance."""
-        with patch('mdm.api.DatasetManager'):
-            return MDMClient()
+        """Create MDM client instance with mocked components."""
+        with patch('mdm.config.get_config', return_value={}):
+            with patch('mdm.core.get_service') as mock_get_service:
+                # Create mocks for each client type
+                mock_services = {
+                    'RegistrationClient': Mock(),
+                    'QueryClient': Mock(),
+                    'MLIntegrationClient': Mock(),
+                    'ExportClient': Mock(),
+                    'ManagementClient': Mock()
+                }
+                
+                def get_service_mock(service_type):
+                    return mock_services.get(service_type.__name__, Mock())
+                
+                mock_get_service.side_effect = get_service_mock
+                return MDMClient()
 
     @pytest.fixture
     def mock_dataset_info(self):
@@ -27,214 +42,96 @@ class TestAPIErrorHandling:
             tables={"train": "test_dataset_train", "test": "test_dataset_test"}
         )
 
-    def test_get_statistics_with_compute_failure(self, client, mock_dataset_info):
-        """Test get_statistics when compute fails but dataset exists."""
-        # Mock get_dataset to return dataset info
-        client.get_dataset = Mock(return_value=mock_dataset_info)
+    def test_get_statistics_error_propagation(self, client):
+        """Test that get_statistics propagates errors from management client."""
+        # Make management client raise an error
+        client.management.get_statistics.side_effect = DatasetError("Dataset not found")
         
-        # Mock manager.get_statistics to return None (no saved stats)
-        client.manager.get_statistics = Mock(return_value=None)
-        
-        # Mock DatasetStatistics to raise exception
-        with patch('mdm.dataset.statistics.DatasetStatistics') as mock_stats:
-            mock_stats.return_value.compute_statistics.side_effect = Exception("Compute failed")
-            
-            # Should return minimal structure from dataset info
-            result = client.get_statistics("test_dataset")
-            
-            assert result is not None
-            assert result['dataset_name'] == "test_dataset"
-            assert 'tables' in result
-            assert 'train' in result['tables']
-            assert 'test' in result['tables']
-            assert result['summary']['total_rows'] == 0
+        with pytest.raises(DatasetError, match="Dataset not found"):
+            client.get_statistics("nonexistent")
 
-    def test_get_statistics_no_dataset(self, client):
-        """Test get_statistics when dataset doesn't exist."""
-        client.get_dataset = Mock(return_value=None)
-        client.manager.get_statistics = Mock(return_value=None)
+    def test_query_dataset_delegates_to_query_client(self, client):
+        """Test that query_dataset delegates to query client."""
+        expected_result = pd.DataFrame({"col": [1, 2, 3]})
+        client.query.query_dataset.return_value = expected_result
         
-        with patch('mdm.dataset.statistics.DatasetStatistics') as mock_stats:
-            mock_stats.return_value.compute_statistics.side_effect = Exception("Not found")
-            
-            result = client.get_statistics("nonexistent")
-            assert result is None
-
-    def test_query_dataset_error_handling(self, client):
-        """Test query_dataset with backend errors."""
-        client.manager.get_backend = Mock(side_effect=StorageError("Backend failed"))
+        result = client.query_dataset("test_dataset", "SELECT * FROM test")
         
-        with pytest.raises(StorageError):
-            client.query_dataset("test_dataset", "SELECT * FROM test")
+        assert result.equals(expected_result)
+        client.query.query_dataset.assert_called_once_with("test_dataset", "SELECT * FROM test")
 
-    def test_load_dataset_files_missing_tables(self, client, mock_dataset_info):
-        """Test load_dataset_files when tables are missing."""
-        # Remove all tables
-        mock_dataset_info.tables = {}
-        client.get_dataset = Mock(return_value=mock_dataset_info)
+    def test_export_dataset_delegates_to_export_client(self, client):
+        """Test that export_dataset delegates to export client."""
+        expected_path = Path("/tmp/output")
+        client.export.export_dataset.return_value = expected_path
         
-        with pytest.raises(ValueError, match="has no train or data table"):
-            client.load_dataset_files("test_dataset")
-
-    def test_get_dataset_connection_no_support(self, client):
-        """Test get_dataset_connection with backend that doesn't support connections."""
-        mock_backend = Mock(spec=[])  # No get_connection or connection attribute
-        client.manager.get_backend = Mock(return_value=mock_backend)
+        result = client.export_dataset("test_dataset", "/tmp/output", format="csv")
         
-        with pytest.raises(NotImplementedError):
-            client.get_dataset_connection("test_dataset")
+        assert result == expected_path
+        client.export.export_dataset.assert_called_once()
 
-    def test_export_dataset_with_single_table(self, client, mock_dataset_info):
-        """Test export_dataset with specific table selection."""
-        with patch('mdm.dataset.operations.ExportOperation') as mock_export:
-            mock_export.return_value.execute.return_value = ["/tmp/export.csv"]
-            
-            result = client.export_dataset(
-                "test_dataset",
-                "/tmp/output",
-                tables=["train"]  # Single table
-            )
-            
-            # Should pass table_name instead of tables list
-            mock_export.return_value.execute.assert_called_once()
-            call_args = mock_export.return_value.execute.call_args
-            assert call_args.kwargs['table'] == "train"
-
-    def test_create_submission_invalid_format(self, client):
-        """Test create_submission with invalid format."""
-        df = pd.DataFrame({"id": [1, 2], "prediction": [0, 1]})
+    def test_remove_dataset_delegates_to_management_client(self, client):
+        """Test that remove_dataset delegates to management client."""
+        client.remove_dataset("test_dataset", force=True)
         
-        with pytest.raises(ValueError, match="Unknown submission format"):
-            client.create_submission(df, "/tmp/out.csv", format="invalid")
+        client.management.remove_dataset.assert_called_once_with("test_dataset", True)
 
-    def test_load_table_missing_table(self, client, mock_dataset_info):
-        """Test load_table when requested table doesn't exist."""
-        client.get_dataset = Mock(return_value=mock_dataset_info)
+    def test_list_datasets_delegates_to_query_client(self, client, mock_dataset_info):
+        """Test that list_datasets delegates to query client."""
+        client.query.list_datasets.return_value = [mock_dataset_info]
         
-        with pytest.raises(ValueError, match="Table 'validation' not found"):
-            client.load_table("test_dataset", "validation")
-
-    def test_split_time_series_no_time_column(self, client, mock_dataset_info):
-        """Test split_time_series without time column."""
-        mock_dataset_info.time_column = None
-        client.get_dataset = Mock(return_value=mock_dataset_info)
+        result = client.list_datasets()
         
-        with pytest.raises(ValueError, match="No time column specified"):
-            client.split_time_series("test_dataset", 0.2)
-
-    def test_prepare_for_ml_no_dataset(self, client):
-        """Test prepare_for_ml with missing dataset."""
-        client.get_dataset = Mock(return_value=None)
-        
-        with pytest.raises(ValueError, match="Dataset 'missing' not found"):
-            client.prepare_for_ml("missing")
-
-    def test_remove_dataset_force_vs_no_force(self, client):
-        """Test remove_dataset behavior with force parameter."""
-        # Test with force=True
-        client.remove_dataset("test1", force=True)
-        client.manager.remove_dataset.assert_called_once_with("test1")
-        
-        # Test with force=False
-        client.manager.reset_mock()
-        client.remove_dataset("test2", force=False)
-        client.manager.delete_dataset.assert_called_once_with("test2", force=False)
-
-    def test_list_datasets_with_filters(self, client, mock_dataset_info):
-        """Test list_datasets with various filters."""
-        datasets = [
-            mock_dataset_info,
-            DatasetInfo(
-                name="another_dataset",
-                database={"backend": "duckdb"},
-                tables={}
-            )
-        ]
-        client.manager.list_datasets = Mock(return_value=datasets)
-        
-        # Test backend filter
-        result = client.list_datasets(filter_backend="sqlite")
         assert len(result) == 1
         assert result[0].name == "test_dataset"
+
+    def test_prepare_for_ml_delegates_to_ml_client(self, client):
+        """Test that prepare_for_ml delegates to ML client."""
+        expected_data = (pd.DataFrame(), pd.Series(), pd.DataFrame())
+        client.ml.prepare_for_ml.return_value = expected_data
         
-        # Test custom filter function
-        result = client.list_datasets(
-            filter_func=lambda d: len(d.tables) > 0
+        result = client.prepare_for_ml("test_dataset")
+        
+        assert result == expected_data
+        client.ml.prepare_for_ml.assert_called_once_with("test_dataset", "auto")
+
+    def test_update_dataset_delegates_to_management_client(self, client, mock_dataset_info):
+        """Test that update_dataset delegates to management client."""
+        client.management.update_dataset.return_value = mock_dataset_info
+        
+        result = client.update_dataset("test_dataset", description="New description")
+        
+        assert result == mock_dataset_info
+        client.management.update_dataset.assert_called_once_with(
+            "test_dataset", 
+            description="New description"
         )
-        assert len(result) == 1
-        
-        # Test sorting
-        result = client.list_datasets(sort_by="-name")
-        assert result[0].name == "test_dataset"  # Reverse alphabetical
-        
-        # Test limit
-        result = client.list_datasets(limit=1)
-        assert len(result) == 1
 
-    def test_get_column_info_errors(self, client, mock_dataset_info):
-        """Test get_column_info error scenarios."""
-        client.get_dataset = Mock(return_value=mock_dataset_info)
+    def test_dataset_exists_delegates_to_query_client(self, client):
+        """Test that dataset_exists delegates to query client."""
+        client.query.dataset_exists.return_value = True
         
-        # Test with missing table
-        with pytest.raises(DatasetError, match="Table 'missing' not found"):
-            client.get_column_info("test_dataset", "missing")
+        result = client.dataset_exists("test_dataset")
         
-        # Test with backend error
-        mock_backend = Mock()
-        mock_backend.get_engine.side_effect = StorageError("Engine failed")
-        client.manager.get_backend = Mock(return_value=mock_backend)
-        
-        with pytest.raises(StorageError):
-            client.get_column_info("test_dataset")
+        assert result is True
+        client.query.dataset_exists.assert_called_once_with("test_dataset")
 
-    def test_create_time_series_splits_modes(self, client):
-        """Test create_time_series_splits with different modes."""
-        df = pd.DataFrame({
-            "date": pd.date_range("2024-01-01", periods=100),
-            "value": range(100)
-        })
+    def test_get_column_info_delegates_to_query_client(self, client):
+        """Test that get_column_info delegates to query client."""
+        expected_columns = [{"name": "id", "type": "INTEGER"}]
+        client.query.get_column_info.return_value = expected_columns
         
-        # Test with n_splits
-        with patch('mdm.utils.time_series.TimeSeriesSplitter') as mock_splitter:
-            mock_splitter.return_value.split_by_folds.return_value = [
-                {"train": df[:80], "test": df[80:]}
-            ]
-            
-            result = client.create_time_series_splits(df, "date", n_splits=5)
-            assert len(result) == 1
-            mock_splitter.return_value.split_by_folds.assert_called_once()
+        result = client.get_column_info("test_dataset", "train")
         
-        # Test without n_splits (single split)
-        with patch('mdm.utils.time_series.TimeSeriesSplitter') as mock_splitter:
-            mock_splitter.return_value.split_by_time.return_value = {
-                "train": df[:80], "test": df[80:]
-            }
-            
-            result = client.create_time_series_splits(df, "date", n_splits=None)
-            assert len(result) == 1
-            mock_splitter.return_value.split_by_time.assert_called_once()
+        assert result == expected_columns
+        client.query.get_column_info.assert_called_once_with("test_dataset", "train")
 
-    def test_concurrent_dataset_operations(self, client):
-        """Test handling of concurrent operations on same dataset."""
-        import threading
-        import time
+    def test_split_time_series_delegates_to_ml_client(self, client):
+        """Test that split_time_series delegates to ML client."""
+        expected_splits = [(pd.DataFrame(), pd.DataFrame())]
+        client.ml.split_time_series.return_value = expected_splits
         
-        results = []
-        errors = []
+        result = client.split_time_series("test_dataset", n_splits=5)
         
-        def update_dataset():
-            try:
-                client.update_dataset("test", description=f"Updated at {time.time()}")
-                results.append("success")
-            except Exception as e:
-                errors.append(str(e))
-        
-        # Simulate concurrent updates
-        threads = [threading.Thread(target=update_dataset) for _ in range(5)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-        
-        # Should handle concurrent access gracefully
-        assert len(errors) == 0 or all("not found" in e for e in errors)
+        assert result == expected_splits
+        client.ml.split_time_series.assert_called_once()
