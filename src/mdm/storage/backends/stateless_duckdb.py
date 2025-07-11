@@ -98,7 +98,8 @@ class StatelessDuckDBBackend(StorageBackend):
             # Enable parallel query execution
             dbapi_conn.execute("SET threads TO 4")
             # Set memory limit
-            dbapi_conn.execute(f"SET memory_limit='{duckdb_config.get('memory_limit', '2GB')}'")
+            memory_limit = getattr(duckdb_config, 'memory_limit', '2GB') if duckdb_config else '2GB'
+            dbapi_conn.execute(f"SET memory_limit='{memory_limit}'")
             # Enable progress bar for long queries (disabled in production)
             dbapi_conn.execute("SET enable_progress_bar=false")
         
