@@ -488,18 +488,29 @@ flowchart TD
 
 ### Adding New Storage Backend
 
+Example: Adding a hypothetical Redis backend for caching:
+
 1. Create new backend class:
 ```python
-# src/mdm/storage/mongodb.py
+# src/mdm/storage/redis_backend.py
 from mdm.storage.base import StorageBackend
 
-class MongoDBBackend(StorageBackend):
-    def __init__(self, config: Dict[str, Any]):
-        self.client = MongoClient(**config)
+class RedisBackend(StorageBackend):
+    """Example backend for key-value storage."""
     
-    def create_table_from_dataframe(self, df, table_name, ...):
-        # Implementation
+    @property
+    def backend_type(self) -> str:
+        return "redis"
+    
+    def create_engine(self, database_path: str) -> Engine:
+        # Redis doesn't use SQLAlchemy, so this would need adaptation
         pass
+    
+    def initialize_database(self, engine: Engine) -> None:
+        # Initialize Redis structures
+        pass
+    
+    # Implement other abstract methods...
 ```
 
 2. Register in BackendFactory:
@@ -510,7 +521,7 @@ class BackendFactory:
         "sqlite": StatelessSQLiteBackend,
         "duckdb": StatelessDuckDBBackend,
         "postgresql": PostgreSQLBackend,
-        "mongodb": MongoDBBackend  # Add here
+        "redis": RedisBackend  # Add new backend
     }
     
     @classmethod
@@ -521,7 +532,7 @@ class BackendFactory:
         backend_class = cls._backends[backend_type]
         
         # Stateless backends don't take config in constructor
-        if backend_type in ["sqlite", "duckdb", "mongodb"]:
+        if backend_type in ["sqlite", "duckdb"]:
             return backend_class()
         else:
             # Stateful backends take config
@@ -531,11 +542,14 @@ class BackendFactory:
 3. Add configuration:
 ```python
 # src/mdm/config.py
-class MongoDBConfig(BaseModel):
+class RedisConfig(BaseModel):
     host: str = "localhost"
-    port: int = 27017
-    database: str = "mdm"
+    port: int = 6379
+    db: int = 0
+    password: Optional[str] = None
 ```
+
+Note: MDM currently supports only SQL-based backends (SQLite, DuckDB, PostgreSQL) that work with SQLAlchemy. Adding non-SQL backends would require significant architectural changes.
 
 ### Adding New Feature Transformers
 
