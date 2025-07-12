@@ -10,6 +10,7 @@ from mdm.features.generic import (
     TemporalFeatures,
     TextFeatures,
 )
+from mdm.features.generic.adapters import create_global_adapters
 from mdm.models.enums import ColumnType
 
 
@@ -24,6 +25,10 @@ class FeatureRegistry:
             ColumnType.NUMERIC: [StatisticalFeatures],
             ColumnType.TEXT: [TextFeatures],
         }
+        
+        # Global transformers that apply to entire dataset
+        # These are instances, not classes, created via adapters
+        self._global_transformer_instances = create_global_adapters()
 
         # Default transformer instances
         self._default_instances: dict[type[GenericFeatureOperation], GenericFeatureOperation] = {}
@@ -79,6 +84,7 @@ class FeatureRegistry:
         """
         all_instances = []
 
+        # Add column-specific transformers
         for transformer_list in self._transformers.values():
             for transformer_class in transformer_list:
                 if transformer_class not in self._default_instances:
@@ -88,7 +94,20 @@ class FeatureRegistry:
                 if instance not in all_instances:
                     all_instances.append(instance)
 
+        # Add global transformers
+        for instance in self._global_transformer_instances:
+            if instance not in all_instances:
+                all_instances.append(instance)
+
         return all_instances
+    
+    def get_global_transformers(self) -> list[GenericFeatureOperation]:
+        """Get global transformer instances that apply to entire dataset.
+        
+        Returns:
+            List of global transformer instances
+        """
+        return self._global_transformer_instances.copy()
 
 
 # Global registry instance

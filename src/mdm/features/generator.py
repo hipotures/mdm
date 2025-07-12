@@ -80,6 +80,34 @@ class FeatureGenerator:
                     if feature_name not in feature_df.columns:
                         feature_df[feature_name] = feature_values
                         feature_count += 1
+        
+        # Apply global transformers that work on entire dataset
+        global_transformers = self.registry.get_global_transformers()
+        for transformer in global_transformers:
+            logger.debug(
+                f"[{transformer.__class__.__name__}] Processing global features"
+            )
+            
+            # Global transformers work differently - they process the entire dataset
+            # Check if this is a GlobalFeatureAdapter
+            if hasattr(transformer, 'generator_class_name'):
+                # This is a global feature adapter
+                try:
+                    features_dict = transformer._generate_column_features(
+                        df, 
+                        "__global_features__",
+                        target_column=target_column,
+                        id_columns=id_columns or []
+                    )
+                    
+                    # Add to feature DataFrame
+                    for feature_name, feature_values in features_dict.items():
+                        if feature_name not in feature_df.columns:
+                            feature_df[feature_name] = feature_values
+                            feature_count += 1
+                            
+                except Exception as e:
+                    logger.error(f"Error generating global features with {transformer.generator_class_name}: {e}")
 
         # Apply custom transformers if available
         custom_features = self._load_custom_features(dataset_name)
