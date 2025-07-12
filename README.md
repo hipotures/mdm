@@ -20,7 +20,6 @@ MDM (ML Data Manager) is a powerful, production-ready tool for managing machine 
 - **📦 Multiple Export Formats**: CSV, Parquet, JSON with compression options
 - **⚡ High Performance**: Batch processing, progress tracking, and optimized data loading
 - **🎨 Beautiful CLI**: Rich terminal output with progress bars and formatted tables
-- **🔄 Dataset Versioning**: Track changes and maintain dataset history
 - **📈 Comprehensive Statistics**: Automatic profiling and statistical analysis
 
 ## 📦 Installation
