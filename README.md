@@ -101,19 +101,26 @@ client.export_dataset("titanic", format="parquet", output_dir="./exports")
 
 ### Core Documentation
 
-- **[Architecture Overview](docs/01_Architecture_Overview.md)** - System design and components
-- **[Configuration Guide](docs/02_Configuration.md)** - Configuration options and settings
-- **[Database Architecture](docs/03_Database_Architecture.md)** - Backend design and selection
-- **[API Reference](docs/04_API_Reference.md)** - Complete API documentation
-- **[Feature Engineering](docs/05_Feature_Engineering.md)** - Feature generation system
-- **[CLI Reference](docs/07_Command_Line_Interface.md)** - Command-line interface guide
+- **[Project Overview](docs/current/user/01_Project_Overview.md)** - Introduction to MDM
+- **[Configuration Guide](docs/current/user/02_Configuration.md)** - Configuration options and settings
+- **[Database Architecture](docs/current/user/03_Database_Architecture.md)** - Backend design and selection
+- **[Dataset Registration](docs/current/user/04_Dataset_Registration.md)** - How to register datasets
+- **[Dataset Management](docs/current/user/05_Dataset_Management_Operations.md)** - Dataset operations
+- **[Database Backends](docs/current/user/06_Database_Backends.md)** - Backend comparison and selection
+- **[CLI Reference](docs/current/user/07_Command_Line_Interface.md)** - Command-line interface guide
+- **[Programmatic API](docs/current/user/08_Programmatic_API.md)** - Python API documentation
+- **[Advanced Features](docs/current/user/09_Advanced_Features.md)** - Feature engineering and more
 
 ### Guides and Tutorials
 
-- **[Quick Start Guide](docs/tutorials/01_Getting_Started.md)** - Get up and running quickly
-- **[Dataset Management](docs/tutorials/02_Advanced_Dataset_Management.md)** - Advanced dataset operations
-- **[Custom Features](docs/tutorials/03_Custom_Feature_Engineering.md)** - Create custom transformers
-- **[Performance Tips](docs/tutorials/04_Performance_Optimization.md)** - Optimize for large datasets
+- **[Getting Started](docs/current/user/tutorials/01_Getting_Started.md)** - Quick start guide
+- **[Advanced Dataset Management](docs/current/user/tutorials/02_Advanced_Dataset_Management.md)** - Advanced operations
+- **[Performance Optimization](docs/current/development/Performance_Optimization.md)** - Tips for large datasets
+
+### API Documentation
+
+- **[API Reference](docs/current/api/API_Reference.md)** - Complete API reference
+- **[Architecture Design](docs/current/api/Architecture_Design.md)** - System architecture details
 
 ## ⚙️ Configuration
 
