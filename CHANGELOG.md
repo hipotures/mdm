@@ -5,6 +5,31 @@ All notable changes to MDM (ML Data Manager) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-07-12
+
+### Documentation
+- Complete documentation overhaul - created comprehensive new documentation
+- Fixed package name from "mdm-ml" to "mdm" throughout documentation
+- Added automatic Kaggle structure recognition to key features
+- Moved test documentation to `tests/docs/` directory
+- Removed redundant manual test checklist in favor of automated tests
+
+### Fixed
+- Architecture documentation now accurately reflects implementation:
+  - Corrected database table names (removed `_table` suffix)
+  - Fixed metadata table name (`_mdm_metadata` → `_metadata`)
+  - Removed reference to non-existent `_mdm_features` table
+  - Updated backend classes to show stateless implementations
+  - Fixed custom feature examples to use `BaseDomainFeatures`
+  - Corrected `StorageBackend` interface documentation
+  - Removed MongoDB from examples (not implemented)
+  - Fixed incorrect multi-instance deployment diagram
+  
+### Changed
+- Reorganized documentation structure - moved `docs-new/` to `docs/`
+- Removed all outdated documentation directories
+- Cleaned up documentation to focus on actual features, not planned ones
+
 ## [1.0.0] - 2025-07-12
 
 ### Added
