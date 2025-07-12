@@ -569,6 +569,7 @@ def update_dataset(
     id_columns: Optional[str] = typer.Option(
         None, "--id-columns", help="Comma-separated ID columns"
     ),
+    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated tags"),
 ) -> None:
     """Update dataset metadata."""
     from mdm.dataset.operations import UpdateOperation
@@ -604,6 +605,10 @@ def update_dataset(
             raise typer.Exit(1)
         if columns:  # Only add if there are valid columns
             updates["id_columns"] = columns
+    if tags is not None:
+        # Parse tags
+        tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        updates["tags"] = tag_list
 
     if not updates:
         console.print("No updates specified")
@@ -611,7 +616,15 @@ def update_dataset(
 
     try:
         operation = UpdateOperation()
-        operation.execute(name, updates)
+        # Unpack updates dictionary to match execute method signature
+        result = operation.execute(
+            name,
+            description=updates.get("description"),
+            target=updates.get("target_column"),
+            problem_type=updates.get("problem_type"),
+            id_columns=updates.get("id_columns"),
+            tags=updates.get("tags")
+        )
 
         console.print(f"[green]✓[/green] Dataset '{name}' updated successfully")
         console.print("\nUpdated fields:")

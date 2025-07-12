@@ -235,8 +235,9 @@ class DatasetRegistrar:
         kwargs: Dict[str, Any]
     ) -> tuple[Optional[str], Optional[str]]:
         """Determine target column and problem type."""
-        target_column = detected_info.get('target_column') or kwargs.get('target_column')
-        problem_type = detected_info.get('problem_type') or kwargs.get('problem_type')
+        # User-provided values take precedence over auto-detected ones
+        target_column = kwargs.get('target_column') or detected_info.get('target_column')
+        problem_type = kwargs.get('problem_type') or detected_info.get('problem_type')
         
         if auto_detect and not problem_type and target_column:
             problem_type = self._infer_problem_type(column_info, target_column)

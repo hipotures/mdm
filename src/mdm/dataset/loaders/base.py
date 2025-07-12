@@ -120,11 +120,35 @@ class FileLoader(ABC):
                 # Check if values look like dates
                 sample_values = sample_df[col].dropna().astype(str).head(10)
                 if len(sample_values) > 0:
-                    # Try parsing
-                    pd.to_datetime(sample_values, errors='coerce')
+                    # Try parsing with common date formats first
+                    common_formats = [
+                        '%Y-%m-%d',           # 2023-01-15
+                        '%Y/%m/%d',           # 2023/01/15
+                        '%d-%m-%Y',           # 15-01-2023
+                        '%d/%m/%Y',           # 15/01/2023
+                        '%m-%d-%Y',           # 01-15-2023
+                        '%m/%d/%Y',           # 01/15/2023
+                        '%Y-%m-%d %H:%M:%S', # 2023-01-15 10:30:45
+                        '%Y/%m/%d %H:%M:%S', # 2023/01/15 10:30:45
+                        '%d-%m-%Y %H:%M:%S', # 15-01-2023 10:30:45
+                        '%d/%m/%Y %H:%M:%S', # 15/01/2023 10:30:45
+                    ]
+                    
+                    parsed = None
+                    for fmt in common_formats:
+                        try:
+                            parsed = pd.to_datetime(sample_values, format=fmt, errors='coerce')
+                            if parsed.notna().sum() > len(parsed) * 0.8:  # 80% success rate
+                                break
+                        except:
+                            continue
+                    
+                    # If no common format worked, fall back to inference
+                    if parsed is None or parsed.notna().sum() <= len(parsed) * 0.5:
+                        parsed = pd.to_datetime(sample_values, errors='coerce', infer_datetime_format=True)
+                    
                     # If more than 50% parsed successfully, it's likely a datetime
-                    parsed = pd.to_datetime(sample_values, errors='coerce')
-                    if parsed.notna().sum() > len(parsed) * 0.5:
+                    if parsed is not None and parsed.notna().sum() > len(parsed) * 0.5:
                         self._detected_datetime_columns.append(col)
                         logger.debug(f"Detected datetime column: {col}")
             except Exception:

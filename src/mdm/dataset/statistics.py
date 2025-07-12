@@ -162,9 +162,19 @@ class DatasetStatistics:
             # Get sample data for analysis
             sample_size = min(10000, row_count) if row_count > 0 else 0
             if sample_size > 0:
-                # For large datasets, use sampling
+                # For large datasets, use LIMIT instead of SAMPLE for SQLite compatibility
                 if row_count > 100000:
-                    query = f"SELECT * FROM {table_name} USING SAMPLE {sample_size}"
+                    # Use ORDER BY RANDOM() LIMIT for random sampling (works in SQLite)
+                    # Note: This can be slow for very large tables
+                    backend_type = backend.__class__.__name__.lower()
+                    if 'sqlite' in backend_type:
+                        query = f"SELECT * FROM {table_name} ORDER BY RANDOM() LIMIT {sample_size}"
+                    elif 'duckdb' in backend_type:
+                        # DuckDB supports USING SAMPLE
+                        query = f"SELECT * FROM {table_name} USING SAMPLE {sample_size}"
+                    else:
+                        # Fallback to LIMIT for other backends
+                        query = f"SELECT * FROM {table_name} LIMIT {sample_size}"
                 else:
                     query = f"SELECT * FROM {table_name}"
 
