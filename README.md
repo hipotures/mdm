@@ -16,6 +16,7 @@ MDM (ML Data Manager) is a powerful, production-ready tool for managing machine 
 - **💾 Multi-Backend Support**: SQLite (default), DuckDB (analytics), and PostgreSQL (enterprise)
 - **🧬 Advanced Feature Engineering**: Two-tier system with generic and custom transformers
 - **📊 Automatic Type Detection**: Smart column type inference with override capabilities
+- **🎯 Kaggle Structure Recognition**: Automatic detection of Kaggle competition datasets
 - **🔍 Smart Dataset Discovery**: Tag-based and pattern search across all datasets
 - **📦 Multiple Export Formats**: CSV, Parquet, JSON with compression options
 - **⚡ High Performance**: Batch processing, progress tracking, and optimized data loading
