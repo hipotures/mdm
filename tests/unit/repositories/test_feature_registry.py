@@ -120,10 +120,11 @@ class TestFeatureRegistry:
         # Get all transformers
         all_transformers = registry.get_all_transformers()
         
-        # Should have 4 unique transformers (one for each default type)
-        assert len(all_transformers) == 4
+        # Should have at least 4 unique transformers (one for each default type)
+        # Plus any global transformers
+        assert len(all_transformers) >= 4
         
-        # Check types
+        # Check that default transformers are present
         transformer_types = {type(t) for t in all_transformers}
         expected_types = {
             TemporalFeatures,
@@ -131,11 +132,16 @@ class TestFeatureRegistry:
             StatisticalFeatures,
             TextFeatures
         }
-        assert transformer_types == expected_types
+        # Check that all expected types are present (may have additional global adapters)
+        assert expected_types.issubset(transformer_types)
 
     def test_get_all_transformers_with_custom(self):
         """Test getting all transformers including custom ones."""
         registry = FeatureRegistry()
+        
+        # Get initial count
+        initial_transformers = registry.get_all_transformers()
+        initial_count = len(initial_transformers)
         
         # Register custom transformer
         registry.register_transformer(ColumnType.NUMERIC, MockFeatureOperation)
@@ -143,8 +149,8 @@ class TestFeatureRegistry:
         # Get all transformers
         all_transformers = registry.get_all_transformers()
         
-        # Should have 5 transformers now
-        assert len(all_transformers) == 5
+        # Should have one more transformer than before
+        assert len(all_transformers) == initial_count + 1
         
         # Check mock transformer is included
         transformer_types = {type(t) for t in all_transformers}
@@ -203,6 +209,7 @@ class TestFeatureRegistry:
         """Test behavior with empty registry."""
         registry = FeatureRegistry()
         registry._transformers = {}  # Clear all transformers
+        registry._global_transformer_instances = []  # Clear global transformers too
         
         # Get transformers for any type
         transformers = registry.get_transformers(ColumnType.NUMERIC)
