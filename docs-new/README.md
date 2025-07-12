@@ -25,7 +25,7 @@ Comprehensive documentation for MDM (ML Data Manager) v1.0.0.
 12. [FAQ](12_FAQ.md) - Frequently asked questions
 
 ### Development
-- [Manual Test Checklist](development/MANUAL_TEST_CHECKLIST.md) - Comprehensive 617-item test checklist
+- [Testing Guide](development/Testing_Guide.md) - How to run and write tests
 - [Test Fix Patterns](development/Test_Fix_Patterns.md) - Common test failure patterns and fixes
 
 ### Technical Reference
