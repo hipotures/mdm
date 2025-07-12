@@ -33,7 +33,11 @@ class TestDatasetUpdateBehavior:
             assert result.exit_code == 0
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {"description": ""}
+                description="",
+                target=None,
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
 
     def test_update_with_malformed_id_columns(self):
@@ -64,7 +68,11 @@ class TestDatasetUpdateBehavior:
                     if expected_list:  # Only called if there's actual content
                         mock_update_op.execute.assert_called_with(
                             "test_dataset",
-                            {"id_columns": expected_list}
+                            description=None,
+                            target=None,
+                            problem_type=None,
+                            id_columns=expected_list,
+                            tags=None
                         )
                     else:
                         # Empty string case - no updates
@@ -102,7 +110,11 @@ class TestDatasetUpdateBehavior:
                 assert result.exit_code == 0
                 mock_update_op.execute.assert_called_with(
                     "test_dataset",
-                    {"problem_type": problem_type}
+                    description=None,
+                    target=None,
+                    problem_type=problem_type,
+                    id_columns=None,
+                    tags=None
                 )
 
     def test_update_multiple_fields_simultaneously(self):
@@ -122,12 +134,11 @@ class TestDatasetUpdateBehavior:
             assert result.exit_code == 0
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {
-                    "description": "New description",
-                    "target_column": "new_target",
-                    "problem_type": "regression",
-                    "id_columns": ["id1", "id2"]
-                }
+                description="New description",
+                target="new_target",
+                problem_type="regression",
+                id_columns=["id1", "id2"],
+                tags=None
             )
 
     def test_update_handles_dataset_error(self):
@@ -206,7 +217,11 @@ class TestDatasetUpdateInputValidation:
             # Should pass through without modification at CLI level
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {"description": special_chars}
+                description=special_chars,
+                target=None,
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
 
     def test_update_very_long_description(self):
@@ -225,7 +240,11 @@ class TestDatasetUpdateInputValidation:
             assert result.exit_code == 0
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {"description": long_description}
+                description=long_description,
+                target=None,
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
 
     def test_update_unicode_in_fields(self):
@@ -244,7 +263,11 @@ class TestDatasetUpdateInputValidation:
             assert result.exit_code == 0
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {"description": unicode_text}
+                description=unicode_text,
+                target=None,
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
 
     def test_update_whitespace_only_fields(self):
@@ -263,10 +286,11 @@ class TestDatasetUpdateInputValidation:
             # Whitespace is preserved as-is
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {
-                    "description": "   ",
-                    "target_column": "\t\n"
-                }
+                description="   ",
+                target="\t\n",
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
 
 
@@ -310,7 +334,11 @@ class TestDatasetUpdateEdgeCases:
                 assert result.exit_code == 0
                 mock_update_op.execute.assert_called_with(
                     name,
-                    {"description": "Test"}
+                    description="Test",
+                    target=None,
+                    problem_type=None,
+                    id_columns=None,
+                    tags=None
                 )
 
     def test_update_with_typer_context_preserved(self):
