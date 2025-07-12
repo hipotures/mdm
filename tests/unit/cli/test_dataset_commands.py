@@ -487,7 +487,11 @@ class TestDatasetUpdateCommand:
             assert "Dataset 'test_dataset' updated successfully" in result.stdout
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {"description": "New description"}
+                description="New description",
+                target=None,
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
     
     def test_update_tags(self, runner):
@@ -504,7 +508,11 @@ class TestDatasetUpdateCommand:
             assert result.exit_code == 0
             mock_update_op.execute.assert_called_with(
                 "test_dataset",
-                {"target_column": "new_target"}
+                description=None,
+                target="new_target",
+                problem_type=None,
+                id_columns=None,
+                tags=None
             )
     
     def test_update_no_changes(self, runner):
