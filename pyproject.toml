@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mdm"
-version = "0.3.1"
+version = "1.0.0"
 description = "ML Data Manager - A standalone, enterprise-grade dataset management system for machine learning"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["machine-learning", "dataset-management", "data-engineering", "ml-ops"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
