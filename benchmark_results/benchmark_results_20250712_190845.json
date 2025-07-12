@@ -1,0 +1,27 @@
+{
+  "benchmark_date": "2025-07-12T19:08:45.362121",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "error": "Classification metrics can't handle a mix of binary and continuous targets"
+        },
+        "rf": {
+          "error": "INVALID_ARGUMENT: The parameter \"num_candidate_attributes_ratio\" should be a real."
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "error": "Classification metrics can't handle a mix of binary and continuous targets"
+        },
+        "rf": {
+          "error": "INVALID_ARGUMENT: The parameter \"num_candidate_attributes_ratio\" should be a real."
+        }
+      },
+      "improvement": {},
+      "status": "completed"
+    }
+  },
+  "summary": {}
+}

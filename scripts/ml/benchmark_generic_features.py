@@ -28,8 +28,22 @@ from rich import print as rprint
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import mdm
-from mdm import MDMClient
 from mdm.core.exceptions import DatasetError
+from mdm.config import get_config_manager
+
+# Initialize MDM's dependency injection system for standalone script
+def initialize_mdm():
+    """Initialize MDM's DI container."""
+    from mdm.core.di import configure_services
+    config_manager = get_config_manager()
+    configure_services(config_manager.config.model_dump())
+
+# Initialize on import
+initialize_mdm()
+
+# Now we can safely import MDM components
+from mdm.dataset.manager import DatasetManager
+from mdm.dataset.registrar import DatasetRegistrar
 
 from utils.competition_configs import get_all_competitions, get_competition_config
 from utils.ydf_helpers import cross_validate_ydf, tune_hyperparameters
@@ -45,7 +59,12 @@ class MDMBenchmark:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.use_cache = use_cache
-        self.client = MDMClient()
+        
+        # Get MDM components (already initialized via DI)
+        self.config_manager = get_config_manager()
+        self.dataset_manager = DatasetManager()
+        self.dataset_registrar = DatasetRegistrar()
+        
         self.results = {
             'benchmark_date': datetime.now().isoformat(),
             'mdm_version': mdm.__version__,
@@ -64,7 +83,7 @@ class MDMBenchmark:
         
         # Check if already registered
         try:
-            existing = self.client.get_dataset_info(dataset_name)
+            existing = self.dataset_manager.get_dataset(dataset_name)
             if existing and self.use_cache:
                 console.print(f"  ✓ Using cached dataset: {dataset_name}")
                 return True
@@ -72,13 +91,14 @@ class MDMBenchmark:
             pass  # Dataset doesn't exist, proceed with registration
         
         # Register dataset
-        train_path = Path(config['path']) / 'train.csv'
+        # Use full directory path for Kaggle datasets to get proper structure
+        dataset_path = Path(config['path'])
         
         try:
             # Prepare registration parameters
             reg_params = {
                 'name': dataset_name,
-                'path': str(train_path),
+                'path': dataset_path,  # Use directory path for auto-detection
                 'problem_type': config['problem_type'],
                 'force': True  # Overwrite if exists
             }
@@ -92,7 +112,13 @@ class MDMBenchmark:
                 reg_params['target'] = config['target']
             
             console.print(f"  → Registering {dataset_name}...")
-            dataset_info = self.client.register_dataset(**reg_params)
+            dataset_info = self.dataset_registrar.register(
+                name=reg_params['name'],
+                path=reg_params['path'],  # Now this is a Path object
+                target=reg_params.get('target'),
+                problem_type=reg_params.get('problem_type'),
+                force=reg_params.get('force', False)
+            )
             console.print(f"  ✓ Registered: {dataset_name}")
             return True
             
@@ -104,25 +130,39 @@ class MDMBenchmark:
         self, name: str, config: Dict[str, Any], with_features: bool
     ) -> Optional[pd.DataFrame]:
         """Load competition data from MDM."""
-        # For simplicity, we'll register and use the same dataset name
-        # but control feature loading via the include_features parameter
         dataset_name = name
         
         try:
-            # Load dataset with or without features
-            files = self.client.load_dataset_files(
-                dataset_name, 
-                include_features=with_features,
-                limit=None
-            )
+            # Get dataset info
+            dataset = self.dataset_manager.get_dataset(dataset_name)
             
-            # Get the train data
-            if 'train' in files:
-                df = files['train']
-            elif 'data' in files:
-                df = files['data']
+            # Determine base table name
+            # Check if dataset has train/test split (Kaggle structure)
+            if 'train' in dataset.tables:
+                base_table = 'train'
+            elif 'data' in dataset.tables:
+                base_table = 'data'
             else:
-                raise ValueError(f"No train or data file found for {dataset_name}")
+                # Use first available table
+                base_table = list(dataset.tables.keys())[0]
+            
+            # Check if features exist by looking for feature tables
+            has_features = f'{base_table}_features' in dataset.feature_tables
+            
+            # Determine final table name
+            if with_features and has_features:
+                table_name = f'{base_table}_features'
+            else:
+                table_name = base_table
+            
+            # Direct SQLite access for simplicity
+            import sqlite3
+            db_path = Path(dataset.database['path'])
+            conn = sqlite3.connect(db_path)
+            
+            # Read table to DataFrame
+            df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+            conn.close()
             
             # If loading without features and we still got feature columns,
             # filter them manually

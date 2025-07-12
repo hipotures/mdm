@@ -1,0 +1,14 @@
+{
+  "benchmark_date": "2025-07-12T19:01:58.591489",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {},
+      "without_features": {},
+      "improvement": {},
+      "status": "failed",
+      "reason": "Failed to register dataset"
+    }
+  },
+  "summary": {}
+}

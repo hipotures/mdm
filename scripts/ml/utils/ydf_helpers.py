@@ -71,7 +71,7 @@ def create_learner(
             'num_trees': 100,
             'max_depth': 16,
             'min_examples': 5,
-            'num_candidate_attributes_ratio': -1,  # sqrt(num_features)
+            'num_candidate_attributes_ratio': -1.0,  # sqrt(num_features)
             'bootstrap_training_dataset': True
         }
         rf_defaults.update(kwargs)
@@ -162,16 +162,23 @@ def cross_validate_ydf(
                 else:
                     # If predictions are already probabilities
                     pred_proba = predictions
+                y_pred = pred_proba
             else:
                 # Multi-class - get all probabilities
-                pred_proba = predictions
+                y_pred = predictions
         else:
             # Get class predictions
             predictions = model.predict(val_df)
+            # For classification, convert predictions to class labels
+            if 'classification' in problem_type:
+                # YDF returns predictions as array, we need integer classes
+                y_pred = predictions.astype(int)
+            else:
+                y_pred = predictions
         
         # Calculate metric
         y_true = val_df[target].values
-        score = calculate_metric(y_true, predictions, metric_name, problem_type)
+        score = calculate_metric(y_true, y_pred, metric_name, problem_type)
         scores.append(score)
     
     return np.mean(scores), np.std(scores), scores
@@ -265,7 +272,7 @@ def tune_hyperparameters(
             'num_trees': [50, 100, 200, 300, 500],
             'max_depth': [8, 12, 16, 20, -1],  # -1 means no limit
             'min_examples': [5, 10, 20],
-            'num_candidate_attributes_ratio': [0.5, 0.7, 1.0, -1]  # -1 means sqrt
+            'num_candidate_attributes_ratio': [0.5, 0.7, 1.0, -1.0]  # -1 means sqrt
         }
     
     best_score = -np.inf if metric_name != 'rmse' else np.inf

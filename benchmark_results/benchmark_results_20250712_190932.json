@@ -1,0 +1,44 @@
+{
+  "benchmark_date": "2025-07-12T19:09:31.631913",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.6162,
+          "std": 0.0023,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.6162,
+          "std": 0.0023,
+          "n_features": 11
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.6162,
+          "std": 0.0023,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.6162,
+          "std": 0.0023,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "+0.00%",
+        "rf": "+0.00%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "+0.00%",
+    "best_improvement": "titanic (gbt): +0.00%",
+    "competitions_improved": 0,
+    "competitions_no_change": 1,
+    "competitions_failed": 0
+  }
+}
