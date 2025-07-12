@@ -26,8 +26,7 @@ Comprehensive documentation for MDM (ML Data Manager) v1.0.0.
 
 
 ### Technical Reference
-- [Known Issues](reference/Known_Issues.md) - Current bugs and technical debt
-- [Architecture Analysis Summary](reference/Architecture_Analysis_Summary.md) - Code quality and refactoring priorities
+- [Architecture Design](reference/Architecture_Design.md) - Detailed system architecture and design patterns
 - [Architecture Diagrams](diagrams.md) - Visual system architecture
 
 ### Project Information
