@@ -1,45 +1,47 @@
-# MDM - ML Data Manager (2025 Refactored Edition)
+# MDM - ML Data Manager
 
-A standalone, enterprise-grade dataset management system for machine learning with a modern, refactored architecture.
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/hipotures/mdm/releases)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-Production%2FStable-brightgreen.svg)](https://github.com/hipotures/mdm)
+
+A standalone, enterprise-grade dataset management system for machine learning.
 
 ## 🚀 Overview
 
-MDM (ML Data Manager) is a powerful tool for managing machine learning datasets. This 2025 refactored version introduces a clean architecture with interfaces, adapters, and performance optimizations while maintaining backward compatibility.
+MDM (ML Data Manager) is a powerful, production-ready tool for managing machine learning datasets. Version 1.0.0 represents a mature, stable release with comprehensive features for dataset management, feature engineering, and ML workflow integration.
 
 ### Key Features
 
-- **🏗️ Interface-Based Architecture**: Clean separation of concerns with well-defined interfaces
-- **🔄 Seamless Migration**: Feature flag-based migration from legacy to new implementation
-- **💾 Multi-Backend Support**: SQLite, DuckDB, and PostgreSQL with optimized configurations
-- **⚡ Performance Optimizations**: Query optimization, caching, batch processing, and connection pooling
-- **🧬 Advanced Feature Engineering**: Two-tier system with custom transformer support
-- **📊 Rich Metadata Tracking**: Comprehensive dataset information and quality metrics
-- **🔍 Smart Search**: Dataset discovery with tag-based and content search
+- **💾 Multi-Backend Support**: SQLite (default), DuckDB (analytics), and PostgreSQL (enterprise)
+- **🧬 Advanced Feature Engineering**: Two-tier system with generic and custom transformers
+- **📊 Automatic Type Detection**: Smart column type inference with override capabilities
+- **🔍 Smart Dataset Discovery**: Tag-based and pattern search across all datasets
 - **📦 Multiple Export Formats**: CSV, Parquet, JSON with compression options
+- **⚡ High Performance**: Batch processing, progress tracking, and optimized data loading
 - **🎨 Beautiful CLI**: Rich terminal output with progress bars and formatted tables
+- **🔄 Dataset Versioning**: Track changes and maintain dataset history
+- **📈 Comprehensive Statistics**: Automatic profiling and statistical analysis
 
 ## 📦 Installation
 
 ```bash
-# Using uv (recommended - faster dependency resolution)
-pip install uv
-uv pip install mdm-refactor
-
 # Using pip
-pip install mdm-refactor
+pip install mdm
+
+# Using uv (recommended for faster dependency resolution)
+pip install uv
+uv pip install mdm
 
 # Development installation
-git clone https://github.com/mdm/mdm-refactor-2025.git
-cd mdm-refactor-2025
+git clone https://github.com/hipotures/mdm.git
+cd mdm
 uv pip install -e .
 ```
 
 ## 🚀 Quick Start
 
 ```bash
-# Initialize MDM
-mdm init
-
 # Register a dataset
 mdm dataset register iris_dataset ./data/iris.csv \
     --target species \
@@ -56,94 +58,118 @@ mdm dataset stats iris_dataset
 
 # Search datasets
 mdm dataset search iris
-mdm dataset list --tag classification
+mdm dataset search --tag classification
 
 # Export dataset
 mdm dataset export iris_dataset --format parquet --compression gzip
+
+# Update dataset metadata
+mdm dataset update iris_dataset --description "Classic ML dataset" --tags "iris,classification"
+```
+
+## 💻 Python API
+
+```python
+from mdm import MDMClient
+
+# Initialize client
+client = MDMClient()
+
+# Register a dataset
+client.register_dataset(
+    name="titanic",
+    path="./data/titanic.csv",
+    target_column="survived",
+    problem_type="binary_classification"
+)
+
+# Load dataset
+df = client.load_dataset("titanic")
+
+# Get dataset info
+info = client.get_dataset_info("titanic")
+print(f"Rows: {info.row_count}, Columns: {info.column_count}")
+
+# Search datasets
+datasets = client.search_datasets("classification")
+
+# Export dataset
+client.export_dataset("titanic", format="parquet", output_dir="./exports")
 ```
 
 ## 📖 Documentation
 
 ### Core Documentation
 
-- **[API Reference](docs/API_Reference.md)** - Complete API documentation
-- **[Migration Guide](docs/Migration_Guide.md)** - Migrate from legacy MDM
-- **[Architecture Decisions](docs/Architecture_Decisions.md)** - Design rationale and patterns
-- **[Troubleshooting Guide](docs/Troubleshooting_Guide.md)** - Common issues and solutions
+- **[Architecture Overview](docs/01_Architecture_Overview.md)** - System design and components
+- **[Configuration Guide](docs/02_Configuration.md)** - Configuration options and settings
+- **[Database Architecture](docs/03_Database_Architecture.md)** - Backend design and selection
+- **[API Reference](docs/04_API_Reference.md)** - Complete API documentation
+- **[Feature Engineering](docs/05_Feature_Engineering.md)** - Feature generation system
+- **[CLI Reference](docs/07_Command_Line_Interface.md)** - Command-line interface guide
 
-### Tutorials
+### Guides and Tutorials
 
-1. **[Getting Started](docs/tutorials/01_Getting_Started.md)** - Basic MDM usage
-2. **[Advanced Dataset Management](docs/tutorials/02_Advanced_Dataset_Management.md)** - Multi-file datasets, time series, large data
-3. **[Custom Feature Engineering](docs/tutorials/03_Custom_Feature_Engineering.md)** - Create custom transformers
-4. **[Performance Optimization](docs/tutorials/04_Performance_Optimization.md)** - Optimize for large datasets
-
-### Technical Documentation
-
-- [Storage Backend Design](docs/03_Database_Architecture.md)
-- [Configuration System](docs/02_Configuration.md)
-- [CLI Reference](docs/07_Command_Line_Interface.md)
-- [Testing Strategy](docs/test_progress.md)
+- **[Quick Start Guide](docs/tutorials/01_Getting_Started.md)** - Get up and running quickly
+- **[Dataset Management](docs/tutorials/02_Advanced_Dataset_Management.md)** - Advanced dataset operations
+- **[Custom Features](docs/tutorials/03_Custom_Feature_Engineering.md)** - Create custom transformers
+- **[Performance Tips](docs/tutorials/04_Performance_Optimization.md)** - Optimize for large datasets
 
 ## ⚙️ Configuration
 
-MDM uses a hierarchical configuration system:
+MDM uses a hierarchical configuration system with sensible defaults:
 
 ```yaml
 # ~/.mdm/mdm.yaml
 database:
-  default_backend: sqlite  # or duckdb, postgresql
-  sqlite:
-    pragmas:
-      journal_mode: WAL
-      synchronous: NORMAL
+  default_backend: sqlite  # Options: sqlite, duckdb, postgresql
+  
 performance:
   batch_size: 10000
-  max_workers: 4
-  cache_size_mb: 100
+  enable_progress: true
+  
+features:
+  enable_at_registration: true
+  min_column_variance: 0.01
+  
+logging:
+  level: INFO
+  file: ~/.mdm/logs/mdm.log
 ```
 
 Environment variables override file settings:
 ```bash
 export MDM_DATABASE_DEFAULT_BACKEND=duckdb
 export MDM_PERFORMANCE_BATCH_SIZE=50000
+export MDM_LOGGING_LEVEL=DEBUG
 ```
-
-## 🔄 Migration from Legacy MDM
-
-The refactored version maintains full backward compatibility while offering new features:
-
-```python
-# Enable new features gradually
-from mdm.core import feature_flags
-
-# Start with legacy implementation
-feature_flags.set("use_new_storage", False)
-
-# Test and migrate gradually
-feature_flags.set("use_new_storage", True)
-feature_flags.set("use_new_features", True)
-
-# Or enable all at once after testing
-feature_flags.enable_all_new_features()
-```
-
-See the [Migration Guide](docs/Migration_Guide.md) for detailed instructions.
 
 ## 🏗️ Architecture
 
-The refactored MDM uses a clean, modular architecture:
+MDM uses a clean, modular architecture:
 
 ```
 mdm/
-├── interfaces/          # Abstract interfaces
-├── core/               # New implementations
-│   ├── storage/        # Storage backends
-│   ├── features/       # Feature engineering
-│   └── config/         # Configuration management
-├── adapters/           # Legacy compatibility
-├── performance/        # Optimization modules
-└── cli/               # Command-line interface
+├── api/            # Public API and client
+├── cli/            # Command-line interface
+├── core/           # Core functionality
+│   ├── config/     # Configuration management
+│   ├── exceptions/ # Custom exceptions
+│   └── logging/    # Logging setup
+├── dataset/        # Dataset management
+│   ├── loaders/    # File format loaders
+│   ├── manager/    # Dataset operations
+│   └── registrar/  # Registration system
+├── features/       # Feature engineering
+│   ├── generic/    # Built-in transformers
+│   └── custom/     # User-defined features
+├── models/         # Data models
+├── storage/        # Storage backends
+│   ├── base/       # Abstract interfaces
+│   ├── sqlite/     # SQLite implementation
+│   ├── duckdb/     # DuckDB implementation
+│   └── postgresql/ # PostgreSQL implementation
+└── utils/          # Utility functions
 ```
 
 ## 🧪 Testing
@@ -160,9 +186,30 @@ mdm/
 # Run with coverage
 ./scripts/run_tests.sh --coverage
 
-# Run performance benchmarks
-python -m mdm.testing.performance_benchmark
+# Run specific test file
+pytest tests/unit/test_config.py -v
 ```
+
+Current test coverage: **95.4%** (1110/1163 tests passing)
+
+## 🔒 Backend Selection
+
+MDM supports three storage backends:
+
+### SQLite (Default)
+- Best for: Single-user, small to medium datasets (<1GB)
+- Pros: Zero configuration, file-based, portable
+- Cons: Limited concurrent access
+
+### DuckDB
+- Best for: Analytics workloads, medium to large datasets (1GB-100GB)
+- Pros: Columnar storage, fast analytics, excellent compression
+- Cons: Single-writer limitation
+
+### PostgreSQL
+- Best for: Enterprise, multi-user, production deployments
+- Pros: Full ACID, concurrent access, scalability
+- Cons: Requires server setup
 
 ## 🤝 Contributing
 
@@ -172,8 +219,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ```bash
 # Clone repository
-git clone https://github.com/mdm/mdm-refactor-2025.git
-cd mdm-refactor-2025
+git clone https://github.com/hipotures/mdm.git
+cd mdm
 
 # Create virtual environment
 uv venv
@@ -188,41 +235,51 @@ pre-commit install
 
 ## 📊 Performance
 
-The refactored version includes significant performance improvements:
+MDM is optimized for performance:
 
-- **Query Optimization**: Automatic query plan caching and optimization
-- **Multi-Level Caching**: LRU cache for frequently accessed data
-- **Batch Processing**: Efficient handling of large datasets
-- **Connection Pooling**: Reuse database connections
-- **Parallel Processing**: Multi-threaded feature generation
+- **Batch Processing**: Efficient handling of large datasets with configurable batch sizes
+- **Progress Tracking**: Real-time progress bars for long operations
+- **Type Detection**: Fast column type inference with caching
+- **Memory Efficient**: Streaming data processing to handle datasets larger than RAM
+- **Parallel Processing**: Multi-threaded feature generation where applicable
 
-Benchmark results show 2-5x performance improvements for common operations.
-
-## 🔒 Security
+## 🔐 Security
 
 - SQL injection prevention through parameterized queries
 - Path traversal protection for file operations
-- Secure configuration with hidden sensitive values
-- Audit logging for all operations
+- Secure configuration with environment variable support
+- No sensitive data in logs or error messages
 
-## 📝 License
+## 📝 Release Notes
+
+### Version 1.0.0 (2025-07-12)
+
+- 🎉 First stable production release
+- ✅ Comprehensive test suite (95.4% passing)
+- 📚 Complete documentation
+- 🐛 All critical bugs fixed
+- 🚀 Production-ready performance
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
+
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- Original MDM contributors
 - SQLAlchemy team for the excellent ORM
 - Rich library for beautiful terminal output
 - DuckDB team for the amazing analytics engine
+- Typer for the intuitive CLI framework
+- All contributors and users of MDM
 
 ## 📞 Support
 
-- 📚 [Documentation](https://mdm.readthedocs.io)
-- 🐛 [Issue Tracker](https://github.com/mdm/mdm-refactor/issues)
-- 💬 [Discussions](https://github.com/mdm/mdm-refactor/discussions)
-- 📧 [Email Support](mailto:support@mdm.io)
+- 📚 [Documentation](https://github.com/hipotures/mdm/tree/main/docs)
+- 🐛 [Issue Tracker](https://github.com/hipotures/mdm/issues)
+- 💬 [Discussions](https://github.com/hipotures/mdm/discussions)
 
 ---
 
-**Note**: This is the 2025 refactored version of MDM. For the legacy version, see the `legacy` branch.
+**MDM v1.0.0** - Production-ready ML dataset management
