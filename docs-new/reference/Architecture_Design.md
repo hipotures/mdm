@@ -161,51 +161,87 @@ Each dataset has its own database with standardized tables:
 
 ```sql
 -- Main data tables
-CREATE TABLE train_table (
+CREATE TABLE train (
     -- Original columns from source data
+    id INTEGER,
+    feature1 REAL,
+    feature2 TEXT,
+    target INTEGER
+);
+
+CREATE TABLE test (
+    -- Same structure as train table
+);
+
+-- Additional tables based on dataset structure
+CREATE TABLE data (          -- For single-file datasets
+    -- All columns from source
+);
+
+CREATE TABLE submission (    -- For Kaggle-style datasets
+    -- Submission format columns
+);
+
+-- Generated feature tables
+CREATE TABLE train_features (
+    -- Original columns plus generated features
     id INTEGER,
     feature1 REAL,
     feature2 TEXT,
     target INTEGER,
     -- Generated feature columns
-    feature1_mean_encoded REAL,
-    feature2_length INTEGER
-);
-
-CREATE TABLE test_table (
-    -- Same structure as train_table
+    feature1_zscore REAL,
+    feature1_log REAL,
+    feature2_length INTEGER,
+    feature2_word_count INTEGER
 );
 
 -- Metadata table
-CREATE TABLE _mdm_metadata (
+CREATE TABLE _metadata (
     key TEXT PRIMARY KEY,
     value TEXT,
     created_at TIMESTAMP,
     updated_at TIMESTAMP
 );
-
--- Feature metadata
-CREATE TABLE _mdm_features (
-    feature_name TEXT PRIMARY KEY,
-    source_column TEXT,
-    transformer_type TEXT,
-    parameters TEXT,  -- JSON
-    created_at TIMESTAMP
-);
 ```
 
 ### Backend Abstraction
+
+MDM uses two backend patterns:
+
+1. **Stateless Backends** (SQLite, DuckDB) - Lighter weight, no persistent connection
+2. **Stateful Backends** (PostgreSQL) - Traditional connection management
 
 ```python
 class StorageBackend(ABC):
     """Abstract base class for storage backends."""
     
+    @property
     @abstractmethod
-    def get_engine(self, connection_string: str) -> Any:
-        """Get SQLAlchemy engine."""
+    def backend_type(self) -> str:
+        """Get backend type identifier."""
         pass
     
     @abstractmethod
+    def create_engine(self, database_path: str) -> Engine:
+        """Create SQLAlchemy engine for the database."""
+        pass
+    
+    @abstractmethod
+    def initialize_database(self, engine: Engine) -> None:
+        """Initialize database with required tables."""
+        pass
+    
+    @abstractmethod
+    def get_database_path(self, dataset_name: str, base_path: Path) -> str:
+        """Get database path or connection string for dataset."""
+        pass
+    
+    # Concrete methods (not abstract)
+    def get_engine(self, database_path: str) -> Engine:
+        """Get or create SQLAlchemy engine."""
+        # Implementation provided in base class
+    
     def create_table_from_dataframe(
         self,
         df: pd.DataFrame,
@@ -216,9 +252,8 @@ class StorageBackend(ABC):
         dtype: Optional[Dict[str, Any]] = None
     ) -> None:
         """Create table from pandas DataFrame."""
-        pass
+        # Implementation provided in base class
     
-    @abstractmethod
     def read_table_to_dataframe(
         self,
         table_name: str,
@@ -228,7 +263,34 @@ class StorageBackend(ABC):
         offset: int = 0
     ) -> pd.DataFrame:
         """Read table into pandas DataFrame."""
-        pass
+        # Implementation provided in base class
+
+# Stateless backend example
+class StatelessSQLiteBackend(StorageBackend):
+    """Stateless implementation - creates engine on demand."""
+    
+    def get_engine(self, connection_string: str) -> Engine:
+        # Create fresh engine for each operation
+        return create_engine(connection_string)
+```
+
+### Performance Optimization Components
+
+The base StorageBackend class includes performance optimizations:
+
+```python
+class StorageBackend:
+    def __init__(self, config: dict[str, Any]):
+        self.config = config
+        # Performance optimization components
+        self._query_optimizer: Optional[QueryOptimizer] = None
+        self._connection_pool: Optional[ConnectionPool] = None
+        self._cache_manager: Optional[CacheManager] = None
+        self._batch_optimizer: Optional[BatchOptimizer] = None
+        
+        # Initialize if enabled
+        if config.get('enable_performance_optimizations', True):
+            self._initialize_performance_optimizations()
 ```
 
 ### Backend Selection
@@ -237,8 +299,8 @@ class StorageBackend(ABC):
 flowchart TD
     A[Dataset Operation] --> B[Read Config]
     B --> C{Backend Type}
-    C -->|sqlite| D[SQLiteBackend]
-    C -->|duckdb| E[DuckDBBackend]
+    C -->|sqlite| D[StatelessSQLiteBackend]
+    C -->|duckdb| E[StatelessDuckDBBackend]
     C -->|postgresql| F[PostgreSQLBackend]
     D --> G[Execute Operation]
     E --> G
@@ -403,8 +465,9 @@ MDM_LOGGING_LEVEL=DEBUG
 
 4. **Index Optimization**
    ```python
-   # Create indexes on frequently queried columns
-   backend.create_index(table_name, ['id', 'created_at'])
+   # Create indexes on frequently queried columns via QueryOptimizer
+   optimizer = QueryOptimizer(backend_type)
+   optimizer.create_indexes(table_name, ['id', 'created_at'], connection)
    ```
 
 ### Memory Management
@@ -444,11 +507,25 @@ class MongoDBBackend(StorageBackend):
 # src/mdm/storage/factory.py
 class BackendFactory:
     _backends = {
-        'sqlite': SQLiteBackend,
-        'duckdb': DuckDBBackend,
-        'postgresql': PostgreSQLBackend,
-        'mongodb': MongoDBBackend  # Add here
+        "sqlite": StatelessSQLiteBackend,
+        "duckdb": StatelessDuckDBBackend,
+        "postgresql": PostgreSQLBackend,
+        "mongodb": MongoDBBackend  # Add here
     }
+    
+    @classmethod
+    def create(cls, backend_type: str, config: dict[str, Any]) -> StorageBackend:
+        if backend_type not in cls._backends:
+            raise BackendError(f"Unsupported backend type: {backend_type}")
+        
+        backend_class = cls._backends[backend_type]
+        
+        # Stateless backends don't take config in constructor
+        if backend_type in ["sqlite", "duckdb", "mongodb"]:
+            return backend_class()
+        else:
+            # Stateful backends take config
+            return backend_class(config)
 ```
 
 3. Add configuration:
@@ -462,21 +539,33 @@ class MongoDBConfig(BaseModel):
 
 ### Adding New Feature Transformers
 
-1. Create transformer class:
+1. Create custom feature class:
 ```python
-# ~/.mdm/config/custom_features/time_features.py
-from mdm.features.base import BaseTransformer
+# ~/.mdm/config/custom_features/{dataset_name}.py
+from mdm.features.custom.base import BaseDomainFeatures
+from typing import Dict
+import pandas as pd
 
-class TimeSeriesFeatures(BaseTransformer):
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        # Add rolling statistics
+class CustomFeatureOperations(BaseDomainFeatures):
+    def __init__(self):
+        super().__init__('{dataset_name}')
+    
+    def _register_operations(self):
+        """Register feature operations."""
+        self._operation_registry = {
+            'time_features': self.calculate_time_features
+        }
+    
+    def calculate_time_features(self, df: pd.DataFrame) -> Dict[str, pd.Series]:
+        """Calculate time-based features."""
+        features = {}
         for col in df.select_dtypes(include=[np.number]).columns:
-            df[f'{col}_rolling_mean_7'] = df[col].rolling(7).mean()
-            df[f'{col}_rolling_std_7'] = df[col].rolling(7).std()
-        return df
+            features[f'{col}_rolling_mean_7'] = df[col].rolling(7).mean()
+            features[f'{col}_rolling_std_7'] = df[col].rolling(7).std()
+        return features
 ```
 
-2. Transformer is automatically loaded from custom features directory
+2. Custom features are automatically loaded from `~/.mdm/config/custom_features/` directory
 
 ### Adding New CLI Commands
 
@@ -536,5 +625,6 @@ FROM python:3.11-slim
 RUN pip install mdm
 ENV MDM_DATABASE_DEFAULT_BACKEND=postgresql
 ENV MDM_DATABASE_POSTGRESQL_HOST=db
-CMD ["mdm", "serve"]  # Future API server
+# Note: MDM is currently a CLI tool only
+# Future versions may include an API server
 ```
