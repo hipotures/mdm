@@ -67,6 +67,11 @@ dev = [
     "PyGithub>=2.1.0",
 ]
 
+ml = [
+    "ydf>=0.4.0",
+    "matplotlib>=3.5.0",
+]
+
 [project.scripts]
 mdm = "mdm.cli.main:main"
 
