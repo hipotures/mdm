@@ -71,6 +71,8 @@ class TestFeatureGenerator:
             'numeric_col_std': [15.8] * 5
         }
         mock_registry.get_transformers.return_value = [mock_transformer]
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         # Act
         result = feature_generator.generate_features(
@@ -100,6 +102,8 @@ class TestFeatureGenerator:
         transformer2.__class__.__name__ = "Transformer2"
         
         mock_registry.get_transformers.return_value = [transformer1, transformer2]
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         # Act
         result = feature_generator.generate_features(
@@ -121,6 +125,8 @@ class TestFeatureGenerator:
             'new_feature': [88] * 5
         }
         mock_registry.get_transformers.return_value = [mock_transformer]
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         # Act
         result = feature_generator.generate_features(
@@ -139,6 +145,8 @@ class TestFeatureGenerator:
         """Test feature generation with custom features."""
         # Arrange
         mock_registry.get_transformers.return_value = []
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         mock_custom = Mock()
         mock_custom.generate_all_features.return_value = {
@@ -164,6 +172,8 @@ class TestFeatureGenerator:
         # Arrange
         empty_df = pd.DataFrame(columns=['id', 'numeric_col', 'target'])
         mock_registry.get_transformers.return_value = []
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         # Act
         result = feature_generator.generate_features(
@@ -184,6 +194,8 @@ class TestFeatureGenerator:
         mock_transformer.generate_features.side_effect = Exception("Transform failed")
         mock_transformer.__class__.__name__ = "FailingTransformer"
         mock_registry.get_transformers.return_value = [mock_transformer]
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         # Act & Assert - should raise the exception
         with pytest.raises(Exception, match="Transform failed"):
@@ -248,6 +260,8 @@ class TestFeatureGenerator:
         """Test performance logging during feature generation."""
         # Arrange
         mock_registry.get_transformers.return_value = []
+        # Mock get_global_transformers to return empty list
+        mock_registry.get_global_transformers.return_value = []
         
         with patch('mdm.features.generator.logger') as mock_logger:
             # Act
