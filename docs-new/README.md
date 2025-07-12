@@ -24,8 +24,6 @@ Comprehensive documentation for MDM (ML Data Manager) v1.0.0.
 11. [Troubleshooting](11_Troubleshooting.md) - Common issues and solutions
 12. [FAQ](12_FAQ.md) - Frequently asked questions
 
-### Development
-- [Testing Guide](development/Testing_Guide.md) - How to run and write tests
 
 ### Technical Reference
 - [Known Issues](reference/Known_Issues.md) - Current bugs and technical debt

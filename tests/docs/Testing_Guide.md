@@ -82,7 +82,7 @@ def test_sqlite_backend():
 
 ## Common Test Patterns
 
-See [Test Fix Patterns](../../tests/docs/Test_Fix_Patterns.md) for solutions to common test failures.
+See [Test Fix Patterns](Test_Fix_Patterns.md) for solutions to common test failures.
 
 ## Continuous Integration
 
