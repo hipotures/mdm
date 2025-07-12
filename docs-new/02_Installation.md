@@ -20,7 +20,7 @@
 
 ```bash
 # Install from PyPI
-pip install mdm-ml
+pip install mdm
 
 # Verify installation
 mdm version
@@ -35,7 +35,7 @@ mdm version
 pip install uv
 
 # Install MDM using uv
-uv pip install mdm-ml
+uv pip install mdm
 
 # Verify installation
 mdm version
@@ -207,12 +207,12 @@ ERROR: Permission denied: '/usr/local/lib/python3.x/...'
 **Solution**: Use `--user` flag or virtual environment:
 ```bash
 # User installation
-pip install --user mdm-ml
+pip install --user mdm
 
 # Or use virtual environment (recommended)
 python -m venv venv
 source venv/bin/activate
-pip install mdm-ml
+pip install mdm
 ```
 
 #### 3. Missing Dependencies
@@ -229,8 +229,8 @@ ImportError: cannot import name 'duckdb'
 ```
 **Solution**: Reinstall with proper dependencies:
 ```bash
-pip uninstall mdm-ml duckdb
-pip install mdm-ml[duckdb]
+pip uninstall mdm duckdb
+pip install mdm[duckdb]
 ```
 
 ### Platform-Specific Notes
@@ -241,7 +241,7 @@ pip install mdm-ml[duckdb]
 softwareupdate --install-rosetta
 
 # Or use arch-specific pip
-arch -arm64 pip install mdm-ml
+arch -arm64 pip install mdm
 ```
 
 #### Windows WSL2
@@ -250,7 +250,7 @@ Recommended to use WSL2 for best compatibility:
 # In WSL2 Ubuntu
 sudo apt update
 sudo apt install python3-pip python3-venv
-pip install mdm-ml
+pip install mdm
 ```
 
 #### Linux Distributions
@@ -302,7 +302,7 @@ python -c "from mdm import MDMClient; print('MDM Python API OK')"
 
 ### From pip
 ```bash
-pip install --upgrade mdm-ml
+pip install --upgrade mdm
 ```
 
 ### From Development
@@ -321,7 +321,7 @@ To completely remove MDM:
 
 ```bash
 # Uninstall package
-pip uninstall mdm-ml
+pip uninstall mdm
 
 # Remove data and config (optional)
 rm -rf ~/.mdm

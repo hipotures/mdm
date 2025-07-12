@@ -37,8 +37,8 @@ ImportError: cannot import name 'MDMClient' from 'mdm'
 **Solution:**
 ```bash
 # Reinstall with all dependencies
-pip uninstall mdm-ml
-pip install mdm-ml[all]
+pip uninstall mdm
+pip install mdm[all]
 
 # Or for development
 git clone https://github.com/hipotures/mdm.git
@@ -347,7 +347,7 @@ bash: mdm: command not found
 **Solution:**
 ```bash
 # 1. Check installation
-pip show mdm-ml
+pip show mdm
 
 # 2. Add to PATH
 export PATH=$PATH:~/.local/bin
@@ -356,8 +356,8 @@ export PATH=$PATH:~/.local/bin
 python -m mdm.cli dataset list
 
 # 4. Reinstall
-pip uninstall mdm-ml
-pip install mdm-ml
+pip uninstall mdm
+pip install mdm
 ```
 
 ### Slow CLI Startup
@@ -550,7 +550,7 @@ client.register_dataset("mydata", "data.csv", id_columns=["id1", "id2"])
 ```bash
 pip install ydata-profiling
 # Or reinstall MDM with all dependencies
-pip install mdm-ml[all]
+pip install mdm[all]
 ```
 
 ### "Connection pool is full"

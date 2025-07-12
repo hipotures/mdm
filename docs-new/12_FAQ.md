@@ -58,7 +58,7 @@ No for SQLite and DuckDB - they're embedded. Yes for PostgreSQL:
 
 ```bash
 # For pip installation
-pip install --upgrade mdm-ml
+pip install --upgrade mdm
 
 # For development installation
 cd /path/to/mdm
