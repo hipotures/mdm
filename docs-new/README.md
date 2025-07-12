@@ -26,7 +26,6 @@ Comprehensive documentation for MDM (ML Data Manager) v1.0.0.
 
 ### Development
 - [Testing Guide](development/Testing_Guide.md) - How to run and write tests
-- [Test Fix Patterns](development/Test_Fix_Patterns.md) - Common test failure patterns and fixes
 
 ### Technical Reference
 - [Known Issues](reference/Known_Issues.md) - Current bugs and technical debt
