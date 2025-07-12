@@ -372,45 +372,33 @@ graph TD
     USER --> ABORT
 ```
 
-## Deployment Architecture
+## Backend Selection
 
 ```mermaid
 graph TB
-    subgraph "Development"
-        DEV[Local MDM<br/>SQLite]
+    subgraph "Single User Setup"
+        USER[User]
+        MDM[MDM CLI/API]
+        CONFIG[~/.mdm/mdm.yaml]
     end
     
-    subgraph "Staging"
-        STAGE[Staging MDM<br/>DuckDB]
+    subgraph "Backend Options"
+        SQLite[SQLite<br/>Default<br/>Zero Config]
+        DuckDB[DuckDB<br/>Analytics<br/>Fast Queries]
+        PostgreSQL[PostgreSQL<br/>Advanced<br/>Remote DB]
     end
     
-    subgraph "Production"
-        subgraph "Load Balancer"
-            LB[HAProxy/Nginx]
-        end
-        
-        subgraph "MDM Instances"
-            MDM1[MDM Instance 1]
-            MDM2[MDM Instance 2]
-            MDM3[MDM Instance 3]
-        end
-        
-        subgraph "Database"
-            PG1[PostgreSQL Primary]
-            PG2[PostgreSQL Replica]
-        end
+    USER --> MDM
+    MDM --> CONFIG
+    CONFIG -->|default_backend| SQLite
+    CONFIG -->|default_backend| DuckDB
+    CONFIG -->|default_backend| PostgreSQL
+    
+    subgraph "Use Cases"
+        UC1[Personal Use<br/>→ SQLite]
+        UC2[Heavy Analytics<br/>→ DuckDB]
+        UC3[Team Shared DB<br/>→ PostgreSQL]
     end
-    
-    DEV -->|Export| STAGE
-    STAGE -->|Test| LB
-    LB --> MDM1
-    LB --> MDM2
-    LB --> MDM3
-    
-    MDM1 --> PG1
-    MDM2 --> PG1
-    MDM3 --> PG1
-    PG1 -->|Replicate| PG2
 ```
 
 These diagrams can be rendered in any Markdown viewer that supports Mermaid (GitHub, GitLab, many documentation tools).
