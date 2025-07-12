@@ -24,6 +24,19 @@ Comprehensive documentation for MDM (ML Data Manager) v1.0.0.
 11. [Troubleshooting](11_Troubleshooting.md) - Common issues and solutions
 12. [FAQ](12_FAQ.md) - Frequently asked questions
 
+### Development
+- [Manual Test Checklist](development/MANUAL_TEST_CHECKLIST.md) - Comprehensive 617-item test checklist
+- [Test Fix Patterns](development/Test_Fix_Patterns.md) - Common test failure patterns and fixes
+
+### Technical Reference
+- [Known Issues](reference/Known_Issues.md) - Current bugs and technical debt
+- [Target/ID Detection Schema](reference/14_Target_ID_Detection_Schema.md) - Detection logic flowchart
+- [Architecture Analysis Summary](reference/Architecture_Analysis_Summary.md) - Code quality and refactoring priorities
+- [Architecture Diagrams](diagrams.md) - Visual system architecture
+
+### Project Information
+- [CHANGELOG](CHANGELOG.md) - Version history and release notes
+
 ## Quick Links
 
 - [GitHub Repository](https://github.com/hipotures/mdm)
