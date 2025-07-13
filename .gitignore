@@ -92,3 +92,33 @@ dmypy.json
 # Local configuration
 mdm.yaml
 !docs/mdm.yaml.default
+
+# ML benchmarking artifacts
+scripts/ml/benchmark_results/
+scripts/ml/ydf_logs/
+scripts/ml/submissions/
+scripts/ml/versions/
+benchmark_results/
+ydf_logs/
+submissions/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Data files (but keep sample data)
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.json
+!tests/data/**
+!scripts/ml/competitions/**
+
+# Model files
+*.pkl
+*.joblib
+*.h5
+*.model
+*.pt
+*.pth
