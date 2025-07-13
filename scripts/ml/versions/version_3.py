@@ -445,9 +445,15 @@ def execute_cv_feature_selection(
                         if removed_feature != "-" and removed_feature in impact_tracking:
                             change = impact_tracking[removed_feature]['change']
                             if metric_name in ['rmse', 'mae']:
-                                impact_value = f"{-change:+.4f}"  # Negate for display
+                                numeric_impact = -change  # Negate for display
                             else:
-                                impact_value = f"{change:+.4f}"
+                                numeric_impact = change
+                            
+                            # Color code the impact value
+                            if numeric_impact > 0:
+                                impact_value = f"[green]{numeric_impact:+.4f}[/green]"
+                            else:
+                                impact_value = f"[red]{numeric_impact:+.4f}[/red]"
                         row_data.extend([removed_feature, impact_value])
                     row_data.append("🔄")
                     
@@ -584,9 +590,15 @@ def execute_cv_feature_selection(
                 if removed_feature != "-" and removed_feature in impact_tracking:
                     change = impact_tracking[removed_feature]['change']
                     if metric_name in ['rmse', 'mae']:
-                        impact_value = f"{-change:+.4f}"  # Negate for display
+                        numeric_impact = -change  # Negate for display
                     else:
-                        impact_value = f"{change:+.4f}"
+                        numeric_impact = change
+                    
+                    # Color code the impact value
+                    if numeric_impact > 0:
+                        impact_value = f"[green]{numeric_impact:+.4f}[/green]"
+                    else:
+                        impact_value = f"[red]{numeric_impact:+.4f}[/red]"
                 row_data.extend([removed_feature, impact_value])
             
             row_data.append("✅")
