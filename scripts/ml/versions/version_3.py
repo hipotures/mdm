@@ -299,11 +299,11 @@ def execute_cv_feature_selection(
     # Create live table for progress tracking
     progress_table = Table(title="Custom Backward Feature Selection Progress")
     progress_table.add_column("Iteration", style="cyan", justify="right")
-    progress_table.add_column("Features", style="magenta") 
+    progress_table.add_column("Features", style="magenta", justify="right") 
     progress_table.add_column("Score", style="green")
     progress_table.add_column("Accuracy", style="green")
     progress_table.add_column("Loss", style="red")
-    progress_table.add_column("Status", style="blue")
+    progress_table.add_column("Status", style="blue", justify="center")
     
     iteration_results = []
     
@@ -358,7 +358,7 @@ def execute_cv_feature_selection(
                             "-",
                             "-",
                             "-",
-                            "Training"
+                            "🔄"
                         ]
                     else:
                         iteration_results.append([
@@ -367,17 +367,17 @@ def execute_cv_feature_selection(
                             "-",
                             "-",
                             "-",
-                            "Training"
+                            "🔄"
                         ])
                 
                 # Rebuild table
                 new_table = Table(title="Custom Backward Feature Selection Progress")
                 new_table.add_column("Iteration", style="cyan", justify="right")
-                new_table.add_column("Features", style="magenta")
+                new_table.add_column("Features", style="magenta", justify="right")
                 new_table.add_column("Score", style="green")
                 new_table.add_column("Accuracy", style="green")
                 new_table.add_column("Loss", style="red")
-                new_table.add_column("Status", style="blue")
+                new_table.add_column("Status", style="blue", justify="center")
                 
                 for row in iteration_results:
                     new_table.add_row(*row)
@@ -464,7 +464,7 @@ def execute_cv_feature_selection(
                 score_text,
                 f"{accuracy_value:.4f}",
                 f"{loss_value:.4f}",
-                "Done"
+                "✅"
             ]
             
             # Update highlighting - remove from all, then highlight the best overall
@@ -473,7 +473,7 @@ def execute_cv_feature_selection(
             
             # Find the best iteration so far
             for i in range(len(iteration_results)):
-                if len(iteration_results[i]) >= 3:
+                if len(iteration_results[i]) >= 5:
                     # Extract numeric score (remove any existing highlighting)
                     score_str = iteration_results[i][2]
                     if "[reverse green]" in score_str:
@@ -481,8 +481,24 @@ def execute_cv_feature_selection(
                     else:
                         numeric_score = float(score_str)
                     
-                    # Clean the score (remove highlighting)
+                    # Clean all highlighted columns (Score, Accuracy, Loss)
                     iteration_results[i][2] = f"{numeric_score:.4f}"
+                    
+                    # Clean Accuracy column
+                    accuracy_str = iteration_results[i][3]
+                    if "[reverse green]" in accuracy_str:
+                        accuracy_val = float(accuracy_str.replace("[reverse green]", "").replace("[/reverse green]", ""))
+                    else:
+                        accuracy_val = float(accuracy_str)
+                    iteration_results[i][3] = f"{accuracy_val:.4f}"
+                    
+                    # Clean Loss column
+                    loss_str = iteration_results[i][4]
+                    if "[reverse green]" in loss_str:
+                        loss_val = float(loss_str.replace("[reverse green]", "").replace("[/reverse green]", ""))
+                    else:
+                        loss_val = float(loss_str)
+                    iteration_results[i][4] = f"{loss_val:.4f}"
                     
                     # Check if this is the best
                     is_better = (
@@ -493,18 +509,27 @@ def execute_cv_feature_selection(
                         best_score_so_far = numeric_score
                         best_iteration_idx = i
             
-            # Highlight the best iteration
+            # Highlight the best iteration (Score, Accuracy, Loss)
             if best_iteration_idx >= 0:
+                # Highlight Score
                 iteration_results[best_iteration_idx][2] = f"[reverse green]{best_score_so_far:.4f}[/reverse green]"
+                
+                # Get accuracy and loss values for highlighting
+                accuracy_val = float(iteration_results[best_iteration_idx][3])
+                loss_val = float(iteration_results[best_iteration_idx][4])
+                
+                # Highlight Accuracy and Loss
+                iteration_results[best_iteration_idx][3] = f"[reverse green]{accuracy_val:.4f}[/reverse green]"
+                iteration_results[best_iteration_idx][4] = f"[reverse green]{loss_val:.4f}[/reverse green]"
             
             # Update display one more time
             final_table = Table(title="Custom Backward Feature Selection Progress")
             final_table.add_column("Iteration", style="cyan", justify="right")
-            final_table.add_column("Features", style="magenta")
+            final_table.add_column("Features", style="magenta", justify="right")
             final_table.add_column("Score", style="green")
             final_table.add_column("Accuracy", style="green")
             final_table.add_column("Loss", style="red")
-            final_table.add_column("Status", style="blue")
+            final_table.add_column("Status", style="blue", justify="center")
             
             for row in iteration_results:
                 final_table.add_row(*row)
@@ -576,11 +601,11 @@ def execute_cv_feature_selection(
         
         final_table = Table(title="Custom Backward Feature Selection Progress")
         final_table.add_column("Iteration", style="cyan", justify="right")
-        final_table.add_column("Features", style="magenta")
+        final_table.add_column("Features", style="magenta", justify="right")
         final_table.add_column("Score", style="green")
         final_table.add_column("Accuracy", style="green")
         final_table.add_column("Loss", style="red")
-        final_table.add_column("Status", style="blue")
+        final_table.add_column("Status", style="blue", justify="center")
         
         for row in iteration_results:
             final_table.add_row(*row)
@@ -616,10 +641,11 @@ def execute_cv_feature_selection(
 class MDMBenchmarkV3:
     """Benchmark MDM generic features with custom backward selection."""
     
-    def __init__(self, output_dir: str = "benchmark_results", use_cache: bool = True):
+    def __init__(self, output_dir: str = "benchmark_results", use_cache: bool = True, cv_folds: int = 3):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.use_cache = use_cache
+        self.cv_folds = cv_folds
         
         # Get MDM components
         self.config_manager = get_config_manager()
@@ -627,8 +653,8 @@ class MDMBenchmarkV3:
         self.dataset_registrar = DatasetRegistrar()
         
         self.results = {
-            'version': 'Version 3: Custom backward selection with CV inside (5-fold)',
-            'description': 'Custom backward feature selection with 5-fold CV + tuning inside each fold',
+            'version': f'Version 3: Custom backward selection with CV inside ({self.cv_folds}-fold)',
+            'description': f'Custom backward feature selection with {self.cv_folds}-fold CV + tuning inside each fold',
             'benchmark_date': datetime.now().isoformat(),
             'mdm_version': mdm.__version__,
             'results': {},
@@ -785,7 +811,7 @@ class MDMBenchmarkV3:
                     model_type,
                     config['problem_type'],
                     config['metric'],
-                    cv_splits=5,
+                    cv_splits=self.cv_folds,
                     removal_ratio=0.1,
                     use_tuning=True,
                     tuning_trials=20
@@ -817,7 +843,7 @@ class MDMBenchmarkV3:
                     model_type,
                     config['problem_type'],
                     config['metric'],
-                    cv_splits=cv_splits,  # Use same CV folds as main process
+                    cv_splits=self.cv_folds,  # Use same CV folds as main process
                     removal_ratio=0.0,  # No feature removal
                     use_tuning=True,
                     tuning_trials=20
@@ -860,8 +886,8 @@ class MDMBenchmarkV3:
             selected = all_competitions
         
         console.print(Panel.fit(
-            f"[bold]Version 3: Custom backward selection with CV inside (5-fold)[/bold]\n"
-            f"Custom feature selection with 5-fold CV + tuning inside each fold\n"
+            f"[bold]Version 3: Custom backward selection with CV inside ({self.cv_folds}-fold)[/bold]\n"
+            f"Custom feature selection with {self.cv_folds}-fold CV + tuning inside each fold\n"
             f"Competitions: {len(selected)}\n"
             f"MDM Version: {mdm.__version__}",
             title="Benchmark Info"
@@ -996,6 +1022,12 @@ def main():
         action='store_true',
         help='Do not use cached datasets'
     )
+    parser.add_argument(
+        '--cv-folds',
+        type=int,
+        default=3,
+        help='Number of CV folds (default: 3)'
+    )
     
     args = parser.parse_args()
     
@@ -1006,7 +1038,8 @@ def main():
     
     benchmark = MDMBenchmarkV3(
         output_dir=args.output_dir,
-        use_cache=not args.no_cache
+        use_cache=not args.no_cache,
+        cv_folds=args.cv_folds
     )
     
     benchmark.run_benchmark(competitions=args.competitions)
