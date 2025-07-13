@@ -55,24 +55,28 @@ def _train_silently(learner, train_data, valid_data=None, verbose=0, show_table=
         learner_type = type(learner).__name__
         learner_params = {}
         
-        # Try to get parameters from learner's internal storage
-        if hasattr(learner, '_label'):
-            learner_params['label'] = learner._label
-        if hasattr(learner, '_task'):
-            learner_params['task'] = str(learner._task) if learner._task else None
-        if hasattr(learner, '_num_trees'):
-            learner_params['num_trees'] = learner._num_trees
-            
-        # If that doesn't work, get from kwargs if available
-        if hasattr(learner, '_kwargs'):
-            for key, value in learner._kwargs.items():
-                if key == 'task' and value is not None:
-                    learner_params[key] = str(value)
-                elif key == 'feature_selector':
-                    # Skip - handle separately
-                    pass
-                elif isinstance(value, (str, int, float, bool, type(None))):
-                    learner_params[key] = value
+        # Get key parameters from learner - YDF stores these as _<param>
+        param_mapping = {
+            '_label': 'label',
+            '_task': 'task', 
+            '_num_trees': 'num_trees',
+            '_max_depth': 'max_depth',
+            '_min_examples': 'min_examples',
+            '_shrinkage': 'shrinkage',
+            '_subsample': 'subsample',
+            '_bootstrap_training_dataset': 'bootstrap_training_dataset',
+            '_compute_oob_variable_importances': 'compute_oob_variable_importances',
+            '_num_candidate_attributes': 'num_candidate_attributes',
+            '_num_candidate_attributes_ratio': 'num_candidate_attributes_ratio'
+        }
+        
+        for internal_name, param_name in param_mapping.items():
+            if hasattr(learner, internal_name):
+                value = getattr(learner, internal_name)
+                if param_name == 'task' and value is not None:
+                    learner_params[param_name] = str(value)
+                elif value is not None:
+                    learner_params[param_name] = value
         
         # Ensure we have label (it's required)
         if 'label' not in learner_params:
@@ -155,10 +159,13 @@ with open('{log_path}', 'w', buffering=1) as log_file:
         if feature_selector:
             params['feature_selector'] = feature_selector
         
-        # Create learner
+        # Create learner with all saved parameters
         if config['learner_type'] == 'GradientBoostedTreesLearner':
             learner = ydf.GradientBoostedTreesLearner(**params)
         else:
+            # Ensure compute_oob_variable_importances is set for RF
+            if 'compute_oob_variable_importances' not in params:
+                params['compute_oob_variable_importances'] = True
             learner = ydf.RandomForestLearner(**params)
         
         # Train
