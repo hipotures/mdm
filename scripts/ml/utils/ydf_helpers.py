@@ -596,16 +596,30 @@ def cross_validate_ydf(
                 ydf_metric = 'mae' 
                 maximize = False
             
-            feature_selector = ydf.BackwardSelectionFeatureSelector(
-                removal_ratio=feature_removal_ratio,
-                objective_metric=ydf_metric,
-                maximize_objective=maximize,
-                # Don't set allow_structural_variable_importance when using validation
-            )
+            # Handle removal_ratio interpretation
+            if feature_removal_ratio >= 1.0:
+                # Use removal_count for exact number of features
+                feature_selector = ydf.BackwardSelectionFeatureSelector(
+                    removal_count=int(feature_removal_ratio),
+                    objective_metric=ydf_metric,
+                    maximize_objective=maximize,
+                    # Don't set allow_structural_variable_importance when using validation
+                )
+            else:
+                # Use removal_ratio for percentage
+                feature_selector = ydf.BackwardSelectionFeatureSelector(
+                    removal_ratio=feature_removal_ratio,
+                    objective_metric=ydf_metric,
+                    maximize_objective=maximize,
+                    # Don't set allow_structural_variable_importance when using validation
+                )
             
             # Force verbose output for feature selection
             console.print(f"    → BackwardSelectionFeatureSelector configured:")
-            console.print(f"      removal_ratio={feature_removal_ratio}")
+            if feature_removal_ratio >= 1.0:
+                console.print(f"      removal_count={int(feature_removal_ratio)} features per iteration")
+            else:
+                console.print(f"      removal_ratio={feature_removal_ratio} ({feature_removal_ratio*100:.0f}% per iteration)")
             console.print(f"      objective_metric={ydf_metric}")
             console.print(f"      maximize_objective={maximize}")
             

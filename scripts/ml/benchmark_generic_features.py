@@ -202,7 +202,7 @@ class MDMBenchmark:
             console.print(f"  ✗ Failed to load {dataset_name}: {str(e)}", style="red")
             return None
     
-    def benchmark_competition(self, name: str, config: Dict[str, Any], use_tuning: bool = False, proper_cv: bool = False) -> Dict[str, Any]:
+    def benchmark_competition(self, name: str, config: Dict[str, Any], use_tuning: bool = False, proper_cv: bool = False, removal_ratio: float = 0.2) -> Dict[str, Any]:
         """Benchmark a single competition."""
         console.rule(f"[bold blue]{name}")
         console.print(f"Description: {config['description']}")
@@ -261,8 +261,7 @@ class MDMBenchmark:
             else:
                 console.print("  Training with features (backward selection)...")
             try:
-                # Use more aggressive feature selection for better reduction
-                removal_ratio = 0.2  # 20% removal per iteration
+                # Use configured removal ratio
                 
                 if proper_cv:
                     # PROPER WAY: First select features, then do CV
@@ -360,7 +359,7 @@ class MDMBenchmark:
         results['status'] = 'completed'
         return results
     
-    def run_benchmark(self, competitions: Optional[List[str]] = None, use_tuning: bool = False, proper_cv: bool = False):
+    def run_benchmark(self, competitions: Optional[List[str]] = None, use_tuning: bool = False, proper_cv: bool = False, removal_ratio: float = 0.2):
         """Run benchmark for specified competitions or all."""
         all_competitions = get_all_competitions()
         
@@ -380,7 +379,7 @@ class MDMBenchmark:
         # Run benchmarks
         for name, config in selected.items():
             try:
-                results = self.benchmark_competition(name, config, use_tuning=use_tuning, proper_cv=proper_cv)
+                results = self.benchmark_competition(name, config, use_tuning=use_tuning, proper_cv=proper_cv, removal_ratio=removal_ratio)
                 self.results['results'][name] = results
             except Exception as e:
                 console.print(f"\n[red]Error benchmarking {name}: {str(e)}[/red]")
@@ -524,6 +523,12 @@ def main():
         action='store_true',
         help='Use proper CV: first select features, then do CV on selected features'
     )
+    parser.add_argument(
+        '--removal-ratio', '-r',
+        type=float,
+        default=0.2,
+        help='Feature removal ratio. If <1: remove that fraction per iteration (0.2 = 20%%). If >=1: remove exactly that many features per iteration (2 = remove 2 features)'
+    )
     
     args = parser.parse_args()
     
@@ -533,7 +538,7 @@ def main():
         use_cache=not args.no_cache
     )
     
-    benchmark.run_benchmark(competitions=args.competitions, use_tuning=args.tune, proper_cv=args.proper_cv)
+    benchmark.run_benchmark(competitions=args.competitions, use_tuning=args.tune, proper_cv=args.proper_cv, removal_ratio=args.removal_ratio)
 
 
 if __name__ == '__main__':
