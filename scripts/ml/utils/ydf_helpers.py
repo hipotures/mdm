@@ -295,8 +295,7 @@ with open('{log_path}', 'w', buffering=1) as log_file:
         # Load model
         model = ydf.load_model(log_path.replace('.log', '_model'))
         
-        if SAVE_YDF_LOGS:
-            console.print(f"    → Log saved: {log_path}")
+        # Don't show log path here - it's too verbose
         
         # Cleanup
         try:
