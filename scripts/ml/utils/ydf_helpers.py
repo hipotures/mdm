@@ -637,7 +637,6 @@ def cross_validate_ydf(
             
             # Show what model reports after training
             console.print(f"    → Model training completed")
-            console.print(f"      Model type: {type(model)}")
             console.print(f"      Number of input features: {len(model.input_features())}")
             
             # Check if model has feature selection info
