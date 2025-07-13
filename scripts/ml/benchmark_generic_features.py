@@ -54,8 +54,7 @@ from mdm.dataset.manager import DatasetManager
 from mdm.dataset.registrar import DatasetRegistrar
 
 from utils.competition_configs import get_all_competitions, get_competition_config
-from utils.ydf_helpers import cross_validate_ydf, tune_hyperparameters
-from utils.ydf_helpers_v2 import select_features_then_cv
+from utils.ydf_helpers import cross_validate_ydf, tune_hyperparameters, select_features_then_cv
 from utils.metrics import needs_probabilities
 
 console = Console()

@@ -1,0 +1,31 @@
+{
+  "benchmark_date": "2025-07-13T10:51:04.992455",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "error": "select_features_then_cv() got an unexpected keyword argument 'feature_removal_ratio'"
+        },
+        "rf": {
+          "error": "select_features_then_cv() got an unexpected keyword argument 'feature_removal_ratio'"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8249,
+          "std": 0.0287,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8384,
+          "std": 0.0204,
+          "n_features": 11
+        }
+      },
+      "improvement": {},
+      "status": "completed"
+    }
+  },
+  "summary": {}
+}

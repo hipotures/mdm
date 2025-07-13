@@ -431,95 +431,133 @@ def determine_task(problem_type: str):
 
 
 def select_features_then_cv(
-    X: pd.DataFrame,
-    y: Union[pd.Series, pd.DataFrame],
-    learner_type: str = 'RANDOM_FOREST',
-    learner_kwargs: Optional[Dict[str, Any]] = None,
-    metric: str = 'accuracy',
-    cv_folds: int = 5,
+    df: pd.DataFrame,
+    target: str,
+    model_type: str,
+    problem_type: str,
+    metric_name: str,
+    feature_removal_ratio: float = 0.2,
+    n_splits: int = 5,
     random_state: int = 42,
-    feature_selection_kwargs: Optional[Dict[str, Any]] = None,
-    show_table: bool = True,
-    verbose: int = 1
-) -> Tuple[List[str], Dict[str, Any], List[int]]:
+    use_tuning: bool = False,
+    tuning_trials: int = 20
+) -> Tuple[float, float, List[float], Optional[List[str]], Optional[int]]:
     """
-    Select features using validation set, then evaluate with CV.
+    PROPER CV: First select features on validation set, then do CV on selected features.
+    
+    This avoids the problem where each CV fold selects different features.
     
     Returns:
-        Tuple of (selected_features, cv_results, selected_indices)
+        Tuple of (mean_score, std_score, individual_scores, selected_features, n_selected)
     """
-    if learner_kwargs is None:
-        learner_kwargs = {}
-    if feature_selection_kwargs is None:
-        feature_selection_kwargs = {}
+    # Split features and target
+    X = df.drop(columns=[target])
+    y = df[target]
     
-    # Set up stratified split for validation
-    if len(y.shape) == 1 or y.shape[1] == 1:
-        # Single target
-        from sklearn.model_selection import train_test_split
+    # Create validation split for feature selection (20%)
+    from sklearn.model_selection import train_test_split
+    if 'classification' in problem_type and problem_type != 'multilabel_classification':
         X_train, X_val, y_train, y_val = train_test_split(
             X, y, test_size=0.2, random_state=random_state, stratify=y
         )
     else:
-        # Multi-label: stratify by first label
-        from sklearn.model_selection import train_test_split
         X_train, X_val, y_train, y_val = train_test_split(
-            X, y, test_size=0.2, random_state=random_state, stratify=y.iloc[:, 0]
+            X, y, test_size=0.2, random_state=random_state
         )
     
-    # Combine for YDF
+    # Combine back to DataFrames for YDF
     train_df = pd.concat([X_train, y_train], axis=1)
     val_df = pd.concat([X_val, y_val], axis=1)
     
-    # Set up YDF datasets
-    if isinstance(y, pd.DataFrame):
-        label = list(y.columns)
+    # Determine task
+    task = determine_task(problem_type)
+    
+    # Configure feature selector
+    ydf_metric = metric_name
+    maximize = True
+    if metric_name in ['rmse', 'mae', 'mse', 'log_loss']:
+        maximize = False
+    if metric_name == 'roc_auc':
+        if problem_type == 'binary_classification':
+            ydf_metric = f"{target}:roc_auc"
+        else:
+            ydf_metric = 'roc_auc'
+    
+    # Handle removal_ratio interpretation
+    if feature_removal_ratio >= 1.0:
+        # Use removal_count for exact number of features
+        feature_selector = ydf.BackwardSelectionFeatureSelector(
+            removal_count=int(feature_removal_ratio),
+            objective_metric=ydf_metric,
+            maximize_objective=maximize
+        )
     else:
-        label = y.name if hasattr(y, 'name') and y.name else 'target'
+        # Use removal_ratio for percentage
+        feature_selector = ydf.BackwardSelectionFeatureSelector(
+            removal_ratio=feature_removal_ratio,
+            objective_metric=ydf_metric,
+            maximize_objective=maximize
+        )
     
-    # Configure learner based on type
-    learner_class = getattr(ydf, f'{learner_type.title().replace("_", "")}Learner')
+    console.print(f"  [bold]Feature Selection Phase:[/bold]")
+    console.print(f"    → Using {len(train_df):,} samples for training, {len(val_df):,} for validation")
+    console.print(f"    → BackwardSelectionFeatureSelector configured:")
+    if feature_removal_ratio >= 1.0:
+        console.print(f"      removal_count={int(feature_removal_ratio)} features per iteration")
+    else:
+        console.print(f"      removal_ratio={feature_removal_ratio} ({feature_removal_ratio*100:.0f}% per iteration)")
+    console.print(f"      objective_metric={ydf_metric}")
+    console.print(f"      maximize_objective={maximize}")
     
-    # Configure feature selection
-    fs_params = feature_selection_kwargs.copy()
-    removal_ratio = fs_params.pop('removal_ratio', 0.2)
-    maximize_objective = fs_params.pop('maximize_objective', 
-                                      metric not in ['rmse', 'mae', 'mse', 'log_loss'])
-    
-    fs = ydf.learner.BackwardSelectionFeatureSelector(
-        removal_ratio=removal_ratio,
-        objective_metric=f"@{metric}",
-        maximize_objective=maximize_objective,
-        **fs_params
+    # Create learner with feature selector
+    learner = create_learner(
+        model_type, target, task, 
+        feature_selector=feature_selector
     )
     
-    # Create learner with feature selection
-    learner = learner_class(
-        label=label,
-        feature_selector=fs,
-        **learner_kwargs
-    )
-    
-    # Train with feature selection - use our special function for monitoring
-    model = _train_silently(learner, train_df, valid_data=val_df, verbose=verbose, show_table=show_table)
+    # Train with feature selection
+    if model_type == 'rf':
+        # For Random Forest, merge train and validation for feature selection
+        console.print(f"    → Note: Random Forest uses internal OOB for feature selection")
+        full_train_df = pd.concat([train_df, val_df])
+        model = _train_silently(learner, full_train_df, verbose=1, show_table=True)
+    else:
+        model = _train_silently(learner, train_df, valid_data=val_df, verbose=1, show_table=True)
     
     # Get selected features
-    selected_features = list(model.features())
-    selected_indices = [X.columns.get_loc(f) for f in selected_features]
+    selected_features = [f.name for f in model.input_features()]
+    n_selected = len(selected_features)
     
-    # Run CV on selected features
-    X_selected = X[selected_features]
-    cv_results = cross_validate_ydf_simple(
-        X_selected, y, 
-        learner_type=learner_type,
-        learner_kwargs=learner_kwargs,
-        metric=metric,
-        cv_folds=cv_folds,
+    console.print(f"    → Selected {n_selected} features (from {len(X.columns)})")
+    if n_selected < len(X.columns):
+        reduction_pct = (1 - n_selected / len(X.columns)) * 100
+        console.print(f"    → Reduction: {reduction_pct:.1f}%")
+    
+    # Now do proper CV on selected features only
+    console.print(f"\n  [bold]Cross-Validation Phase:[/bold]")
+    console.print(f"    → Running {n_splits}-fold CV on {n_selected} selected features")
+    
+    df_selected = df[selected_features + [target]]
+    
+    # If tuning is requested, do it during CV
+    if use_tuning:
+        console.print(f"    → With hyperparameter tuning ({tuning_trials} trials per fold)")
+    
+    # Run CV without feature selection (already done)
+    mean_score, std_score, fold_scores, _, _ = cross_validate_ydf(
+        df_selected,
+        target,
+        model_type,
+        problem_type,
+        metric_name,
+        n_splits=n_splits,
         random_state=random_state,
-        verbose=0
+        use_feature_selection=False,  # Already selected
+        use_tuning=use_tuning,
+        tuning_trials=tuning_trials
     )
     
-    return selected_features, cv_results, selected_indices
+    return mean_score, std_score, fold_scores, selected_features, n_selected
 
 
 def cross_validate_ydf(

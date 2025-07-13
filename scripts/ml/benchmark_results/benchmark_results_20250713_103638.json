@@ -1,0 +1,46 @@
+{
+  "benchmark_date": "2025-07-13T09:52:20.140199",
+  "mdm_version": "1.0.1",
+  "results": {
+    "playground-s5e7": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.7395,
+          "std": 0.0,
+          "n_features": 63,
+          "n_selected": 17
+        },
+        "rf": {
+          "mean_score": 0.7395,
+          "std": 0.0,
+          "n_features": 63,
+          "n_selected": 54
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.7395,
+          "std": 0.0,
+          "n_features": 7
+        },
+        "rf": {
+          "mean_score": 0.7395,
+          "std": 0.0,
+          "n_features": 7
+        }
+      },
+      "improvement": {
+        "gbt": "+0.00%",
+        "rf": "+0.00%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "+0.00%",
+    "best_improvement": "playground-s5e7 (gbt): +0.00%",
+    "competitions_improved": 0,
+    "competitions_no_change": 1,
+    "competitions_failed": 0
+  }
+}
