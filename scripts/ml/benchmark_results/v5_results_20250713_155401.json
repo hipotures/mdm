@@ -1,0 +1,96 @@
+{
+  "version": "Version 5: Functional Programming Style with Aesthetic CV Spinners",
+  "description": "Same algorithm with functional approach: feature selection with CV inside (3-fold) + functional spinners",
+  "benchmark_date": "2025-07-13T15:53:39.170388",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8305,
+          "std": 0.0,
+          "n_features": 89,
+          "n_selected": 34,
+          "best_features": [
+            "Name",
+            "Fare",
+            "Embarked",
+            "Pclass_log",
+            "Pclass_percentile",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_avg_word_length",
+            "Name_n_uppercase",
+            "Name_n_spaces",
+            "Name_unique_word_count",
+            "Sex_frequency",
+            "Sex_frequency_ratio",
+            "Sex_male",
+            "Age_log",
+            "Age_zscore",
+            "Age_percentile",
+            "Age_is_outlier",
+            "Age_bin_equal",
+            "SibSp_div_mean"
+          ],
+          "best_hyperparams": {},
+          "method": "Functional backward selection with 3-fold CV inside (blocks spinner)"
+        },
+        "rf": {
+          "mean_score": 0.8283,
+          "std": 0.0,
+          "n_features": 89,
+          "n_selected": 66,
+          "best_features": [
+            "Name",
+            "Age",
+            "SibSp",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked",
+            "Pclass_log",
+            "Pclass_percentile",
+            "Pclass_sqrt",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_avg_word_length",
+            "Name_n_uppercase",
+            "Name_n_spaces",
+            "Name_n_special",
+            "Name_unique_word_count",
+            "Sex_frequency",
+            "Sex_frequency_ratio",
+            "Sex_female"
+          ],
+          "best_hyperparams": {},
+          "method": "Functional backward selection with 3-fold CV inside (diamonds spinner)"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8249,
+          "std": 0.0,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8305,
+          "std": 0.0,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "+0.68%",
+        "rf": "-0.26%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "+0.21%",
+    "best_improvement": "titanic (gbt): +0.68%",
+    "competitions_improved": 1,
+    "competitions_no_change": 0,
+    "competitions_failed": 0
+  }
+}

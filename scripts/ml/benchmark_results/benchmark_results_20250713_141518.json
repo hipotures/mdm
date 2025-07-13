@@ -1,0 +1,29 @@
+{
+  "benchmark_date": "2025-07-13T14:14:55.407332",
+  "mdm_version": "1.0.1",
+  "results": {
+    "playground-s4e10": {
+      "with_features": {
+        "gbt": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        },
+        "rf": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        },
+        "rf": {
+          "mean_score": 0.9337,
+          "std": 0.0039,
+          "n_features": 10
+        }
+      },
+      "improvement": {},
+      "status": "completed"
+    }
+  },
+  "summary": {}
+}

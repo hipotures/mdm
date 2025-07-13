@@ -1,0 +1,96 @@
+{
+  "version": "Version 3: Custom backward selection with CV inside (3-fold)",
+  "description": "Custom backward feature selection with 3-fold CV + tuning inside each fold",
+  "benchmark_date": "2025-07-13T17:35:46.777329",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8316,
+          "std": 0.0,
+          "n_features": 89,
+          "n_selected": 89,
+          "best_features": [
+            "Fare_is_outlier",
+            "Cabin_n_spaces",
+            "Ticket_has_special",
+            "SibSp_zscore",
+            "Name_avg_word_length",
+            "SibSp_is_outlier",
+            "Pclass_zscore",
+            "Embarked",
+            "Name_n_lowercase",
+            "Name_n_special",
+            "Fare_percentile",
+            "Parch_percentile",
+            "Ticket_unique_word_count",
+            "Pclass_percentile",
+            "Fare",
+            "SibSp_div_mean",
+            "Name_unique_word_ratio",
+            "Embarked_Q",
+            "Name_n_uppercase",
+            "missing_together_Age_Cabin"
+          ],
+          "best_hyperparams": {},
+          "method": "Custom backward selection with 3-fold CV + tuning"
+        },
+        "rf": {
+          "mean_score": 0.8249,
+          "std": 0.0,
+          "n_features": 89,
+          "n_selected": 73,
+          "best_features": [
+            "Fare_is_outlier",
+            "Cabin_n_spaces",
+            "Ticket_has_special",
+            "SibSp_zscore",
+            "SibSp_is_outlier",
+            "Pclass_zscore",
+            "Embarked",
+            "Name_n_special",
+            "Parch_percentile",
+            "Ticket_unique_word_count",
+            "SibSp_div_mean",
+            "Name_unique_word_ratio",
+            "Embarked_Q",
+            "missing_together_Age_Cabin",
+            "Ticket_n_digits",
+            "Ticket",
+            "Sex_male",
+            "Ticket_has_digits",
+            "Embarked_frequency",
+            "Cabin_unique_word_count"
+          ],
+          "best_hyperparams": {},
+          "method": "Custom backward selection with 3-fold CV + tuning"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8283,
+          "std": 0.0,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8316,
+          "std": 0.0,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "+0.40%",
+        "rf": "-0.81%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "-0.21%",
+    "best_improvement": "titanic (gbt): +0.40%",
+    "competitions_improved": 1,
+    "competitions_no_change": 0,
+    "competitions_failed": 0
+  }
+}

@@ -380,6 +380,9 @@ def execute_cv_feature_selection(
     progress_table.add_column("Score", style="green")
     progress_table.add_column("Accuracy", style="green")
     progress_table.add_column("Loss", style="red")
+    if impact_analysis:
+        progress_table.add_column("Removed Feature", style="yellow")
+        progress_table.add_column("Impact", style="yellow")
     progress_table.add_column("Status", style="blue", justify="center")
     
     iteration_results = []
@@ -428,24 +431,30 @@ def execute_cv_feature_selection(
                 
                 # Update table row
                 if iteration_count <= len(iteration_results) + 1:
+                    row_data = [
+                        f"{iteration_count} {cv_progress_display}",
+                        str(len(current_features)),
+                        "-",
+                        "-",
+                        "-"
+                    ]
+                    if impact_analysis:
+                        # Add removed feature and impact columns
+                        removed_feature = removed_in_iteration.get(iteration_count, "-")
+                        impact_value = "-"
+                        if removed_feature != "-" and removed_feature in impact_tracking:
+                            change = impact_tracking[removed_feature]['change']
+                            if metric_name in ['rmse', 'mae']:
+                                impact_value = f"{-change:+.4f}"  # Negate for display
+                            else:
+                                impact_value = f"{change:+.4f}"
+                        row_data.extend([removed_feature, impact_value])
+                    row_data.append("🔄")
+                    
                     if len(iteration_results) >= iteration_count:
-                        iteration_results[iteration_count-1] = [
-                            f"{iteration_count} {cv_progress_display}",
-                            str(len(current_features)),
-                            "-",
-                            "-",
-                            "-",
-                            "🔄"
-                        ]
+                        iteration_results[iteration_count-1] = row_data
                     else:
-                        iteration_results.append([
-                            f"{iteration_count} {cv_progress_display}",
-                            str(len(current_features)),
-                            "-",
-                            "-",
-                            "-",
-                            "🔄"
-                        ])
+                        iteration_results.append(row_data)
                 
                 # Rebuild table
                 new_table = Table(title="Custom Backward Feature Selection Progress")
@@ -454,6 +463,9 @@ def execute_cv_feature_selection(
                 new_table.add_column("Score", style="green")
                 new_table.add_column("Accuracy", style="green")
                 new_table.add_column("Loss", style="red")
+                if impact_analysis:
+                    new_table.add_column("Removed Feature", style="yellow")
+                    new_table.add_column("Impact", style="yellow")
                 new_table.add_column("Status", style="blue", justify="center")
                 
                 for row in iteration_results:
@@ -557,14 +569,28 @@ def execute_cv_feature_selection(
             # Add current iteration result first
             score_text = f"{current_mean:.4f}"
             
-            iteration_results[iteration_count-1] = [
+            row_data = [
                 f"{iteration_count} {final_cv_progress}",
                 str(len(current_features)),
                 score_text,
                 f"{accuracy_value:.4f}",
-                f"{loss_value:.4f}",
-                "✅"
+                f"{loss_value:.4f}"
             ]
+            
+            if impact_analysis:
+                # Add removed feature and impact columns
+                removed_feature = removed_in_iteration.get(iteration_count, "-")
+                impact_value = "-"
+                if removed_feature != "-" and removed_feature in impact_tracking:
+                    change = impact_tracking[removed_feature]['change']
+                    if metric_name in ['rmse', 'mae']:
+                        impact_value = f"{-change:+.4f}"  # Negate for display
+                    else:
+                        impact_value = f"{change:+.4f}"
+                row_data.extend([removed_feature, impact_value])
+            
+            row_data.append("✅")
+            iteration_results[iteration_count-1] = row_data
             
             # Update highlighting - remove from all, then highlight the best overall
             best_iteration_idx = -1
@@ -628,6 +654,9 @@ def execute_cv_feature_selection(
             final_table.add_column("Score", style="green")
             final_table.add_column("Accuracy", style="green")
             final_table.add_column("Loss", style="red")
+            if impact_analysis:
+                final_table.add_column("Removed Feature", style="yellow")
+                final_table.add_column("Impact", style="yellow")
             final_table.add_column("Status", style="blue", justify="center")
             
             for row in iteration_results:
@@ -747,14 +776,17 @@ def execute_cv_feature_selection(
         console.print(f"\n[bold]PHASE 2: Hyperparameter Tuning for Best Features ({len(best_features_overall)} features)[/bold]")
         
         # Update table to show tuning phase
-        iteration_results.append([
+        tuning_row = [
             "Tuning ●●●",
             str(len(best_features_overall)),
             "-",
             "-",
-            "-",
-            "Tuning"
-        ])
+            "-"
+        ]
+        if impact_analysis:
+            tuning_row.extend(["-", "-"])  # No removed feature/impact during tuning
+        tuning_row.append("Tuning")
+        iteration_results.append(tuning_row)
         
         final_table = Table(title="Custom Backward Feature Selection Progress")
         final_table.add_column("Iteration", style="cyan", justify="right")
@@ -762,6 +794,9 @@ def execute_cv_feature_selection(
         final_table.add_column("Score", style="green")
         final_table.add_column("Accuracy", style="green")
         final_table.add_column("Loss", style="red")
+        if impact_analysis:
+            final_table.add_column("Removed Feature", style="yellow")
+            final_table.add_column("Impact", style="yellow")
         final_table.add_column("Status", style="blue", justify="center")
         
         for row in iteration_results:

@@ -1,0 +1,1 @@
+{"learner_type": "GradientBoostedTreesLearner", "learner_params": {"label": "target", "task": "Task.CLASSIFICATION"}, "verbose": 1}

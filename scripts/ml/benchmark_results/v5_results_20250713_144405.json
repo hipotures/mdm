@@ -1,0 +1,29 @@
+{
+  "version": "Version 5: No feature selection, just CV with all features",
+  "description": "Baseline approach using all features without any selection",
+  "benchmark_date": "2025-07-13T14:43:54.779196",
+  "mdm_version": "1.0.1",
+  "results": {
+    "playground-s4e10": {
+      "with_features": {
+        "gbt": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        },
+        "rf": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        },
+        "rf": {
+          "error": "INVALID_ARGUMENT: Operation interrupted by user"
+        }
+      },
+      "improvement": {},
+      "status": "completed"
+    }
+  },
+  "summary": {}
+}

@@ -1,0 +1,1 @@
+{"learner_type": "GradientBoostedTreesLearner", "learner_params": {"label": "loan_status", "task": "Task.CLASSIFICATION", "feature_selector_config": {"removal_count": 5, "removal_ratio": null, "objective_metric": "characteristic_0:roc_auc", "maximize_objective": true}}, "verbose": 1}

@@ -1,0 +1,52 @@
+{
+  "version": "Version 1: Original YDF BackwardSelectionFeatureSelector",
+  "description": "Feature selection inside each CV fold using YDF built-in selector",
+  "benchmark_date": "2025-07-13T16:07:23.218274",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8148,
+          "std": 0.0203,
+          "n_features": 89,
+          "n_selected": 30,
+          "best_features": [],
+          "method": "YDF BackwardSelectionFeatureSelector per fold"
+        },
+        "rf": {
+          "mean_score": 0.8373,
+          "std": 0.0189,
+          "n_features": 89,
+          "n_selected": 19,
+          "best_features": [],
+          "method": "YDF BackwardSelectionFeatureSelector per fold"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8249,
+          "std": 0.0287,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8384,
+          "std": 0.0204,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "-1.22%",
+        "rf": "-0.13%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "-0.68%",
+    "best_improvement": "titanic (rf): -0.13%",
+    "competitions_improved": 0,
+    "competitions_no_change": 1,
+    "competitions_failed": 0
+  }
+}
