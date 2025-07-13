@@ -1005,17 +1005,15 @@ class DatasetRegistrar:
         """
         column_types = {}
         
-        # Focus on the main training table
-        if 'train' in table_mappings:
-            table_name = table_mappings['train']
+        # Process ALL tables to ensure we have column types for each
+        for table_type, table_name in table_mappings.items():
+            logger.info(f"Detecting column types for {table_type} table: {table_name}")
             
             # Create minimal profile for type detection
             try:
                 # Read sample data for profiling
                 backend = BackendFactory.create(engine.url.drivername, {})
                 df = backend.read_table_to_dataframe(table_name, engine, limit=10000)
-                # Don't create a new progress if we already have one active
-                logger.info("Analyzing column types with ydata-profiling...")
                 
                 # Suppress tqdm progress bars from ydata-profiling
                 import os
@@ -1023,10 +1021,10 @@ class DatasetRegistrar:
                 os.environ['TQDM_DISABLE'] = '1'
                 
                 try:
-                    # Use stored column types if available
-                    if hasattr(self, '_detected_column_types') and self._detected_column_types:
+                    # Use stored column types if available (only for first table)
+                    if table_type == 'train' and hasattr(self, '_detected_column_types') and self._detected_column_types:
                         # We already have column types from first chunk
-                        logger.info("Using column types detected during data loading")
+                        logger.info("Using column types detected during data loading for train table")
                         for col_name, var_type in self._detected_column_types.items():
                             if col_name not in df.columns:
                                 continue
@@ -1143,20 +1141,24 @@ class DatasetRegistrar:
                     else:
                         os.environ['TQDM_DISABLE'] = old_tqdm
                         
-                logger.info(f"Detected column types using ydata-profiling: {column_types}")
+                logger.info(f"Detected {len(column_types)} column types for {table_type} table")
                 
             except Exception as e:
-                logger.warning(f"Failed to use ydata-profiling, falling back to simple detection: {e}")
-                # Fallback to simple detection
-                column_types = self._simple_column_type_detection(
-                    column_info, target_column, id_columns
+                logger.warning(f"Failed to use ydata-profiling for {table_type}, falling back to simple detection: {e}")
+                # Fallback to simple detection for this table
+                table_column_types = self._simple_column_type_detection(
+                    {table_type: column_info.get(table_type, {})}, target_column, id_columns
                 )
-        else:
-            # No train table, use simple detection
+                column_types.update(table_column_types)
+        
+        # If no tables were processed or no column types detected, use simple detection
+        if not column_types:
+            logger.warning("No column types detected, using simple detection for all tables")
             column_types = self._simple_column_type_detection(
                 column_info, target_column, id_columns
             )
             
+        logger.info(f"Total column types detected: {len(column_types)}")
         return column_types
     
     def _simple_column_type_detection(

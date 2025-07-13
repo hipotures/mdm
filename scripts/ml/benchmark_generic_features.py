@@ -10,11 +10,19 @@ import os
 import sys
 import json
 import argparse
+import signal
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
 import warnings
 warnings.filterwarnings('ignore')
+
+# Handle Ctrl+C gracefully
+def signal_handler(sig, frame):
+    print('\n\nInterrupted by user. Exiting...')
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 import pandas as pd
 import numpy as np
@@ -47,6 +55,7 @@ from mdm.dataset.registrar import DatasetRegistrar
 
 from utils.competition_configs import get_all_competitions, get_competition_config
 from utils.ydf_helpers import cross_validate_ydf, tune_hyperparameters
+from utils.ydf_helpers_v2 import select_features_then_cv
 from utils.metrics import needs_probabilities
 
 console = Console()
@@ -80,10 +89,12 @@ class MDMBenchmark:
             True if successful, False otherwise
         """
         dataset_name = name
+        # MDM converts dashes to underscores in dataset names
+        mdm_name = name.replace('-', '_')
         
         # Check if already registered
         try:
-            existing = self.dataset_manager.get_dataset(dataset_name)
+            existing = self.dataset_manager.get_dataset(mdm_name)
             if existing and self.use_cache:
                 console.print(f"  ✓ Using cached dataset: {dataset_name}")
                 return True
@@ -130,7 +141,8 @@ class MDMBenchmark:
         self, name: str, config: Dict[str, Any], with_features: bool
     ) -> Optional[pd.DataFrame]:
         """Load competition data from MDM."""
-        dataset_name = name
+        # MDM converts dashes to underscores in dataset names
+        dataset_name = name.replace('-', '_')
         
         try:
             # Get dataset info
@@ -190,7 +202,7 @@ class MDMBenchmark:
             console.print(f"  ✗ Failed to load {dataset_name}: {str(e)}", style="red")
             return None
     
-    def benchmark_competition(self, name: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    def benchmark_competition(self, name: str, config: Dict[str, Any], use_tuning: bool = False, proper_cv: bool = False) -> Dict[str, Any]:
         """Benchmark a single competition."""
         console.rule(f"[bold blue]{name}")
         console.print(f"Description: {config['description']}")
@@ -243,23 +255,67 @@ class MDMBenchmark:
         for model_type in model_types:
             console.print(f"\n[cyan]{model_type.upper()}:[/cyan]")
             
-            # With features
-            console.print("  Training with features...")
+            # With features (with backward feature selection)
+            if use_tuning:
+                console.print("  Training with features (backward selection + hyperparameter tuning)...")
+            else:
+                console.print("  Training with features (backward selection)...")
             try:
-                mean_with, std_with, _ = cross_validate_ydf(
-                    df_features,
-                    config['target'],
-                    model_type,
-                    config['problem_type'],
-                    config['metric'],
-                    n_splits=5
-                )
+                # Use more aggressive feature selection for better reduction
+                removal_ratio = 0.2  # 20% removal per iteration
+                
+                if proper_cv:
+                    # PROPER WAY: First select features, then do CV
+                    mean_with, std_with, _, selected_features, n_selected = select_features_then_cv(
+                        df_features,
+                        config['target'],
+                        model_type,
+                        config['problem_type'],
+                        config['metric'],
+                        feature_removal_ratio=removal_ratio,
+                        n_splits=5,
+                        use_tuning=use_tuning,
+                        tuning_trials=30
+                    )
+                    avg_n_selected = n_selected
+                else:
+                    # OLD WAY: Feature selection inside each CV fold
+                    mean_with, std_with, _, selected_features, avg_n_selected = cross_validate_ydf(
+                        df_features,
+                        config['target'],
+                        model_type,
+                        config['problem_type'],
+                        config['metric'],
+                        n_splits=5,
+                        use_feature_selection=True,
+                        feature_removal_ratio=removal_ratio,
+                        use_tuning=use_tuning,
+                        tuning_trials=30
+                    )
                 results['with_features'][model_type] = {
                     'mean_score': round(mean_with, 4),
                     'std': round(std_with, 4),
-                    'n_features': n_features_with
+                    'n_features': n_features_with,
+                    'n_selected': int(avg_n_selected) if avg_n_selected else n_features_with
                 }
                 console.print(f"    ✓ Score: {mean_with:.4f} ± {std_with:.4f}")
+                
+                # Show top features from last model
+                if selected_features and len(selected_features) > 0:
+                    # Count non-empty feature lists
+                    non_empty_features = []
+                    for sf in selected_features:
+                        # Check if sf is a list and has length
+                        if isinstance(sf, list) and len(sf) > 0:
+                            non_empty_features.append(sf)
+                    
+                    if non_empty_features:
+                        avg_features = np.mean([len(sf) for sf in non_empty_features])
+                        console.print(f"    → Average top features tracked: {avg_features:.0f}")
+                        if non_empty_features[0] and len(non_empty_features[0]) > 0:
+                            # Convert to strings if needed
+                            feature_names = [str(f) for f in non_empty_features[0][:5]]
+                            console.print(f"    → Top 5 important: {', '.join(feature_names)}...")
             except Exception as e:
                 console.print(f"    ✗ Failed: {str(e)}", style="red")
                 results['with_features'][model_type] = {'error': str(e)}
@@ -267,7 +323,7 @@ class MDMBenchmark:
             # Without features
             console.print("  Training without features...")
             try:
-                mean_without, std_without, _ = cross_validate_ydf(
+                mean_without, std_without, _, _, _ = cross_validate_ydf(
                     df_raw,
                     config['target'],
                     model_type,
@@ -304,7 +360,7 @@ class MDMBenchmark:
         results['status'] = 'completed'
         return results
     
-    def run_benchmark(self, competitions: Optional[List[str]] = None):
+    def run_benchmark(self, competitions: Optional[List[str]] = None, use_tuning: bool = False, proper_cv: bool = False):
         """Run benchmark for specified competitions or all."""
         all_competitions = get_all_competitions()
         
@@ -324,7 +380,7 @@ class MDMBenchmark:
         # Run benchmarks
         for name, config in selected.items():
             try:
-                results = self.benchmark_competition(name, config)
+                results = self.benchmark_competition(name, config, use_tuning=use_tuning, proper_cv=proper_cv)
                 self.results['results'][name] = results
             except Exception as e:
                 console.print(f"\n[red]Error benchmarking {name}: {str(e)}[/red]")
@@ -396,6 +452,7 @@ class MDMBenchmark:
         table = Table(title="Benchmark Summary", show_header=True)
         table.add_column("Competition", style="cyan")
         table.add_column("Status", style="green")
+        table.add_column("Features", justify="right")
         table.add_column("GBT Improvement", justify="right")
         table.add_column("RF Improvement", justify="right")
         
@@ -403,6 +460,17 @@ class MDMBenchmark:
             status = result.get('status', 'unknown')
             gbt_imp = result.get('improvement', {}).get('gbt', 'N/A')
             rf_imp = result.get('improvement', {}).get('rf', 'N/A')
+            
+            # Get feature info
+            if 'with_features' in result and 'gbt' in result['with_features']:
+                n_total = result['with_features']['gbt'].get('n_features', 'N/A')
+                n_selected = result['with_features']['gbt'].get('n_selected', n_total)
+                if n_selected != n_total and n_selected != 'N/A':
+                    features_str = f"{n_selected}/{n_total}"
+                else:
+                    features_str = str(n_total)
+            else:
+                features_str = 'N/A'
             
             # Color code improvements
             if isinstance(gbt_imp, str) and '+' in gbt_imp:
@@ -415,7 +483,7 @@ class MDMBenchmark:
             elif isinstance(rf_imp, str) and '-' in rf_imp:
                 rf_imp = f"[red]{rf_imp}[/red]"
             
-            table.add_row(name, status, gbt_imp, rf_imp)
+            table.add_row(name, status, features_str, gbt_imp, rf_imp)
         
         console.print("\n")
         console.print(table)
@@ -446,6 +514,16 @@ def main():
         action='store_true',
         help='Do not use cached datasets'
     )
+    parser.add_argument(
+        '--tune',
+        action='store_true',
+        help='Enable hyperparameter tuning after feature selection'
+    )
+    parser.add_argument(
+        '--proper-cv',
+        action='store_true',
+        help='Use proper CV: first select features, then do CV on selected features'
+    )
     
     args = parser.parse_args()
     
@@ -455,7 +533,7 @@ def main():
         use_cache=not args.no_cache
     )
     
-    benchmark.run_benchmark(competitions=args.competitions)
+    benchmark.run_benchmark(competitions=args.competitions, use_tuning=args.tune, proper_cv=args.proper_cv)
 
 
 if __name__ == '__main__':

@@ -29,10 +29,9 @@ def check_signal(features: pd.DataFrame, descriptions: Dict[str, str],
             logger.debug(f"Dropping {col}: all null values")
             continue
         
-        # Check unique ratio
-        unique_ratio = series.nunique() / len(series)
-        if unique_ratio < min_signal_ratio:
-            logger.debug(f"Dropping {col}: low unique ratio {unique_ratio:.4f}")
+        # Check if all values are the same (no signal)
+        if series.nunique() == 1:
+            logger.debug(f"Dropping {col}: all values are the same")
             continue
         
         # For numeric features, check variance

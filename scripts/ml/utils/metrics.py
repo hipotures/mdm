@@ -127,7 +127,7 @@ def calculate_metric(
             # If we have probabilities, convert to class predictions
             if len(y_pred.shape) > 1 and y_pred.shape[1] > 1:
                 y_pred = np.argmax(y_pred, axis=1)
-            elif problem_type == 'binary_classification' and y_pred.dtype == float:
+            elif problem_type == 'binary_classification' and np.issubdtype(y_pred.dtype, np.floating):
                 # Binary probabilities - convert to 0/1
                 y_pred = (y_pred > 0.5).astype(int)
         

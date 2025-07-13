@@ -108,9 +108,8 @@ class BaseFeatureOperation(ABC):
         if non_null_count == 0:
             return False
 
-        # Check unique ratio
-        unique_ratio = sample.nunique() / len(sample)
-        if unique_ratio < self.min_signal_ratio:
+        # Check if all values are the same (no signal)
+        if sample.nunique() == 1:
             return False
 
         # For numeric features, check variance
