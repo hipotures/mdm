@@ -334,7 +334,8 @@ def execute_cv_feature_selection(
     use_tuning: bool = True,
     tuning_trials: int = 20,
     random_state: int = 42,
-    impact_analysis: bool = False
+    impact_analysis: bool = False,
+    pairwise_removal: bool = False
 ) -> Tuple[float, float, List[str], Dict[str, Any]]:
     """
     CORRECT ALGORITHM:
@@ -1278,6 +1279,11 @@ def main():
         '--impact-analysis',
         action='store_true',
         help='Use impact analysis mode: remove only features that improve score when removed (forces removal-ratio=1)'
+    )
+    parser.add_argument(
+        '--pairwise-removal',
+        action='store_true',
+        help='Remove features in pairs to detect negative interactions (e.g., redundant features)'
     )
     
     args = parser.parse_args()
