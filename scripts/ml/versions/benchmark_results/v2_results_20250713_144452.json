@@ -1,0 +1,94 @@
+{
+  "version": "Version 2: Custom backward selection with train/validation split",
+  "description": "Custom feature selection using train/validation split, then CV on selected features",
+  "benchmark_date": "2025-07-13T14:44:45.972815",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8226,
+          "std": 0.0168,
+          "n_features": 89,
+          "n_selected": 89,
+          "best_features": [
+            "PassengerId",
+            "Pclass",
+            "Name",
+            "Sex",
+            "Age",
+            "SibSp",
+            "Parch",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked",
+            "Pclass_log",
+            "Pclass_zscore",
+            "Pclass_percentile",
+            "Pclass_sqrt",
+            "Pclass_boxcox",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_word_count",
+            "Name_avg_word_length"
+          ],
+          "method": "Custom backward selection with train/validation split"
+        },
+        "rf": {
+          "mean_score": 0.8238,
+          "std": 0.0231,
+          "n_features": 89,
+          "n_selected": 89,
+          "best_features": [
+            "PassengerId",
+            "Pclass",
+            "Name",
+            "Sex",
+            "Age",
+            "SibSp",
+            "Parch",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked",
+            "Pclass_log",
+            "Pclass_zscore",
+            "Pclass_percentile",
+            "Pclass_sqrt",
+            "Pclass_boxcox",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_word_count",
+            "Name_avg_word_length"
+          ],
+          "method": "Custom backward selection with train/validation split"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8249,
+          "std": 0.0287,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8384,
+          "std": 0.0204,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "-0.28%",
+        "rf": "-1.74%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "-1.01%",
+    "best_improvement": "titanic (gbt): -0.28%",
+    "competitions_improved": 0,
+    "competitions_no_change": 1,
+    "competitions_failed": 0
+  }
+}

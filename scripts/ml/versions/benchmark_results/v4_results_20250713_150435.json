@@ -1,0 +1,52 @@
+{
+  "version": "Version 4: Object-Oriented Implementation",
+  "description": "Feature selection with CV inside (3-fold) + tuning inside each fold - OOP design",
+  "benchmark_date": "2025-07-13T15:04:19.804967",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.7991,
+          "std": 0.0233,
+          "n_features": 89,
+          "n_selected": 9,
+          "best_features": [],
+          "method": "YDF BackwardSelectionFeatureSelector + tuning (CV=2)"
+        },
+        "rf": {
+          "mean_score": 0.8137,
+          "std": 0.002,
+          "n_features": 89,
+          "n_selected": 48,
+          "best_features": [],
+          "method": "YDF BackwardSelectionFeatureSelector + tuning (CV=2)"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8058,
+          "std": 0.0148,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8171,
+          "std": 0.0009,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "-0.83%",
+        "rf": "-0.42%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "-0.62%",
+    "best_improvement": "titanic (rf): -0.42%",
+    "competitions_improved": 0,
+    "competitions_no_change": 1,
+    "competitions_failed": 0
+  }
+}

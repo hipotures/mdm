@@ -1,0 +1,75 @@
+{
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8103,
+          "std": 0.0166,
+          "n_features": 89,
+          "n_selected": 46,
+          "best_features": [
+            "Sex_male",
+            "Fare_zscore",
+            "Name_n_special",
+            "Sex_female",
+            "Sex_frequency_ratio"
+          ],
+          "best_hyperparams": {
+            "tuning_enabled": true,
+            "tuning_trials": 20,
+            "note": "YDF automatic hyperparameter tuning was used"
+          },
+          "method": "Functional GBT with feature selection + tuning"
+        },
+        "rf": {
+          "mean_score": 0.8316,
+          "std": 0.0027,
+          "n_features": 89,
+          "n_selected": 34,
+          "best_features": [
+            "Sex_female",
+            "Sex",
+            "Name_n_special",
+            "Pclass_boxcox",
+            "Pclass_sqrt",
+            "Pclass_zscore"
+          ],
+          "best_hyperparams": {
+            "tuning_enabled": true,
+            "tuning_trials": 20,
+            "note": "YDF automatic hyperparameter tuning was used"
+          },
+          "method": "Functional RF with feature selection + tuning"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8204,
+          "std": 0.0069,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8339,
+          "std": 0.0138,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "-1.23%",
+        "rf": "-0.28%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "-0.76%",
+    "best_improvement": "-0.28%",
+    "competitions_improved": 0,
+    "competitions_no_change": 2,
+    "total_competitions": 1
+  },
+  "version": "Version 5: Functional Programming Style",
+  "description": "Feature selection with CV inside (3-fold) + tuning using functional programming",
+  "benchmark_date": "2025-07-13T15:02:22.500893",
+  "mdm_version": "1.0.1"
+}

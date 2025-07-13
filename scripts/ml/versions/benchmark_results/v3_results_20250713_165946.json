@@ -1,0 +1,96 @@
+{
+  "version": "Version 3: Correct Algorithm - Feature Selection + Tuning for Best",
+  "description": "Phase 1: Feature selection with CV (no tuning), Phase 2: Tuning with CV for best features",
+  "benchmark_date": "2025-07-13T16:58:56.950173",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8361,
+          "std": 0.0,
+          "n_features": 89,
+          "n_selected": 45,
+          "best_features": [
+            "Ticket_word_count",
+            "Parch_zscore",
+            "Name_word_count",
+            "Embarked_nunique_chars",
+            "Name",
+            "Name_n_special",
+            "Embarked_frequency_ratio",
+            "Parch",
+            "Parch_percentile",
+            "Cabin_unique_word_count",
+            "Embarked_C",
+            "Fare_div_mean",
+            "Name_length",
+            "Sex",
+            "Sex_frequency_ratio",
+            "Fare_bin_quantile",
+            "Fare_is_outlier",
+            "Cabin_unique_word_ratio",
+            "Ticket_has_special",
+            "Age"
+          ],
+          "best_hyperparams": {},
+          "method": "Phase 1: Feature selection (no tuning) + Phase 2: Tuning for best"
+        },
+        "rf": {
+          "mean_score": 0.8339,
+          "std": 0.0,
+          "n_features": 89,
+          "n_selected": 60,
+          "best_features": [
+            "Ticket",
+            "Ticket_unique_word_count",
+            "Sex_female",
+            "Ticket_n_spaces",
+            "Ticket_word_count",
+            "Parch_zscore",
+            "SibSp_div_mean",
+            "Ticket_n_special",
+            "Embarked_nunique_chars",
+            "Name",
+            "Embarked_frequency_ratio",
+            "Age_div_mean",
+            "SibSp_percentile",
+            "Parch",
+            "SibSp_is_outlier",
+            "Age_log",
+            "Parch_percentile",
+            "Pclass_zscore",
+            "Embarked_C",
+            "Age_is_missing"
+          ],
+          "best_hyperparams": {},
+          "method": "Phase 1: Feature selection (no tuning) + Phase 2: Tuning for best"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8327,
+          "std": 0.0,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8294,
+          "std": 0.0,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "+0.41%",
+        "rf": "+0.54%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "+0.47%",
+    "best_improvement": "titanic (rf): +0.54%",
+    "competitions_improved": 1,
+    "competitions_no_change": 0,
+    "competitions_failed": 0
+  }
+}

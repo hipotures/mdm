@@ -1,0 +1,144 @@
+{
+  "version": "Version 5: Functional Programming Style with Aesthetic CV Spinners",
+  "description": "Same algorithm with functional approach: feature selection with CV inside (3-fold) + functional spinners",
+  "benchmark_date": "2025-07-13T15:22:50.878852",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.7957,
+          "std": 0.0277,
+          "n_features": 89,
+          "n_selected": 54,
+          "best_features": [
+            "PassengerId",
+            "Pclass",
+            "Name",
+            "Sex",
+            "SibSp",
+            "Parch",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Pclass_log",
+            "Pclass_zscore",
+            "Pclass_percentile",
+            "Pclass_sqrt",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_word_count",
+            "Name_n_spaces",
+            "Name_unique_word_count",
+            "Name_unique_word_ratio",
+            "Sex_female"
+          ],
+          "method": "Functional custom backward selection (CV=3, blocks spinner)",
+          "fold_scores": [
+            0.8316498316498316,
+            0.7643097643097643,
+            0.7912457912457912
+          ],
+          "hyperparams": {}
+        },
+        "rf": {
+          "mean_score": 0.8272,
+          "std": 0.0111,
+          "n_features": 89,
+          "n_selected": 73,
+          "best_features": [
+            "PassengerId",
+            "Pclass",
+            "Name",
+            "Sex",
+            "Age",
+            "SibSp",
+            "Parch",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked",
+            "Pclass_log",
+            "Pclass_zscore",
+            "Name_word_count",
+            "Name_n_uppercase",
+            "Name_n_spaces",
+            "Name_n_special",
+            "Name_unique_word_count",
+            "Name_unique_word_ratio",
+            "Sex_frequency"
+          ],
+          "method": "Functional custom backward selection (CV=3, diamonds spinner)",
+          "fold_scores": [
+            0.8417508417508418,
+            0.8148148148148148,
+            0.8249158249158249
+          ],
+          "hyperparams": {}
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8126,
+          "std": 0.0166,
+          "n_features": 11,
+          "n_selected": 9,
+          "best_features": [
+            "PassengerId",
+            "Name",
+            "Sex",
+            "Age",
+            "SibSp",
+            "Parch",
+            "Ticket",
+            "Fare",
+            "Cabin"
+          ],
+          "method": "Functional custom backward selection (CV=3, blocks spinner)",
+          "fold_scores": [
+            0.8316498316498316,
+            0.7912457912457912,
+            0.8148148148148148
+          ],
+          "hyperparams": {}
+        },
+        "rf": {
+          "mean_score": 0.8092,
+          "std": 0.0136,
+          "n_features": 11,
+          "n_selected": 9,
+          "best_features": [
+            "PassengerId",
+            "Name",
+            "Sex",
+            "Age",
+            "SibSp",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked"
+          ],
+          "method": "Functional custom backward selection (CV=3, diamonds spinner)",
+          "fold_scores": [
+            0.8282828282828283,
+            0.8013468013468014,
+            0.797979797979798
+          ],
+          "hyperparams": {}
+        }
+      },
+      "improvement": {
+        "gbt": "-2.08%",
+        "rf": "+2.22%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "+0.07%",
+    "best_improvement": "titanic (rf): +2.22%",
+    "competitions_improved": 1,
+    "competitions_no_change": 0,
+    "competitions_failed": 0
+  }
+}

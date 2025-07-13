@@ -1,0 +1,61 @@
+{
+  "version": "Version 8: Event-Driven Architecture",
+  "description": "Event-driven feature selection with CV inside (2-fold) + tuning inside each fold",
+  "algorithm": "Same as Version 1: Feature selection inside each CV fold using YDF built-in selector",
+  "architecture": "Event-driven with observer pattern for live table updates",
+  "config": {
+    "cv_folds": 2,
+    "removal_ratio": 0.1,
+    "use_tuning": false
+  },
+  "benchmark_date": "2025-07-13T15:08:02.160600",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8059,
+          "std": 0.0189,
+          "n_features": 89,
+          "n_selected": 20,
+          "best_features": [],
+          "best_hyperparams": {},
+          "method": "YDF BackwardSelectionFeatureSelector per fold (CV=2, removal_ratio=0.1)"
+        },
+        "rf": {
+          "mean_score": 0.8058,
+          "std": 0.0099,
+          "n_features": 89,
+          "n_selected": 34,
+          "best_features": [],
+          "best_hyperparams": {},
+          "method": "YDF BackwardSelectionFeatureSelector per fold (CV=2, removal_ratio=0.1)"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8058,
+          "std": 0.0148,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8171,
+          "std": 0.0009,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "+0.01%",
+        "rf": "-1.38%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "-0.68%",
+    "best_improvement": "titanic (gbt): +0.01%",
+    "competitions_improved": 1,
+    "competitions_no_change": 0,
+    "competitions_failed": 0
+  }
+}

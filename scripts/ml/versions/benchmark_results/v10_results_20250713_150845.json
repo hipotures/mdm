@@ -1,0 +1,62 @@
+{
+  "version": "Version 10: Iterator-Based Implementation",
+  "description": "Feature selection with CV inside (3-fold) + tuning using iterator patterns",
+  "benchmark_date": "2025-07-13T15:07:57.225959",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8249,
+          "std": 0.0027,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8305,
+          "std": 0.0156,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "-5.99%",
+        "rf": "+0.13%"
+      },
+      "status": "completed",
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.7755,
+          "std": 0.0042,
+          "n_features": 89,
+          "n_selected": 13,
+          "best_features": [],
+          "best_hyperparams": {
+            "tuning_enabled": true,
+            "tuning_trials": 20,
+            "note": "YDF automatic hyperparameter tuning was used"
+          },
+          "method": "Iterator-based GBT with feature selection + tuning"
+        },
+        "rf": {
+          "mean_score": 0.8316,
+          "std": 0.0027,
+          "n_features": 89,
+          "n_selected": 34,
+          "best_features": [],
+          "best_hyperparams": {
+            "tuning_enabled": true,
+            "tuning_trials": 20,
+            "note": "YDF automatic hyperparameter tuning was used"
+          },
+          "method": "Iterator-based RF with feature selection + tuning"
+        }
+      }
+    }
+  },
+  "summary": {
+    "average_improvement": "-2.93%",
+    "best_improvement": "+0.13%",
+    "competitions_improved": 1,
+    "competitions_no_change": 1,
+    "total_competitions": 1
+  }
+}

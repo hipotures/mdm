@@ -1,0 +1,17 @@
+{
+  "version": "Version 3: Alternative Implementation Structure",
+  "description": "Feature selection with 3-fold CV inside + tuning per fold (no additional CV)",
+  "benchmark_timestamp": "2025-07-13T15:00:31.913600",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {},
+      "without_features": {},
+      "improvement": {},
+      "status": "failed",
+      "metadata": {},
+      "error": "Dataset registration failed"
+    }
+  },
+  "summary": {}
+}

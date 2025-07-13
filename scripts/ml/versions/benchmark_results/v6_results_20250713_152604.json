@@ -1,0 +1,29 @@
+{
+  "version": "Version 6: Modular Custom Backward Feature Selection with CV inside",
+  "description": "Modular approach with separate feature selector, CV evaluator, and spinner utilities",
+  "benchmark_date": "2025-07-13T15:26:03.895465",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "error": "GradientBoostedTreesLearner.__init__() missing 1 required positional argument: 'label'"
+        },
+        "rf": {
+          "error": "RandomForestLearner.__init__() missing 1 required positional argument: 'label'"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "error": "GradientBoostedTreesLearner.__init__() missing 1 required positional argument: 'label'"
+        },
+        "rf": {
+          "error": "RandomForestLearner.__init__() missing 1 required positional argument: 'label'"
+        }
+      },
+      "improvement": {},
+      "status": "completed"
+    }
+  },
+  "summary": {}
+}

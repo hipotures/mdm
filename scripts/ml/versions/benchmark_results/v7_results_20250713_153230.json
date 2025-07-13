@@ -1,0 +1,105 @@
+{
+  "version": "Version 7: Pipeline-Based Feature Selection with Emoji Spinners",
+  "description": "Pipeline approach with emoji spinners and step-by-step execution",
+  "benchmark_date": "2025-07-13T15:32:06.137168",
+  "mdm_version": "1.0.1",
+  "results": {
+    "titanic": {
+      "with_features": {
+        "gbt": {
+          "mean_score": 0.8339,
+          "std": 0.0114,
+          "n_features": 89,
+          "n_selected": 73,
+          "best_features": [
+            "Name",
+            "Sex",
+            "Age",
+            "SibSp",
+            "Parch",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked",
+            "Pclass_percentile",
+            "Pclass_sqrt",
+            "Pclass_boxcox",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_avg_word_length",
+            "Name_n_uppercase",
+            "Name_n_spaces",
+            "Name_n_special",
+            "Name_unique_word_count",
+            "Sex_frequency"
+          ],
+          "best_hyperparams": {
+            "num_trees": 50,
+            "max_depth": 4,
+            "min_examples": 5,
+            "subsample": 0.8
+          },
+          "method": "Pipeline-based backward selection with 3-fold CV inside"
+        },
+        "rf": {
+          "mean_score": 0.8316,
+          "std": 0.0126,
+          "n_features": 89,
+          "n_selected": 66,
+          "best_features": [
+            "Sex",
+            "Age",
+            "SibSp",
+            "Ticket",
+            "Fare",
+            "Cabin",
+            "Embarked",
+            "Pclass_percentile",
+            "Pclass_boxcox",
+            "Pclass_div_mean",
+            "Name_length",
+            "Name_avg_word_length",
+            "Name_n_uppercase",
+            "Name_n_spaces",
+            "Name_n_special",
+            "Sex_frequency",
+            "Sex_frequency_ratio",
+            "Sex_female",
+            "Sex_male",
+            "Age_log"
+          ],
+          "best_hyperparams": {
+            "num_trees": 50,
+            "max_depth": 8,
+            "min_examples": 5
+          },
+          "method": "Pipeline-based backward selection with 3-fold CV inside"
+        }
+      },
+      "without_features": {
+        "gbt": {
+          "mean_score": 0.8249,
+          "std": 0.012,
+          "n_features": 11
+        },
+        "rf": {
+          "mean_score": 0.8305,
+          "std": 0.0156,
+          "n_features": 11
+        }
+      },
+      "improvement": {
+        "gbt": "+1.09%",
+        "rf": "+0.13%"
+      },
+      "status": "completed"
+    }
+  },
+  "summary": {
+    "average_improvement": "+0.61%",
+    "best_improvement": "titanic (gbt): +1.09%",
+    "competitions_improved": 1,
+    "competitions_no_change": 0,
+    "competitions_failed": 0
+  }
+}
