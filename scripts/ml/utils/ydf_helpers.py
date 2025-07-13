@@ -616,12 +616,7 @@ def cross_validate_ydf(
                 **learner_params
             )
             
-            # Log feature selection start
-            n_features = len(train_df.columns) - 1
-            min_to_remove_per_iter = int(feature_removal_ratio * n_features)
-            console.print(f"    → Starting backward feature selection (removing {feature_removal_ratio*100:.0f}% per iteration)")
-            console.print(f"      {n_features} features, ~{min_to_remove_per_iter} features per iteration")
-            console.print(f"      Using {len(fs_train_df)} samples for training, {len(fs_valid_df)} for validation")
+            # Feature selection will start - no need for verbose details
         
         # Train with verbose output if feature selection is enabled
         if use_feature_selection:
