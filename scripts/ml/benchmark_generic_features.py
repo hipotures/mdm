@@ -55,6 +55,7 @@ from mdm.dataset.registrar import DatasetRegistrar
 
 from utils.competition_configs import get_all_competitions, get_competition_config
 from utils.ydf_helpers import cross_validate_ydf, tune_hyperparameters, select_features_then_cv
+from utils.custom_ml_helpers import custom_feature_selection_cv
 from utils.metrics import needs_probabilities
 
 console = Console()
@@ -201,7 +202,7 @@ class MDMBenchmark:
             console.print(f"  ✗ Failed to load {dataset_name}: {str(e)}", style="red")
             return None
     
-    def benchmark_competition(self, name: str, config: Dict[str, Any], use_tuning: bool = False, proper_cv: bool = False, removal_ratio: float = 0.2) -> Dict[str, Any]:
+    def benchmark_competition(self, name: str, config: Dict[str, Any], use_tuning: bool = False, proper_cv: bool = False, removal_ratio: float = 0.2, custom_selection: bool = False) -> Dict[str, Any]:
         """Benchmark a single competition."""
         console.rule(f"[bold blue]{name}")
         console.print(f"Description: {config['description']}")
@@ -255,14 +256,30 @@ class MDMBenchmark:
             console.print(f"\n[cyan]{model_type.upper()}:[/cyan]")
             
             # With features (with backward feature selection)
-            if use_tuning:
+            if custom_selection:
+                console.print("  Training with features (custom backward selection)...")
+            elif use_tuning:
                 console.print("  Training with features (backward selection + hyperparameter tuning)...")
             else:
                 console.print("  Training with features (backward selection)...")
             try:
                 # Use configured removal ratio
                 
-                if proper_cv:
+                if custom_selection:
+                    # CUSTOM IMPLEMENTATION: Our own backward selection + CV
+                    mean_with, std_with, _, selected_features, n_selected = custom_feature_selection_cv(
+                        df_features,
+                        config['target'],
+                        model_type,
+                        config['problem_type'],
+                        config['metric'],
+                        removal_ratio=removal_ratio,
+                        n_splits=5,
+                        use_tuning=use_tuning,
+                        tuning_trials=30
+                    )
+                    avg_n_selected = n_selected
+                elif proper_cv:
                     # PROPER WAY: First select features, then do CV
                     mean_with, std_with, _, selected_features, n_selected = select_features_then_cv(
                         df_features,
@@ -358,7 +375,7 @@ class MDMBenchmark:
         results['status'] = 'completed'
         return results
     
-    def run_benchmark(self, competitions: Optional[List[str]] = None, use_tuning: bool = False, proper_cv: bool = False, removal_ratio: float = 0.2):
+    def run_benchmark(self, competitions: Optional[List[str]] = None, use_tuning: bool = False, proper_cv: bool = False, removal_ratio: float = 0.2, custom_selection: bool = False):
         """Run benchmark for specified competitions or all."""
         all_competitions = get_all_competitions()
         
@@ -378,7 +395,7 @@ class MDMBenchmark:
         # Run benchmarks
         for name, config in selected.items():
             try:
-                results = self.benchmark_competition(name, config, use_tuning=use_tuning, proper_cv=proper_cv, removal_ratio=removal_ratio)
+                results = self.benchmark_competition(name, config, use_tuning=use_tuning, proper_cv=proper_cv, removal_ratio=removal_ratio, custom_selection=custom_selection)
                 self.results['results'][name] = results
             except Exception as e:
                 console.print(f"\n[red]Error benchmarking {name}: {str(e)}[/red]")
@@ -528,6 +545,11 @@ def main():
         default=0.2,
         help='Feature removal ratio. If <1: remove that fraction per iteration (0.2 = 20%%). If >=1: remove exactly that many features per iteration (2 = remove 2 features)'
     )
+    parser.add_argument(
+        '--custom-selection',
+        action='store_true',
+        help='Use custom feature selection implementation instead of YDF BackwardSelectionFeatureSelector'
+    )
     
     args = parser.parse_args()
     
@@ -537,7 +559,7 @@ def main():
         use_cache=not args.no_cache
     )
     
-    benchmark.run_benchmark(competitions=args.competitions, use_tuning=args.tune, proper_cv=args.proper_cv, removal_ratio=args.removal_ratio)
+    benchmark.run_benchmark(competitions=args.competitions, use_tuning=args.tune, proper_cv=args.proper_cv, removal_ratio=args.removal_ratio, custom_selection=args.custom_selection)
 
 
 if __name__ == '__main__':
