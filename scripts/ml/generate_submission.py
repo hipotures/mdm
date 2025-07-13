@@ -59,6 +59,14 @@ def load_test_data(competition_name: str, config: Dict[str, Any],
         # Load test data
         import sqlite3
         db_path = Path(dataset.database['path'])
+        
+        # Handle different database file extensions
+        if not db_path.exists():
+            # Try with .sqlite extension
+            alt_path = db_path.with_suffix('.sqlite')
+            if alt_path.exists():
+                db_path = alt_path
+        
         conn = sqlite3.connect(db_path)
         
         # Check which tables are available
@@ -69,12 +77,8 @@ def load_test_data(competition_name: str, config: Dict[str, Any],
             console.print("[yellow]Warning: No test table found. Using train for demo.[/yellow]")
             table_name = 'train'
         
-        # Check if features table exists
-        feature_table = f'{table_name}_features'
-        if feature_table in dataset.feature_tables:
-            df = pd.read_sql_query(f"SELECT * FROM {feature_table}", conn)
-        else:
-            df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+        # For submission, use raw data without features to avoid mismatch
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
         
         conn.close()
         
@@ -82,9 +86,19 @@ def load_test_data(competition_name: str, config: Dict[str, Any],
         if selected_features:
             # Include ID column if exists
             id_col = config.get('id_column', 'id')
-            cols_to_keep = selected_features.copy()
+            cols_to_keep = []
+            
+            # Only keep features that exist in test data
+            for feat in selected_features:
+                if feat in df.columns:
+                    cols_to_keep.append(feat)
+                else:
+                    console.print(f"[yellow]Warning: Feature '{feat}' not in test data, skipping[/yellow]")
+            
+            # Always include ID column
             if id_col in df.columns and id_col not in cols_to_keep:
                 cols_to_keep = [id_col] + cols_to_keep
+                
             df = df[cols_to_keep]
         
         return df
@@ -124,14 +138,18 @@ def generate_submission(
         # Check if we need probabilities
         submission_format = config.get('submission_format', 'class')
         if submission_format == 'probability':
-            # Get probability of positive class
-            if hasattr(predictions, 'probability'):
-                y_pred = predictions.probability(1)
-            else:
-                y_pred = predictions
-        else:
-            # Get class predictions
+            # Keep probabilities as is
             y_pred = predictions
+        else:
+            # Convert to class predictions (0 or 1)
+            # YDF returns probabilities as numpy array for binary classification
+            if isinstance(predictions, np.ndarray) and predictions.dtype in [np.float32, np.float64]:
+                # These are probabilities, convert to classes
+                y_pred = (predictions > 0.5).astype(int)
+            else:
+                # Already class predictions
+                y_pred = predictions
+            
             # Map to original labels if needed
             if 'label_mapping' in config:
                 mapping = config['label_mapping']
@@ -171,7 +189,11 @@ def generate_submission(
     
     # Show preview
     console.print("\n[bold]Submission Preview:[/bold]")
-    console.print(submission.head(10))
+    preview_df = submission.head(10).copy()
+    # Format floats nicely in preview
+    if preview_df[target].dtype == np.float64:
+        preview_df[target] = preview_df[target].round(4)
+    console.print(preview_df)
     console.print(f"... ({len(submission)} total rows)")
     
     return str(filepath)
@@ -258,16 +280,22 @@ def main():
         else:
             base_table = 'data'
         
-        # Check for features
-        feature_table = f'{base_table}_features'
-        if feature_table in dataset.feature_tables:
-            table_name = feature_table
-        else:
-            table_name = base_table
+        # For submission generation, use raw data without features
+        # to avoid mismatch between train and test features
+        table_name = base_table
         
         # Load train data
         import sqlite3
-        conn = sqlite3.connect(dataset.database['path'])
+        db_path = Path(dataset.database['path'])
+        
+        # Handle different database file extensions
+        if not db_path.exists():
+            # Try with .sqlite extension
+            alt_path = db_path.with_suffix('.sqlite')
+            if alt_path.exists():
+                db_path = alt_path
+        
+        conn = sqlite3.connect(db_path)
         train_df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
         conn.close()
         
