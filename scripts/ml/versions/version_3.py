@@ -450,7 +450,9 @@ def execute_cv_feature_selection(
                                 numeric_impact = change
                             
                             # Color code the impact value
-                            if numeric_impact > 0:
+                            if abs(numeric_impact) < 0.00005:  # effectively zero
+                                impact_value = f"[red]0.0000[/red]"
+                            elif numeric_impact > 0:
                                 impact_value = f"[green]{numeric_impact:+.4f}[/green]"
                             else:
                                 impact_value = f"[red]{numeric_impact:+.4f}[/red]"
@@ -595,7 +597,9 @@ def execute_cv_feature_selection(
                         numeric_impact = change
                     
                     # Color code the impact value
-                    if numeric_impact > 0:
+                    if abs(numeric_impact) < 0.00005:  # effectively zero
+                        impact_value = f"[red]0.0000[/red]"
+                    elif numeric_impact > 0:
                         impact_value = f"[green]{numeric_impact:+.4f}[/green]"
                     else:
                         impact_value = f"[red]{numeric_impact:+.4f}[/red]"
