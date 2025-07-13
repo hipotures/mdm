@@ -837,9 +837,27 @@ def cross_validate_ydf(
         else:
             # Get class predictions
             predictions = model.predict(val_df)
-            # Don't convert to int here - let calculate_metric handle the conversion
-            # This allows proper threshold-based conversion for binary classification
-            y_pred = predictions
+            
+            # Handle string labels - YDF returns numeric predictions but we may have string labels
+            y_true_sample = val_df[target].values
+            if len(y_true_sample) > 0 and isinstance(y_true_sample[0], str):
+                # Get unique classes from the full training data (not just validation)
+                # YDF sees all training data, so we need to use the same order
+                train_classes = sorted(train_df[target].unique())
+                
+                # YDF internally sorts classes alphabetically and assigns indices
+                if len(train_classes) == 2:
+                    # Binary classification with string labels
+                    # YDF uses 0 for first class (alphabetically), 1 for second
+                    label_map = {0: train_classes[0], 1: train_classes[1]}
+                    y_pred = np.array([label_map.get(int(p), p) for p in predictions])
+                else:
+                    # Multi-class - map indices to labels
+                    label_map = {i: cls for i, cls in enumerate(train_classes)}
+                    y_pred = np.array([label_map.get(int(p), p) for p in predictions])
+            else:
+                # Numeric labels or regression
+                y_pred = predictions
         
         # Calculate metric
         y_true = val_df[target].values
@@ -968,7 +986,23 @@ def cross_validate_multilabel(
                     pred_proba = predictions
                 all_predictions[label] = pred_proba
             else:
-                all_predictions[label] = model.predict(val_df)
+                predictions = model.predict(val_df)
+                
+                # Handle string labels
+                y_true_sample = val_df[label].values
+                if len(y_true_sample) > 0 and isinstance(y_true_sample[0], str):
+                    # Get unique classes from the training data to map predictions
+                    unique_classes = sorted(val_df[label].unique())
+                    if len(unique_classes) == 2:
+                        # Binary classification with string labels
+                        label_map = {0: unique_classes[0], 1: unique_classes[1]}
+                        predictions = np.array([label_map.get(int(p), p) for p in predictions])
+                    else:
+                        # Multi-class - map indices to labels
+                        label_map = {i: cls for i, cls in enumerate(unique_classes)}
+                        predictions = np.array([label_map.get(int(p), p) for p in predictions])
+                
+                all_predictions[label] = predictions
             
             y_true_all.append(val_df[label].values)
         
