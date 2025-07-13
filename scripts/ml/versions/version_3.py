@@ -833,14 +833,21 @@ def execute_cv_feature_selection(
             final_mean_score = tuned_score
             best_hyperparams_overall = best_hyperparams
             console.print(f"Phase 2 complete. Tuned score: {final_mean_score:.4f}")
+            console.print(f"Best hyperparameters: {best_hyperparams}")
         else:
             final_mean_score = best_score_overall
-            console.print(f"Phase 2 failed. Using Phase 1 score: {final_mean_score:.4f}")
+            console.print(f"[yellow]Phase 2 failed (no successful trials). Using Phase 1 score: {final_mean_score:.4f}[/yellow]")
     else:
         final_mean_score = best_score_overall
         console.print(f"\n[bold]Feature Selection Complete (No Tuning)[/bold]")
         console.print(f"Best iteration had {len(best_features_overall)} features")
         console.print(f"Best score: {final_mean_score:.4f}")
+        
+    # Show sample of selected features
+    if len(best_features_overall) > 20:
+        console.print(f"Selected features (showing first 20): {best_features_overall[:20]} ...")
+    else:
+        console.print(f"Selected features: {best_features_overall}")
     
     final_std_score = 0.0
     return final_mean_score, final_std_score, best_features_overall, best_hyperparams_overall
