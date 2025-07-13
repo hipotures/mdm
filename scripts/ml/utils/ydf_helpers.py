@@ -441,7 +441,7 @@ def select_features_then_cv(
     random_state: int = 42,
     use_tuning: bool = False,
     tuning_trials: int = 20
-) -> Tuple[float, float, List[float], Optional[List[str]], Optional[int]]:
+) -> Tuple[float, float, List[float], Optional[List[str]], Optional[int], Dict[str, Any]]:
     """
     PROPER CV: First select features on validation set, then do CV on selected features.
     
@@ -557,7 +557,15 @@ def select_features_then_cv(
         tuning_trials=tuning_trials
     )
     
-    return mean_score, std_score, fold_scores, selected_features, n_selected
+    # Extract best hyperparameters if tuning was used
+    best_hyperparams = {}
+    if use_tuning:
+        # For select_features_then_cv, we don't have access to the tuned model
+        # since tuning happens inside cross_validate_ydf
+        # The hyperparams would be returned from cross_validate_ydf
+        pass
+    
+    return mean_score, std_score, fold_scores, selected_features, n_selected, best_hyperparams
 
 
 def cross_validate_ydf(
@@ -573,7 +581,7 @@ def cross_validate_ydf(
     feature_removal_ratio: float = 0.1,
     use_tuning: bool = False,
     tuning_trials: int = 20
-) -> Tuple[float, float, List[float], Optional[List[str]], Optional[int]]:
+) -> Tuple[float, float, List[float], Optional[List[str]], Optional[int], Dict[str, Any]]:
     """
     Perform cross-validation with YDF model.
     
@@ -919,7 +927,18 @@ def cross_validate_ydf(
     # Calculate average number of selected features
     avg_n_selected = np.mean(n_selected_list) if n_selected_list else None
     
-    return np.mean(scores), np.std(scores), scores, consensus_features, avg_n_selected
+    # Extract best hyperparameters if tuning was used
+    best_hyperparams = {}
+    if use_tuning and 'model' in locals():
+        # YDF doesn't expose hyperparameters directly in a clean way
+        # For now, just indicate that tuning was used
+        best_hyperparams = {
+            'tuning_enabled': True,
+            'tuning_trials': tuning_trials,
+            'note': 'YDF automatic hyperparameter tuning was used'
+        }
+    
+    return np.mean(scores), np.std(scores), scores, consensus_features, avg_n_selected, best_hyperparams
 
 
 def cross_validate_ydf_simple(

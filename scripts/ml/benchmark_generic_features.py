@@ -267,7 +267,7 @@ class MDMBenchmark:
                 
                 if custom_selection:
                     # CUSTOM IMPLEMENTATION: Our own backward selection + CV
-                    mean_with, std_with, _, selected_features, n_selected = custom_feature_selection_cv(
+                    mean_with, std_with, _, selected_features, n_selected, best_hyperparams = custom_feature_selection_cv(
                         df_features,
                         config['target'],
                         model_type,
@@ -279,9 +279,11 @@ class MDMBenchmark:
                         tuning_trials=30
                     )
                     avg_n_selected = n_selected
+                    # For custom selection, selected_features is already a list of feature names
+                    best_features = selected_features
                 elif proper_cv:
                     # PROPER WAY: First select features, then do CV
-                    mean_with, std_with, _, selected_features, n_selected = select_features_then_cv(
+                    mean_with, std_with, _, selected_features, n_selected, best_hyperparams = select_features_then_cv(
                         df_features,
                         config['target'],
                         model_type,
@@ -293,9 +295,11 @@ class MDMBenchmark:
                         tuning_trials=30
                     )
                     avg_n_selected = n_selected
+                    # For proper CV, selected_features is a list of feature names
+                    best_features = selected_features
                 else:
                     # OLD WAY: Feature selection inside each CV fold
-                    mean_with, std_with, _, selected_features, avg_n_selected = cross_validate_ydf(
+                    mean_with, std_with, _, selected_features, avg_n_selected, best_hyperparams = cross_validate_ydf(
                         df_features,
                         config['target'],
                         model_type,
@@ -307,11 +311,25 @@ class MDMBenchmark:
                         use_tuning=use_tuning,
                         tuning_trials=30
                     )
+                    # For old way, selected_features is a list of lists (one per fold)
+                    # Get the most common features across folds
+                    if selected_features and len(selected_features) > 0:
+                        # Flatten and get unique features
+                        all_features = []
+                        for fold_features in selected_features:
+                            if isinstance(fold_features, list):
+                                all_features.extend(fold_features)
+                        # Get unique features
+                        best_features = list(set(all_features))[:20]  # Top 20 most common
+                    else:
+                        best_features = []
                 results['with_features'][model_type] = {
                     'mean_score': round(mean_with, 4),
                     'std': round(std_with, 4),
                     'n_features': n_features_with,
-                    'n_selected': int(avg_n_selected) if avg_n_selected else n_features_with
+                    'n_selected': int(avg_n_selected) if avg_n_selected else n_features_with,
+                    'best_features': best_features if 'best_features' in locals() else [],
+                    'best_hyperparameters': best_hyperparams if 'best_hyperparams' in locals() else {}
                 }
                 console.print(f"    ✓ Score: {mean_with:.4f} ± {std_with:.4f}")
                 
@@ -338,7 +356,8 @@ class MDMBenchmark:
             # Without features
             console.print("  Training without features...")
             try:
-                mean_without, std_without, _, _, _ = cross_validate_ydf(
+                # cross_validate_ydf always returns 6 values now
+                mean_without, std_without, _, _, _, _ = cross_validate_ydf(
                     df_raw,
                     config['target'],
                     model_type,

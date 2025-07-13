@@ -444,7 +444,7 @@ def custom_feature_selection_cv(
     use_tuning: bool = False,
     tuning_trials: int = 20,
     random_state: int = 42
-) -> Tuple[float, float, List[float], List[str], int]:
+) -> Tuple[float, float, List[float], List[str], int, Dict[str, Any]]:
     """
     Combined function: First select features, then do CV.
     
@@ -484,4 +484,8 @@ def custom_feature_selection_cv(
         random_state=random_state
     )
     
-    return mean_score, std_score, fold_scores, selected_features, len(selected_features)
+    # For custom implementation, we don't have hyperparameter tuning yet
+    # Return empty dict for consistency
+    best_hyperparams = {}
+    
+    return mean_score, std_score, fold_scores, selected_features, len(selected_features), best_hyperparams
