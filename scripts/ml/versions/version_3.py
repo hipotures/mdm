@@ -149,6 +149,77 @@ def create_ydf_learner(model_type: str, label: str, task_type=None, **params):
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
+def simple_cv_evaluation(
+    data_frame: pd.DataFrame,
+    target_column: str,
+    model_type: str,
+    problem_type: str,
+    metric_name: str,
+    cv_splits: int = 5,
+    random_state: int = 42
+) -> float:
+    """Simple CV evaluation without tuning."""
+    from sklearn.model_selection import KFold, StratifiedKFold
+    
+    # Determine CV strategy
+    if 'classification' in problem_type:
+        task_type = ydf.Task.CLASSIFICATION
+        cv_strategy = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=random_state)
+    else:
+        task_type = ydf.Task.REGRESSION
+        cv_strategy = KFold(n_splits=cv_splits, shuffle=True, random_state=random_state)
+    
+    X = data_frame.drop(columns=[target_column])
+    y = data_frame[target_column]
+    
+    cv_scores = []
+    
+    for train_idx, val_idx in cv_strategy.split(X, y):
+        train_data = data_frame.iloc[train_idx]
+        val_data = data_frame.iloc[val_idx]
+        
+        try:
+            # Train model with default parameters
+            learner = create_ydf_learner(model_type, target_column, task_type)
+            
+            if model_type == 'rf':
+                model = train_ydf_silently(learner, train_data)
+            else:
+                # Split training data for GBT validation
+                train_subset_size = int(0.8 * len(train_data))
+                train_subset = train_data.iloc[:train_subset_size]
+                val_subset = train_data.iloc[train_subset_size:]
+                model = train_ydf_silently(learner, train_subset, val_subset)
+            
+            # Make predictions
+            if needs_probabilities(metric_name):
+                predictions = model.predict(val_data)
+                if problem_type == 'binary_classification':
+                    if hasattr(predictions, 'probability'):
+                        y_pred = predictions.probability(1)
+                    else:
+                        y_pred = predictions
+                else:
+                    y_pred = predictions
+            else:
+                predictions = model.predict(val_data)
+                y_pred = predictions
+            
+            # Calculate score
+            y_true = val_data[target_column].values
+            score = calculate_metric(y_true, y_pred, metric_name, problem_type)
+            cv_scores.append(score)
+            
+        except Exception as e:
+            # Skip failed folds
+            continue
+    
+    if cv_scores:
+        return np.mean(cv_scores)
+    else:
+        return 0.5 if metric_name not in ['rmse', 'mae'] else 1.0
+
+
 def hyperparameter_tuning(
     data_frame: pd.DataFrame,
     target_column: str,
@@ -262,7 +333,8 @@ def execute_cv_feature_selection(
     removal_ratio: float = 0.1,
     use_tuning: bool = True,
     tuning_trials: int = 20,
-    random_state: int = 42
+    random_state: int = 42,
+    impact_analysis: bool = False
 ) -> Tuple[float, float, List[str], Dict[str, Any]]:
     """
     CORRECT ALGORITHM:
@@ -295,6 +367,11 @@ def execute_cv_feature_selection(
     best_features_overall = list(current_features)
     best_hyperparams_overall = {}
     iteration_count = 0
+    
+    # For impact analysis mode
+    impact_tracking = {}  # feature -> (score_before, score_after, should_remove)
+    previous_score = None
+    removed_in_iteration = {}  # iteration -> feature_removed
     
     # Create live table for progress tracking
     progress_table = Table(title="Custom Backward Feature Selection Progress")
@@ -432,6 +509,28 @@ def execute_cv_feature_selection(
             current_mean = np.mean(cv_fold_scores)
             current_std = np.std(cv_fold_scores)
             
+            # Impact analysis tracking
+            if impact_analysis and iteration_count > 1 and previous_score is not None:
+                # Find which feature was removed in this iteration
+                removed_feature = removed_in_iteration.get(iteration_count, None)
+                if removed_feature:
+                    # Determine impact of removing this feature
+                    if metric_name in ['rmse', 'mae']:
+                        # Lower is better
+                        score_improved = current_mean < previous_score
+                    else:
+                        # Higher is better
+                        score_improved = current_mean > previous_score
+                    
+                    impact_tracking[removed_feature] = {
+                        'score_before': previous_score,
+                        'score_after': current_mean,
+                        'change': current_mean - previous_score,
+                        'should_remove': score_improved  # Remove if score improved
+                    }
+            
+            previous_score = current_mean
+            
             # Check if this is the best iteration so far
             is_best_iteration = (
                 (metric_name in ['rmse', 'mae'] and current_mean < best_score_overall) or
@@ -539,8 +638,13 @@ def execute_cv_feature_selection(
             
             # Feature removal for next iteration
             if len(current_features) > 1 and removal_ratio > 0:
-                # Calculate number of features to remove
-                num_to_remove = max(1, int(len(current_features) * removal_ratio))
+                # Calculate number of features to remove (YDF logic)
+                if removal_ratio >= 1.0:
+                    # Use removal_count for exact number of features
+                    num_to_remove = int(removal_ratio)
+                else:
+                    # Use removal_ratio for percentage
+                    num_to_remove = max(1, int(len(current_features) * removal_ratio))
                 
                 # Use feature importance from the last trained model
                 # Train a quick model to get importances
@@ -553,22 +657,36 @@ def execute_cv_feature_selection(
                     importance_dict = {}
                     if hasattr(temp_model, 'variable_importances'):
                         importances = temp_model.variable_importances()
-                        if isinstance(importances, dict) and 'NUM_AS_ROOT' in importances:
-                            for score, feature_name in importances['NUM_AS_ROOT']:
-                                if feature_name in current_features:
-                                    importance_dict[feature_name] = score
+                        
+                        # Try different importance types in order of preference
+                        importance_types = ['NUM_AS_ROOT', 'SUM_SCORE', 'MEAN_DECREASE_IN_ACCURACY']
+                        
+                        for imp_type in importance_types:
+                            if imp_type in importances and not importance_dict:
+                                for item in importances[imp_type]:
+                                    if isinstance(item, tuple) and len(item) >= 2:
+                                        score, feature_name = item[0], item[1]
+                                    else:
+                                        continue
+                                    if feature_name in current_features:
+                                        importance_dict[feature_name] = score
                     
-                    # Remove least important features
-                    if importance_dict:
-                        sorted_features = sorted(importance_dict.items(), key=lambda x: x[1])
-                        features_to_remove = [f[0] for f in sorted_features[:num_to_remove]]
-                    else:
-                        # Fallback: remove random features
-                        features_to_remove = np.random.choice(
-                            list(current_features), 
-                            size=min(num_to_remove, len(current_features) - 1), 
-                            replace=False
-                        )
+                    # IMPORTANT: Include ALL features in ranking
+                    # Features without importance get score 0 (lowest)
+                    all_features_with_importance = []
+                    for feature in current_features:
+                        score = importance_dict.get(feature, 0.0)  # Default to 0 if no importance
+                        all_features_with_importance.append((feature, score))
+                    
+                    # Sort ALL features by importance (ascending - worst first)
+                    sorted_features = sorted(all_features_with_importance, key=lambda x: x[1])
+                    
+                    # Remove the worst num_to_remove features
+                    features_to_remove = [f[0] for f in sorted_features[:num_to_remove]]
+                    
+                    # Track removed features for impact analysis
+                    if impact_analysis and len(features_to_remove) == 1:
+                        removed_in_iteration[iteration_count + 1] = features_to_remove[0]
                     
                     for feature in features_to_remove:
                         if feature in current_features:
@@ -584,6 +702,45 @@ def execute_cv_feature_selection(
                     for feature in features_to_remove:
                         if feature in current_features:
                             current_features.remove(feature)
+    
+    # Impact Analysis Mode: Rebuild feature set based on impact
+    if impact_analysis and impact_tracking:
+        console.print(f"\n[bold]Impact Analysis Results:[/bold]")
+        
+        # Start with all original features
+        final_features = set(feature_columns)
+        features_to_remove = []
+        
+        # Analyze each feature's impact
+        for feature, impact in impact_tracking.items():
+            change = impact['change']
+            should_remove = impact['should_remove']
+            
+            if metric_name in ['rmse', 'mae']:
+                change_str = f"{-change:+.4f}" # Negate for display (negative is good)
+            else:
+                change_str = f"{change:+.4f}"
+            
+            status = "REMOVE" if should_remove else "KEEP"
+            console.print(f"  {feature}: {change_str} → {status}")
+            
+            if should_remove:
+                features_to_remove.append(feature)
+                final_features.discard(feature)
+        
+        # Update best features based on impact analysis
+        best_features_overall = list(final_features)
+        console.print(f"\nFinal feature set: {len(best_features_overall)} features (removed {len(features_to_remove)})")
+        
+        # Recalculate final score with impact-selected features
+        if len(best_features_overall) > 0:
+            impact_data = data_frame[best_features_overall + [target_column]]
+            impact_score = simple_cv_evaluation(
+                impact_data, target_column, model_type, problem_type, 
+                metric_name, cv_splits, random_state
+            )
+            best_score_overall = impact_score
+            console.print(f"Impact analysis score: {impact_score:.4f}")
     
     # PHASE 2: Hyperparameter tuning for best features only
     if use_tuning and len(best_features_overall) > 0:
@@ -641,11 +798,16 @@ def execute_cv_feature_selection(
 class MDMBenchmarkV3:
     """Benchmark MDM generic features with custom backward selection."""
     
-    def __init__(self, output_dir: str = "benchmark_results", use_cache: bool = True, cv_folds: int = 3):
+    def __init__(self, output_dir: str = "benchmark_results", use_cache: bool = True, cv_folds: int = 3, removal_ratio: float = 0.1, tuning_trials: int = 20, use_tuning: bool = True, random_state: int = 42, impact_analysis: bool = False):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.use_cache = use_cache
         self.cv_folds = cv_folds
+        self.removal_ratio = removal_ratio
+        self.tuning_trials = tuning_trials
+        self.use_tuning = use_tuning
+        self.random_state = random_state
+        self.impact_analysis = impact_analysis
         
         # Get MDM components
         self.config_manager = get_config_manager()
@@ -812,9 +974,11 @@ class MDMBenchmarkV3:
                     config['problem_type'],
                     config['metric'],
                     cv_splits=self.cv_folds,
-                    removal_ratio=0.1,
-                    use_tuning=True,
-                    tuning_trials=20
+                    removal_ratio=self.removal_ratio,
+                    use_tuning=self.use_tuning,
+                    tuning_trials=self.tuning_trials,
+                    random_state=self.random_state,
+                    impact_analysis=self.impact_analysis
                 )
                 
                 results['with_features'][model_type] = {
@@ -845,8 +1009,9 @@ class MDMBenchmarkV3:
                     config['metric'],
                     cv_splits=self.cv_folds,  # Use same CV folds as main process
                     removal_ratio=0.0,  # No feature removal
-                    use_tuning=True,
-                    tuning_trials=20
+                    use_tuning=self.use_tuning,
+                    tuning_trials=self.tuning_trials,
+                    random_state=self.random_state
                 )
                 results['without_features'][model_type] = {
                     'mean_score': round(mean_without, 4),
@@ -1028,6 +1193,34 @@ def main():
         default=3,
         help='Number of CV folds (default: 3)'
     )
+    parser.add_argument(
+        '--removal-ratio',
+        type=float,
+        default=0.1,
+        help='Feature removal ratio per iteration (default: 0.1)'
+    )
+    parser.add_argument(
+        '--tuning-trials',
+        type=int,
+        default=20,
+        help='Number of hyperparameter tuning trials (default: 20)'
+    )
+    parser.add_argument(
+        '--no-tuning',
+        action='store_true',
+        help='Disable hyperparameter tuning (Phase 2)'
+    )
+    parser.add_argument(
+        '--random-state',
+        type=int,
+        default=42,
+        help='Random state for reproducibility (default: 42)'
+    )
+    parser.add_argument(
+        '--impact-analysis',
+        action='store_true',
+        help='Use impact analysis mode: remove only features that improve score when removed (forces removal-ratio=1)'
+    )
     
     args = parser.parse_args()
     
@@ -1036,10 +1229,22 @@ def main():
         console.print("Install it with: pip install ydf")
         sys.exit(1)
     
+    # Handle impact analysis mode
+    if args.impact_analysis:
+        removal_ratio = 1.0  # Force removal of 1 feature at a time
+        console.print("[yellow]Impact Analysis Mode: Forcing removal-ratio=1[/yellow]")
+    else:
+        removal_ratio = args.removal_ratio
+    
     benchmark = MDMBenchmarkV3(
         output_dir=args.output_dir,
         use_cache=not args.no_cache,
-        cv_folds=args.cv_folds
+        cv_folds=args.cv_folds,
+        removal_ratio=removal_ratio,
+        tuning_trials=args.tuning_trials,
+        use_tuning=not args.no_tuning,
+        random_state=args.random_state,
+        impact_analysis=args.impact_analysis
     )
     
     benchmark.run_benchmark(competitions=args.competitions)
