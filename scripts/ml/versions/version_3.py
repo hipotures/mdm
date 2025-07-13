@@ -149,6 +149,109 @@ def create_ydf_learner(model_type: str, label: str, task_type=None, **params):
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
+def hyperparameter_tuning(
+    data_frame: pd.DataFrame,
+    target_column: str,
+    model_type: str,
+    problem_type: str,
+    metric_name: str,
+    cv_splits: int = 5,
+    tuning_trials: int = 20,
+    random_state: int = 42
+) -> Tuple[Optional[float], Dict[str, Any]]:
+    """
+    Hyperparameter tuning with cross-validation for the best features.
+    """
+    from sklearn.model_selection import KFold, StratifiedKFold
+    
+    # Determine CV strategy
+    if 'classification' in problem_type:
+        task_type = ydf.Task.CLASSIFICATION
+        cv_strategy = StratifiedKFold(n_splits=cv_splits, shuffle=True, random_state=random_state)
+    else:
+        task_type = ydf.Task.REGRESSION
+        cv_strategy = KFold(n_splits=cv_splits, shuffle=True, random_state=random_state)
+    
+    X = data_frame.drop(columns=[target_column])
+    y = data_frame[target_column]
+    
+    best_score = -float('inf') if metric_name not in ['rmse', 'mae'] else float('inf')
+    best_params = {}
+    
+    for trial in range(tuning_trials):
+        # Random hyperparameter sampling
+        if model_type == 'gbt':
+            trial_params = {
+                'num_trees': np.random.choice([50, 100, 200, 300]),
+                'shrinkage': np.random.choice([0.05, 0.1, 0.2, 0.3])
+            }
+        else:  # rf
+            trial_params = {
+                'num_trees': np.random.choice([50, 100, 200, 300])
+            }
+        
+        # Cross-validation for this parameter set
+        cv_scores = []
+        
+        for train_idx, val_idx in cv_strategy.split(X, y):
+            train_data = data_frame.iloc[train_idx]
+            val_data = data_frame.iloc[val_idx]
+            
+            try:
+                # Train model with trial parameters
+                learner = create_ydf_learner(model_type, target_column, task_type, **trial_params)
+                
+                if model_type == 'rf':
+                    model = train_ydf_silently(learner, train_data)
+                else:
+                    # Split training data for GBT validation
+                    train_subset_size = int(0.8 * len(train_data))
+                    train_subset = train_data.iloc[:train_subset_size]
+                    val_subset = train_data.iloc[train_subset_size:]
+                    model = train_ydf_silently(learner, train_subset, val_subset)
+                
+                # Make predictions
+                if needs_probabilities(metric_name):
+                    predictions = model.predict(val_data)
+                    if problem_type == 'binary_classification':
+                        if hasattr(predictions, 'probability'):
+                            y_pred = predictions.probability(1)
+                        else:
+                            y_pred = predictions
+                    else:
+                        y_pred = predictions
+                else:
+                    predictions = model.predict(val_data)
+                    y_pred = predictions
+                
+                # Calculate score
+                y_true = val_data[target_column].values
+                score = calculate_metric(y_true, y_pred, metric_name, problem_type)
+                cv_scores.append(score)
+                
+            except Exception as e:
+                # Skip failed trials
+                continue
+        
+        if cv_scores:
+            mean_score = np.mean(cv_scores)
+            
+            # Check if this is the best trial
+            is_better = (
+                (metric_name in ['rmse', 'mae'] and mean_score < best_score) or
+                (metric_name not in ['rmse', 'mae'] and mean_score > best_score)
+            )
+            
+            if is_better:
+                best_score = mean_score
+                best_params = trial_params.copy()
+    
+    if best_score == -float('inf') or best_score == float('inf'):
+        return None, {}
+    
+    return best_score, best_params
+
+
 def execute_cv_feature_selection(
     data_frame: pd.DataFrame,
     target_column: str,
@@ -162,11 +265,9 @@ def execute_cv_feature_selection(
     random_state: int = 42
 ) -> Tuple[float, float, List[str], Dict[str, Any]]:
     """
-    Custom backward feature selection with CV inside (3-fold) + tuning inside each fold.
-    
-    ALGORITHM:
-    - Feature selection with CV inside (3-fold) + tuning inside each fold
-    - Return CV score from feature selection as final result (NO additional CV)
+    CORRECT ALGORITHM:
+    1. Feature selection with CV (NO tuning) - Phase 1
+    2. Hyperparameter tuning with CV for best features - Phase 2
     
     Returns:
         Tuple of (mean_score, std_score, best_features, best_hyperparams)
@@ -206,16 +307,10 @@ def execute_cv_feature_selection(
     
     iteration_results = []
     
-    # Start feature selection loop
-    if removal_ratio == 0:
-        console.print(f"\n[bold]Simple Cross-Validation (No Feature Selection)[/bold]")
-        tuning_info = f" ({tuning_trials} trials)" if use_tuning else ""
-        console.print(f"Features: {len(current_features)}, CV folds: {cv_splits}, Tuning: {use_tuning}{tuning_info}")
-    else:
-        console.print(f"\n[bold]Custom Backward Feature Selection[/bold]")
-        console.print(f"Starting with {len(current_features)} features")
-        tuning_info = f" ({tuning_trials} trials per fold)" if use_tuning else ""
-        console.print(f"CV folds: {cv_splits}, Removal ratio: {removal_ratio}, Tuning: {use_tuning}{tuning_info}")
+    # PHASE 1: Feature selection with CV (NO tuning)
+    console.print(f"\n[bold]PHASE 1: Feature Selection with CV (No Tuning)[/bold]")
+    console.print(f"Starting with {len(current_features)} features")
+    console.print(f"CV folds: {cv_splits}, Removal ratio: {removal_ratio}")
     
     with Live(progress_table, refresh_per_second=4, console=console) as live_display:
         
@@ -244,8 +339,15 @@ def execute_cv_feature_selection(
             for train_indices, validation_indices in cv_strategy.split(X_temp, y_temp):
                 fold_idx += 1
                 
-                # Simple single spinner during processing
-                cv_progress_display = "●●●"
+                # Original spinner with circles
+                cv_progress_display = ""
+                for i in range(cv_splits):
+                    if i < fold_idx - 1:
+                        cv_progress_display += "●"  # Completed: ●
+                    elif i == fold_idx - 1:
+                        cv_progress_display += "◉"  # Current: ◉
+                    else:
+                        cv_progress_display += "◯"  # Pending: ◯
                 
                 # Update table row
                 if iteration_count <= len(iteration_results) + 1:
@@ -256,7 +358,7 @@ def execute_cv_feature_selection(
                             "-",
                             "-",
                             "-",
-                            "Running"
+                            "Training"
                         ]
                     else:
                         iteration_results.append([
@@ -265,7 +367,7 @@ def execute_cv_feature_selection(
                             "-",
                             "-",
                             "-",
-                            "Running"
+                            "Training"
                         ])
                 
                 # Rebuild table
@@ -281,138 +383,50 @@ def execute_cv_feature_selection(
                     new_table.add_row(*row)
                 
                 live_display.update(new_table)
-                time.sleep(0.1)
+                time.sleep(0.3)
                 
                 # Split data for this fold
                 train_data_fold = current_data.iloc[train_indices]
                 validation_data_fold = current_data.iloc[validation_indices]
                 
-                # Hyperparameter tuning if enabled
-                fold_best_score = -float('inf') if metric_name not in ['rmse', 'mae'] else float('inf')
-                fold_best_params = {}
-                
-                tuning_iterations = tuning_trials if use_tuning else 1
-                for trial_idx in range(tuning_iterations):
-                    # Use only CV progress, no tuning spinner
-                    cv_progress_with_tuning = cv_progress_display
+                # PHASE 1: Simple CV evaluation (NO tuning)
+                try:
+                    # Create simple model with default parameters
+                    learner = create_ydf_learner(model_type, target_column, task_type)
                     
-                    # Update table with tuning progress
-                    if len(iteration_results) >= iteration_count:
-                        iteration_results[iteration_count-1] = [
-                            f"{iteration_count} {cv_progress_with_tuning}",
-                            str(len(current_features)),
-                            "-",
-                            "-",
-                            "-",
-                            "Tuning" if use_tuning else "Running"
-                        ]
-                        
-                        # Rebuild table
-                        tuning_table = Table(title="Custom Backward Feature Selection Progress")
-                        tuning_table.add_column("Iteration", style="cyan", justify="right")
-                        tuning_table.add_column("Features", style="magenta")
-                        tuning_table.add_column("Score", style="green")
-                        tuning_table.add_column("Accuracy", style="green")
-                        tuning_table.add_column("Loss", style="red")
-                        tuning_table.add_column("Status", style="blue")
-                        
-                        for row in iteration_results:
-                            tuning_table.add_row(*row)
-                        
-                        live_display.update(tuning_table)
-                        time.sleep(0.05)
-                    try:
-                        if use_tuning:
-                            # Simplified hyperparameter sampling - only safe parameters
-                            if model_type == 'gbt':
-                                trial_params = {
-                                    'num_trees': np.random.choice([50, 100, 200]),
-                                    'shrinkage': np.random.choice([0.1, 0.2])
-                                }
-                            else:  # rf
-                                trial_params = {
-                                    'num_trees': np.random.choice([50, 100, 200])
-                                }
-                        else:
-                            trial_params = {}
-                        
-                        # Create and train model
-                        learner = create_ydf_learner(model_type, target_column, task_type, **trial_params)
-                        
-                        # For RF, don't use validation data (use OOB)
-                        if model_type == 'rf':
-                            model = train_ydf_silently(learner, train_data_fold)
-                        else:
-                            # Split training data for GBT validation
-                            train_subset_size = int(0.8 * len(train_data_fold))
-                            train_subset = train_data_fold.iloc[:train_subset_size]
-                            val_subset = train_data_fold.iloc[train_subset_size:]
-                            model = train_ydf_silently(learner, train_subset, val_subset)
-                        
-                        # Make predictions
-                        if needs_probabilities(metric_name):
-                            predictions = model.predict(validation_data_fold)
-                            if problem_type == 'binary_classification':
-                                if hasattr(predictions, 'probability'):
-                                    y_pred = predictions.probability(1)
-                                else:
-                                    y_pred = predictions
+                    # For RF, don't use validation data (use OOB)
+                    if model_type == 'rf':
+                        model = train_ydf_silently(learner, train_data_fold)
+                    else:
+                        # Split training data for GBT validation
+                        train_subset_size = int(0.8 * len(train_data_fold))
+                        train_subset = train_data_fold.iloc[:train_subset_size]
+                        val_subset = train_data_fold.iloc[train_subset_size:]
+                        model = train_ydf_silently(learner, train_subset, val_subset)
+                    
+                    # Make predictions
+                    if needs_probabilities(metric_name):
+                        predictions = model.predict(validation_data_fold)
+                        if problem_type == 'binary_classification':
+                            if hasattr(predictions, 'probability'):
+                                y_pred = predictions.probability(1)
                             else:
                                 y_pred = predictions
                         else:
-                            predictions = model.predict(validation_data_fold)
                             y_pred = predictions
-                        
-                        # Calculate score
-                        y_true = validation_data_fold[target_column].values
-                        trial_score = calculate_metric(y_true, y_pred, metric_name, problem_type)
-                        
-                        # Check if this is the best trial for this fold
-                        is_better = (
-                            (metric_name in ['rmse', 'mae'] and trial_score < fold_best_score) or
-                            (metric_name not in ['rmse', 'mae'] and trial_score > fold_best_score)
-                        )
-                        
-                        if is_better:
-                            fold_best_score = trial_score
-                            fold_best_params = trial_params.copy()
+                    else:
+                        predictions = model.predict(validation_data_fold)
+                        y_pred = predictions
                     
-                    except Exception as e:
-                        # Skip failed trials
-                        continue
-                
-                # Only add score if we got a valid result
-                if fold_best_score != -float('inf') and fold_best_score != float('inf'):
-                    cv_fold_scores.append(fold_best_score)
-                    cv_hyperparams.append(fold_best_params)
-                else:
-                    # Train a simple model without tuning as fallback
-                    try:
-                        simple_learner = create_ydf_learner(model_type, target_column, task_type)
-                        simple_model = train_ydf_silently(simple_learner, train_data_fold)
-                        
-                        if needs_probabilities(metric_name):
-                            predictions = simple_model.predict(validation_data_fold)
-                            if problem_type == 'binary_classification':
-                                if hasattr(predictions, 'probability'):
-                                    y_pred = predictions.probability(1)
-                                else:
-                                    y_pred = predictions
-                            else:
-                                y_pred = predictions
-                        else:
-                            predictions = simple_model.predict(validation_data_fold)
-                            y_pred = predictions
-                        
-                        y_true = validation_data_fold[target_column].values
-                        fallback_score = calculate_metric(y_true, y_pred, metric_name, problem_type)
-                        cv_fold_scores.append(fallback_score)
-                        cv_hyperparams.append({})
-                    except Exception as e:
-                        # Last resort fallback
-                        default_score = 0.5 if metric_name not in ['rmse', 'mae'] else 1.0
-                        cv_fold_scores.append(default_score)
-                        cv_hyperparams.append({})
+                    # Calculate score
+                    y_true = validation_data_fold[target_column].values
+                    fold_score = calculate_metric(y_true, y_pred, metric_name, problem_type)
+                    cv_fold_scores.append(fold_score)
+                    
+                except Exception as e:
+                    # Fallback score
+                    default_score = 0.5 if metric_name not in ['rmse', 'mae'] else 1.0
+                    cv_fold_scores.append(default_score)
             
             # Calculate mean and std for current iteration
             current_mean = np.mean(cv_fold_scores)
@@ -427,18 +441,8 @@ def execute_cv_feature_selection(
             if is_best_iteration:
                 best_score_overall = current_mean
                 best_features_overall = list(current_features)
-                # Average hyperparameters across folds
-                if cv_hyperparams and any(cv_hyperparams):
-                    best_hyperparams_overall = {}
-                    for key in cv_hyperparams[0].keys():
-                        values = [hp.get(key) for hp in cv_hyperparams if hp.get(key) is not None]
-                        if values:
-                            if isinstance(values[0], (int, float)):
-                                best_hyperparams_overall[key] = np.mean(values)
-                            else:
-                                # For categorical parameters, take the most common
-                                from collections import Counter
-                                best_hyperparams_overall[key] = Counter(values).most_common(1)[0][0]
+                # No hyperparameters in Phase 1
+                pass
             
             # Update final results for this iteration
             final_cv_progress = "●●●"  # Simple single spinner
@@ -556,14 +560,56 @@ def execute_cv_feature_selection(
                         if feature in current_features:
                             current_features.remove(feature)
     
-    # Return results from best iteration
-    final_mean_score = best_score_overall
-    final_std_score = 0.0  # We don't track std for the best iteration in this simplified version
+    # PHASE 2: Hyperparameter tuning for best features only
+    if use_tuning and len(best_features_overall) > 0:
+        console.print(f"\n[bold]PHASE 2: Hyperparameter Tuning for Best Features ({len(best_features_overall)} features)[/bold]")
+        
+        # Update table to show tuning phase
+        iteration_results.append([
+            "Tuning ●●●",
+            str(len(best_features_overall)),
+            "-",
+            "-",
+            "-",
+            "Tuning"
+        ])
+        
+        final_table = Table(title="Custom Backward Feature Selection Progress")
+        final_table.add_column("Iteration", style="cyan", justify="right")
+        final_table.add_column("Features", style="magenta")
+        final_table.add_column("Score", style="green")
+        final_table.add_column("Accuracy", style="green")
+        final_table.add_column("Loss", style="red")
+        final_table.add_column("Status", style="blue")
+        
+        for row in iteration_results:
+            final_table.add_row(*row)
+        
+        live_display.update(final_table)
+        
+        # Prepare data with only best features
+        best_data = data_frame[best_features_overall + [target_column]]
+        
+        # Hyperparameter tuning with CV
+        tuned_score, best_hyperparams = hyperparameter_tuning(
+            best_data, target_column, model_type, problem_type, metric_name, 
+            cv_splits, tuning_trials, random_state
+        )
+        
+        if tuned_score is not None:
+            final_mean_score = tuned_score
+            best_hyperparams_overall = best_hyperparams
+            console.print(f"Phase 2 complete. Tuned score: {final_mean_score:.4f}")
+        else:
+            final_mean_score = best_score_overall
+            console.print(f"Phase 2 failed. Using Phase 1 score: {final_mean_score:.4f}")
+    else:
+        final_mean_score = best_score_overall
+        console.print(f"\n[bold]Feature Selection Complete (No Tuning)[/bold]")
+        console.print(f"Best iteration had {len(best_features_overall)} features")
+        console.print(f"Best score: {final_mean_score:.4f}")
     
-    console.print(f"\n[bold]Feature Selection Complete[/bold]")
-    console.print(f"Best iteration had {len(best_features_overall)} features")
-    console.print(f"Best score: {final_mean_score:.4f}")
-    
+    final_std_score = 0.0
     return final_mean_score, final_std_score, best_features_overall, best_hyperparams_overall
 
 
