@@ -98,8 +98,13 @@ def _train_silently(learner, train_data, valid_data=None, verbose=0, show_table=
             elif hasattr(fs, 'objective_metric'):
                 obj_metric = fs.objective_metric
                 
+            # Get removal parameters - check for both removal_count and removal_ratio
+            removal_count = getattr(fs, '_removal_count', getattr(fs, 'removal_count', None))
+            removal_ratio = getattr(fs, '_removal_ratio', getattr(fs, 'removal_ratio', None))
+            
             learner_params['feature_selector_config'] = {
-                'removal_ratio': getattr(fs, '_removal_ratio', getattr(fs, 'removal_ratio', 0.2)),
+                'removal_count': removal_count,
+                'removal_ratio': removal_ratio,
                 'objective_metric': obj_metric,
                 'maximize_objective': getattr(fs, '_maximize_objective', getattr(fs, 'maximize_objective', True))
             }
@@ -138,11 +143,16 @@ with open('{log_path}', 'w', buffering=1) as log_file:
         feature_selector = None
         if 'feature_selector_config' in config['learner_params']:
             fs_config = config['learner_params']['feature_selector_config']
-            feature_selector = ydf.BackwardSelectionFeatureSelector(
-                removal_ratio=fs_config['removal_ratio'],
-                objective_metric=fs_config['objective_metric'],
-                maximize_objective=fs_config['maximize_objective']
-            )
+            # Use removal_count or removal_ratio based on what's available
+            fs_params = {{
+                'objective_metric': fs_config['objective_metric'],
+                'maximize_objective': fs_config['maximize_objective']
+            }}
+            if fs_config.get('removal_count') is not None:
+                fs_params['removal_count'] = fs_config['removal_count']
+            elif fs_config.get('removal_ratio') is not None:
+                fs_params['removal_ratio'] = fs_config['removal_ratio']
+            feature_selector = ydf.BackwardSelectionFeatureSelector(**fs_params)
         
         # Create learner with all parameters
         params = config['learner_params'].copy()
