@@ -3,6 +3,14 @@
 from typing import Dict, Any
 
 COMPETITIONS: Dict[str, Dict[str, Any]] = {
+    'simple_benchmark': {
+        'path': '/tmp/simple_benchmark',
+        'target': 'target',
+        'problem_type': 'binary_classification',
+        'metric': 'accuracy',
+        'id_column': 'id',
+        'description': 'Simple synthetic benchmark dataset'
+    },
     'titanic': {
         'path': '/home/xai/DEV/mdm/scripts/ml/competitions/Titanic',
         'target': 'Survived',
@@ -51,14 +59,6 @@ COMPETITIONS: Dict[str, Dict[str, Any]] = {
         'id_column': 'id',
         'description': 'Student outcome prediction (Graduate/Dropout/Enrolled)'
     },
-    'playground-s4e10': {
-        'path': '/home/xai/DEV/mdm/scripts/ml/competitions/playground-series-s4e10',
-        'target': 'loan_status',
-        'problem_type': 'binary_classification',
-        'metric': 'roc_auc',
-        'id_column': 'id',
-        'description': 'Loan default prediction'
-    },
     'playground-s4e11': {
         'path': '/home/xai/DEV/mdm/scripts/ml/competitions/playground-series-s4e11',
         'target': 'Depression',
@@ -74,6 +74,14 @@ COMPETITIONS: Dict[str, Dict[str, Any]] = {
         'metric': 'rmse',
         'id_column': 'id',
         'description': 'Insurance premium prediction'
+    },
+    'playground-s4e10': {
+        'path': '/mnt/ml/competitions/playground-series-s4e10',
+        'target': 'loan_status',
+        'problem_type': 'binary_classification',
+        'metric': 'roc_auc',
+        'id_column': 'id',
+        'description': 'Loan default prediction'
     },
     'playground-s5e1': {
         'path': '/home/xai/DEV/mdm/scripts/ml/competitions/playground-series-s5e1/data',
