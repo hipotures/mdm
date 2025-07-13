@@ -1,5 +1,6 @@
 """YDF (Yggdrasil Decision Forests) helper functions."""
 
+import ydf
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any, Union
@@ -337,20 +338,6 @@ try:
     HAS_YDF = True
 except ImportError:
     HAS_YDF = False
-    # Create placeholder classes to avoid import errors
-    class YDFPlaceholder:
-        Task = type('Task', (), {
-            'CLASSIFICATION': 'CLASSIFICATION',
-            'REGRESSION': 'REGRESSION'
-        })()
-        
-        def GradientBoostedTreesLearner(self, **kwargs):
-            raise ImportError("YDF not installed. Run: pip install ydf")
-        
-        def RandomForestLearner(self, **kwargs):
-            raise ImportError("YDF not installed. Run: pip install ydf")
-    
-    ydf = YDFPlaceholder()
 
 
 def create_learner(
