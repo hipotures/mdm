@@ -425,7 +425,38 @@ class DatasetRegistrar:
         if detected_info.get('structure') == 'kaggle':
             if 'test' in files and 'sample_submission' in files:
                 # Read test columns for validation
-                test_df = pd.read_csv(files['test'], nrows=5)
+                # Try to detect encoding first
+                encoding = 'utf-8'
+                try:
+                    import chardet
+                    with open(files['test'], 'rb') as fb:
+                        raw_data = fb.read(10000)
+                        result = chardet.detect(raw_data)
+                        if result['encoding'] and result['confidence'] > 0.7:
+                            encoding = result['encoding']
+                except:
+                    pass
+                
+                try:
+                    logger.debug(f"Reading test file: {files['test']}")
+                    logger.debug(f"Using encoding: {encoding}")
+                    
+                    # Check file extension to use appropriate reader
+                    test_file = files['test']
+                    if test_file.suffix.lower() == '.parquet':
+                        test_df = pd.read_parquet(test_file).head(5)
+                    elif test_file.suffix.lower() in ['.xlsx', '.xls']:
+                        test_df = pd.read_excel(test_file, nrows=5)
+                    else:
+                        # CSV/TSV files
+                        test_df = pd.read_csv(files['test'], nrows=5, encoding=encoding, encoding_errors='replace')
+                    
+                    logger.debug(f"Test columns: {list(test_df.columns)}")
+                except Exception as e:
+                    logger.error(f"Failed to read test file {files['test']}: {e}")
+                    import traceback
+                    logger.debug(f"Traceback: {traceback.format_exc()}")
+                    raise
                 is_valid, error = validate_kaggle_submission_format(
                     list(test_df.columns),
                     files['sample_submission']

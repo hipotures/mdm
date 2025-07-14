@@ -253,7 +253,22 @@ class DatasetStructureDetector:
         submission_path = path / 'sample_submission.csv'
         if submission_path.exists():
             try:
-                df = pd.read_csv(submission_path, nrows=5)
+                # Try to detect encoding first
+                encoding = 'utf-8'
+                try:
+                    import chardet
+                    with open(submission_path, 'rb') as fb:
+                        raw_data = fb.read(10000)
+                        result = chardet.detect(raw_data)
+                        if result['encoding'] and result['confidence'] > 0.7:
+                            encoding = result['encoding']
+                except:
+                    pass
+                
+                logger.debug(f"Reading submission file: {submission_path}")
+                logger.debug(f"Using encoding: {encoding}")
+                df = pd.read_csv(submission_path, nrows=5, encoding=encoding, encoding_errors='replace')
+                logger.debug(f"Submission columns: {list(df.columns)}")
                 # First column is usually ID, second is target
                 if len(df.columns) >= 2:
                     features['id_column'] = df.columns[0]

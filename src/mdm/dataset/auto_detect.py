@@ -5,6 +5,7 @@ from loguru import logger
 import re
 from pathlib import Path
 from typing import Any, Optional, Tuple
+import chardet
 
 
 
@@ -46,7 +47,19 @@ def extract_target_from_sample_submission(path: Path) -> Optional[str]:
         return None
 
     try:
-        with open(path, encoding='utf-8') as f:
+        # Try to detect encoding first
+        encoding = 'utf-8'
+        try:
+            with open(path, 'rb') as fb:
+                import chardet
+                raw_data = fb.read(10000)
+                result = chardet.detect(raw_data)
+                if result['encoding'] and result['confidence'] > 0.7:
+                    encoding = result['encoding']
+        except:
+            pass
+        
+        with open(path, encoding=encoding, errors='replace') as f:
             reader = csv.reader(f)
             headers = next(reader, None)
 
@@ -67,6 +80,8 @@ def extract_target_from_sample_submission(path: Path) -> Optional[str]:
 
     except Exception as e:
         logger.warning(f"Failed to read sample_submission.csv: {e}")
+        import traceback
+        logger.debug(f"Traceback: {traceback.format_exc()}")
 
     return None
 
@@ -270,8 +285,9 @@ def discover_data_files(path: Path, extensions: Optional[list[str]] = None) -> d
         Dictionary mapping file type to path
     """
     if extensions is None:
-        extensions = ['.csv', '.parquet', '.json', '.tsv', '.xlsx', '.xls', 
-                     '.csv.gz', '.tsv.gz']
+        # CSV first, then other formats
+        extensions = ['.csv', '.tsv', '.csv.gz', '.tsv.gz', 
+                     '.parquet', '.json', '.xlsx', '.xls']
 
     files = {}
 
@@ -327,7 +343,19 @@ def validate_kaggle_submission_format(
         return True, None  # Can't validate without sample
 
     try:
-        with open(sample_submission_path, encoding='utf-8') as f:
+        # Try to detect encoding first
+        encoding = 'utf-8'
+        try:
+            with open(sample_submission_path, 'rb') as fb:
+                import chardet
+                raw_data = fb.read(10000)
+                result = chardet.detect(raw_data)
+                if result['encoding'] and result['confidence'] > 0.7:
+                    encoding = result['encoding']
+        except:
+            pass
+        
+        with open(sample_submission_path, encoding=encoding, errors='replace') as f:
             reader = csv.reader(f)
             submission_columns = next(reader, None)
 
@@ -342,14 +370,18 @@ def validate_kaggle_submission_format(
         return True, None
 
     except Exception as e:
+        import traceback
+        logger.error(f"Failed to validate submission format: {e}")
+        logger.debug(f"Traceback: {traceback.format_exc()}")
         return False, f"Failed to validate submission format: {e}"
 
 
-def detect_delimiter(file_path: Path) -> str:
+def detect_delimiter(file_path: Path, encoding: str = 'utf-8') -> str:
     """Detect delimiter for CSV-like files.
     
     Args:
         file_path: Path to file
+        encoding: File encoding to use (default: 'utf-8')
         
     Returns:
         Detected delimiter (default: ',')
@@ -358,7 +390,7 @@ def detect_delimiter(file_path: Path) -> str:
         return '\t'
 
     try:
-        with open(file_path, encoding='utf-8') as f:
+        with open(file_path, encoding=encoding, errors='replace') as f:
             sample = f.read(1024)
             sniffer = csv.Sniffer()
             delimiter = sniffer.sniff(sample).delimiter
