@@ -65,7 +65,7 @@ ruff check src/ && black src/ tests/ --line-length 100 --check && mypy src/mdm
 ### Common MDM Commands
 ```bash
 # Register dataset
-mdm dataset register <name> <path> [--target <col>] [--problem-type <type>] [--force]
+mdm dataset register <name> <path> [--target <col>] [--problem-type <type>] [--force] [--no-features]
 
 # List datasets
 mdm dataset list [--limit N] [--sort-by name|registration_date|size]
@@ -73,7 +73,7 @@ mdm dataset list [--limit N] [--sort-by name|registration_date|size]
 # Dataset operations
 mdm dataset info <name>
 mdm dataset stats <name>
-mdm dataset export <name> [--format csv|parquet|json] [--output <path>] [--compression gzip|zip]
+mdm dataset export <name> [--format csv|parquet|json] [--output-dir <path>] [--compression none|gzip|zip]
 mdm dataset remove <name> [--force]
 mdm dataset update <name> [--description "text"] [--tags "tag1,tag2"] [--problem-type type]
 mdm dataset search <pattern> [--tag <tag>]
@@ -89,6 +89,11 @@ mdm version
 MDM uses a two-tier database system:
 1. **Dataset-Specific Databases**: Each dataset has its own SQLite/DuckDB/PostgreSQL database in `~/.mdm/datasets/{name}/`
 2. **Discovery Mechanism**: YAML configuration files in `~/.mdm/config/datasets/` serve as lightweight pointers
+
+### Database File Naming
+- **Primary database file**: `{dataset_name}.sqlite` (contains all data and features)
+- **Secondary file**: `dataset.db` (may be empty or a symlink)
+- Configuration points to the primary file via `database.path`
 
 ### Single Backend Principle
 - MDM uses ONE backend type for all datasets at any time
@@ -125,7 +130,7 @@ MDM uses a two-tier database system:
 7. Creates storage backend
 8. Loads data with batch processing (10k rows per chunk)
 9. Detects column types using ydata-profiling
-10. Generates features
+10. Generates features (can be skipped with --no-features)
 11. Computes statistics
 12. Saves configuration
 
@@ -150,8 +155,15 @@ MDM uses a two-tier database system:
 - Log level: DEBUG shows all operations including batch processing
 - Console output: WARNING and above only (clean CLI experience)
 - Interceptor pattern used to unify standard logging with loguru
+- Log files located in `~/.mdm/logs/`
 
 ## Recent Improvements (2025-07)
+
+### Encoding Support (v1.0.6)
+- Automatic encoding detection using chardet for non-UTF8 files
+- Support for Latin-1, Windows-1252, and other common encodings
+- Intelligent file format detection (CSV, Parquet, Excel)
+- Proper error handling for malformed CSV files
 
 ### Performance Optimizations
 - CLI startup time reduced from 6.5s to 0.1s using lazy loading
@@ -180,6 +192,10 @@ MDM uses a two-tier database system:
 2. **--id-columns with multiple values**: Similar error when specifying multiple columns
 3. **SQLite synchronous setting**: Always FULL instead of configured NORMAL
 4. **Custom features**: Not loaded from `~/.mdm/config/custom_features/`
+
+### File Discovery Priority
+- CSV files are now prioritized over Parquet files during discovery
+- If both exist, CSV will be used unless Parquet is explicitly specified
 
 ### Missing Features
 - Many CLI options in test checklist don't exist (--source, --datetime-columns, etc.)
@@ -222,6 +238,34 @@ When fixing tests:
 - Use appropriate timeouts for performance tests (10s default)
 - E2E tests may be slow due to ydata-profiling - use --no-features flag for speed
 
+## Feature Generation
+
+### Generic Features
+MDM automatically generates ~90+ features including:
+- Statistical aggregations (mean, std, ratios)
+- Frequency-based features for categorical columns
+- Interaction features between numeric columns
+- Time-based features if datetime columns detected
+
+### Feature Generation Time
+- Small datasets (<100k rows): 2-5 minutes
+- Medium datasets (100k-1M rows): 10-30 minutes
+- Large datasets (>1M rows): Can take hours
+- Use `--no-features` flag to skip feature generation
+
+### Export Functionality
+```bash
+# Export dataset with features
+mdm dataset export <name> --output-dir ./exports --format parquet
+
+# Export creates:
+# - {name}_train.parquet
+# - {name}_train_features.parquet
+# - {name}_test.parquet
+# - {name}_test_features.parquet
+# - {name}_metadata.json
+```
+
 ## Useful Files for Context
 - `docs/03_Database_Architecture.md`: Authoritative backend selection explanation
 - `docs/Architecture_Decisions.md`: ADRs for key design choices
@@ -229,5 +273,5 @@ When fixing tests:
 - `docs/MANUAL_TEST_CHECKLIST.md`: 617-item comprehensive test checklist
 - `MDM_Architecture_Analysis_Report.md`: Comprehensive architecture analysis
 - `CHANGELOG.md`: Recent changes and version history
-- `pyproject.toml`: Dependencies and project metadata
+- `pyproject.toml`: Dependencies and project metadata (currently v1.0.6)
 - `scripts/check_test_imports.py`: Pre-commit hook for test imports

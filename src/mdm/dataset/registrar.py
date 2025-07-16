@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
 
 import pandas as pd
 import yaml
@@ -21,8 +22,13 @@ from mdm.dataset.auto_detect import (
     validate_kaggle_submission_format,
 )
 from mdm.dataset.manager import DatasetManager
+from mdm.dataset.metadata import (
+    create_metadata_tables,
+    store_column_metadata,
+    store_dataset_statistics
+)
 from mdm.features.generator import FeatureGenerator
-from mdm.models.dataset import DatasetInfo
+from mdm.models.dataset import DatasetInfo, ColumnInfo, DatasetStatistics
 from mdm.models.enums import ColumnType
 from mdm.storage.factory import BackendFactory
 from mdm.utils.serialization import serialize_for_yaml
@@ -52,6 +58,7 @@ class DatasetRegistrar:
         self.base_path = config_manager.base_path
         self.feature_generator = FeatureGenerator()
         self._detected_datetime_columns = []
+        self._detected_column_stats = {}
         self.monitor = SimpleMonitor()
         
         # Initialize file loader registry
@@ -212,6 +219,15 @@ class DatasetRegistrar:
         """Analyze columns with progress tracking."""
         task = progress.add_task("Analyzing columns and data types...", total=None)
         column_info = self._analyze_columns(db_info, table_mappings)
+        
+        # Detect column types with ydata-profiling for the main table
+        if 'train' in table_mappings:
+            self._detect_column_types_for_table(
+                db_info, 
+                table_mappings['train'],
+                column_info.get('train', {})
+            )
+        
         progress.update(task, completed=True, visible=False)
         return column_info
     
@@ -307,6 +323,15 @@ class DatasetRegistrar:
         statistics = self._compute_initial_statistics(normalized_name, db_info, table_mappings)
         if statistics:
             dataset_info.metadata['statistics'] = statistics
+        
+        # Step 11.7: Create metadata tables and store column types
+        self._store_metadata_in_database(
+            normalized_name, 
+            db_info, 
+            table_mappings, 
+            column_info,
+            statistics
+        )
         
         # Step 12: Save registration
         self.manager.register_dataset(dataset_info)
@@ -613,9 +638,7 @@ class DatasetRegistrar:
                 
                 table_mappings[file_key] = table_name
                 
-                # Store detected column types and datetime columns
-                if loader.detected_column_types:
-                    self._detected_column_types.update(loader.detected_column_types)
+                # Store detected datetime columns (but not column types - we'll detect those later)
                 if loader.detected_datetime_columns:
                     self._detected_datetime_columns.extend(
                         col for col in loader.detected_datetime_columns 
@@ -1382,3 +1405,239 @@ class DatasetRegistrar:
         finally:
             if backend and hasattr(backend, 'close_connections'):
                 backend.close_connections()
+    
+    def _detect_column_types_for_table(
+        self,
+        db_info: Dict[str, Any],
+        table_name: str,
+        table_info: Dict[str, Any]
+    ) -> None:
+        """Detect column types using ydata-profiling for a specific table."""
+        try:
+            # Get sample data
+            sample_data = table_info.get('sample_data', {})
+            if not sample_data:
+                logger.warning(f"No sample data available for table {table_name}")
+                return
+            
+            # Convert to DataFrame
+            df = pd.DataFrame(sample_data)
+            if df.empty:
+                logger.warning(f"Empty DataFrame for table {table_name}")
+                return
+            
+            # Clear any existing types from loader
+            self._detected_column_types.clear()
+            
+            # Detect types with ydata-profiling
+            logger.info(f"Detecting column types for table {table_name} with ydata-profiling")
+            
+            # Temporarily disable tqdm progress bars
+            import os
+            import sys
+            from io import StringIO
+            from unittest.mock import patch
+            import tqdm
+            
+            old_tqdm = os.environ.get('TQDM_DISABLE')
+            os.environ['TQDM_DISABLE'] = '1'
+            
+            # Also redirect stdout to suppress other output
+            old_stdout = sys.stdout
+            sys.stdout = StringIO()
+            
+            # Patch tqdm to disable it completely
+            original_tqdm = tqdm.tqdm
+            original_trange = tqdm.trange
+            tqdm.tqdm = lambda *args, **kwargs: args[0] if args else None
+            tqdm.trange = lambda *args, **kwargs: range(*args)
+            
+            try:
+                with patch('tqdm.auto.tqdm', lambda *args, **kwargs: args[0] if args else None):
+                    profile = ProfileReport(
+                        df.head(1000),  # Use sample for performance
+                        minimal=True,
+                        pool_size=1,
+                        progress_bar=False,
+                        html={'style': {'full_width': True}},
+                        duplicates=None,
+                        samples=None
+                    )
+            finally:
+                # Restore tqdm and stdout
+                tqdm.tqdm = original_tqdm
+                tqdm.trange = original_trange
+                sys.stdout = old_stdout
+                
+                # Restore TQDM setting
+                if old_tqdm is None:
+                    os.environ.pop('TQDM_DISABLE', None)
+                else:
+                    os.environ['TQDM_DISABLE'] = old_tqdm
+            
+            # Extract column types and statistics
+            description = profile.get_description()
+            variables = description.variables
+            
+            # Store full column info including statistics
+            self._detected_column_stats = {}
+            
+            for col_name, var_info in variables.items():
+                if isinstance(var_info, dict):
+                    var_type = var_info.get('type', 'Unsupported')
+                else:
+                    var_type = getattr(var_info, 'type', 'Unsupported')
+                
+                # Store the detected type
+                self._detected_column_types[col_name] = var_type
+                
+                # Extract statistics for numeric columns
+                col_stats = {
+                    'type': var_type,
+                    'missing_count': getattr(var_info, 'n_missing', 0) if hasattr(var_info, 'n_missing') else var_info.get('n_missing', 0) if isinstance(var_info, dict) else 0,
+                    'missing_ratio': getattr(var_info, 'p_missing', 0.0) if hasattr(var_info, 'p_missing') else var_info.get('p_missing', 0.0) if isinstance(var_info, dict) else 0.0,
+                    'unique_count': getattr(var_info, 'n_unique', 0) if hasattr(var_info, 'n_unique') else var_info.get('n_unique', 0) if isinstance(var_info, dict) else 0,
+                }
+                
+                # Add numeric statistics if available
+                if var_type == 'Numeric':
+                    col_stats.update({
+                        'min': getattr(var_info, 'min', None) if hasattr(var_info, 'min') else var_info.get('min', None) if isinstance(var_info, dict) else None,
+                        'max': getattr(var_info, 'max', None) if hasattr(var_info, 'max') else var_info.get('max', None) if isinstance(var_info, dict) else None,
+                        'mean': getattr(var_info, 'mean', None) if hasattr(var_info, 'mean') else var_info.get('mean', None) if isinstance(var_info, dict) else None,
+                        'std': getattr(var_info, 'std', None) if hasattr(var_info, 'std') else var_info.get('std', None) if isinstance(var_info, dict) else None,
+                    })
+                
+                self._detected_column_stats[col_name] = col_stats
+                
+            logger.info(f"Detected {len(self._detected_column_types)} column types with statistics")
+            
+        except Exception as e:
+            logger.warning(f"Failed to detect column types with ydata-profiling: {e}")
+            # Fallback to basic type detection
+            self._detect_column_types_fallback(table_info)
+    
+    def _detect_column_types_fallback(self, table_info: Dict[str, Any]) -> None:
+        """Fallback method to detect column types based on dtypes."""
+        sample_data = table_info.get('sample_data', {})
+        if not sample_data:
+            return
+            
+        df = pd.DataFrame(sample_data)
+        for col in df.columns:
+            dtype = str(df[col].dtype)
+            if 'int' in dtype or 'float' in dtype:
+                self._detected_column_types[col] = 'Numeric'
+            elif 'datetime' in dtype:
+                self._detected_column_types[col] = 'DateTime'
+            else:
+                self._detected_column_types[col] = 'Categorical'
+    
+    def _map_detected_type_to_enum(self, detected_type: str) -> ColumnType:
+        """Map ydata-profiling detected type to ColumnType enum."""
+        type_mapping = {
+            'NUMERIC': ColumnType.NUMERIC,
+            'CATEGORICAL': ColumnType.CATEGORICAL,
+            'DATETIME': ColumnType.DATETIME,
+            'BOOLEAN': ColumnType.BINARY,
+            'TEXT': ColumnType.TEXT,
+            'URL': ColumnType.TEXT,
+            'PATH': ColumnType.TEXT,
+            'FILE': ColumnType.TEXT,
+            'IMAGE': ColumnType.TEXT,
+            'UNSUPPORTED': ColumnType.TEXT
+        }
+        # Convert to uppercase for consistent mapping
+        upper_type = detected_type.upper() if detected_type else 'TEXT'
+        return type_mapping.get(upper_type, ColumnType.TEXT)
+    
+    def _store_metadata_in_database(
+        self,
+        dataset_name: str,
+        db_info: Dict[str, Any],
+        table_mappings: Dict[str, str],
+        column_info: Dict[str, Any],
+        statistics: Optional[Dict[str, Any]]
+    ) -> None:
+        """Create metadata tables and store column information in database."""
+        try:
+            # Get backend and engine
+            backend = BackendFactory.create(db_info['backend'], db_info)
+            engine = backend.get_engine(db_info['path'])
+            
+            # Create metadata tables
+            create_metadata_tables(engine)
+            logger.info("Created metadata tables in dataset database")
+            
+            # Store column metadata for all tables (including feature tables)
+            for table_type, table_name in table_mappings.items():
+                columns = []
+                
+                # Get column info for this table type
+                table_info = column_info.get(table_type, {})
+                if not table_info or 'columns' not in table_info:
+                    logger.warning(f"No column info found for table type {table_type}")
+                    continue
+                
+                # Extract actual column definitions
+                table_columns = table_info.get('columns', {})
+                sample_data = table_info.get('sample_data', {})
+                
+                for col_name, col_type in table_columns.items():
+                    # Get detected type from ydata-profiling results
+                    detected_type = self._detected_column_types.get(col_name, 'TEXT')
+                    column_type_enum = self._map_detected_type_to_enum(detected_type)
+                    
+                    # Get statistics from ydata-profiling if available
+                    col_stats = self._detected_column_stats.get(col_name, {})
+                    
+                    # Calculate basic stats from sample data as fallback
+                    col_sample = sample_data.get(col_name, [])
+                    missing_count = col_stats.get('missing_count', sum(1 for val in col_sample if val is None or (isinstance(val, float) and pd.isna(val))))
+                    missing_ratio = col_stats.get('missing_ratio', missing_count / len(col_sample) if col_sample else 0.0)
+                    unique_count = col_stats.get('unique_count', len(set(val for val in col_sample if val is not None)))
+                    
+                    col_info = ColumnInfo(
+                        name=col_name,
+                        dtype=str(col_type),
+                        column_type=column_type_enum,
+                        nullable=missing_count > 0,
+                        unique=unique_count == len(col_sample) and len(col_sample) > 0,
+                        missing_count=missing_count,
+                        missing_ratio=missing_ratio,
+                        cardinality=unique_count,
+                        min_value=col_stats.get('min'),
+                        max_value=col_stats.get('max'),
+                        mean_value=col_stats.get('mean'),
+                        std_value=col_stats.get('std')
+                    )
+                    columns.append(col_info)
+                
+                if columns:
+                    store_column_metadata(dataset_name, table_name, columns, engine)
+                    logger.debug(f"Stored {len(columns)} column metadata for table {table_name}")
+            
+            # Store dataset statistics if available
+            if statistics:
+                # Convert statistics dict to DatasetStatistics object
+                stats = DatasetStatistics(
+                    row_count=statistics.get('row_count', 0),
+                    column_count=statistics.get('column_count', 0),
+                    memory_usage_mb=statistics.get('memory_size_mb', 0.0),
+                    missing_values=statistics.get('missing_values', {}),
+                    column_types=self._detected_column_types,
+                    numeric_columns=[col for col, typ in self._detected_column_types.items() 
+                                   if typ.upper() == 'NUMERIC'],
+                    categorical_columns=[col for col, typ in self._detected_column_types.items() 
+                                       if typ.upper() == 'CATEGORICAL'],
+                    datetime_columns=self._detected_datetime_columns,
+                    text_columns=[col for col, typ in self._detected_column_types.items() 
+                                if typ.upper() == 'TEXT'],
+                    computed_at=datetime.now(timezone.utc)
+                )
+                store_dataset_statistics(dataset_name, 'data', stats, engine)
+                logger.info("Stored dataset statistics in metadata tables")
+                
+        except Exception as e:
+            logger.warning(f"Failed to store metadata in database: {e}")
+            # Non-critical - continue without metadata tables
